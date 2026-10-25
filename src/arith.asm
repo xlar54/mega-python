@@ -1096,7 +1096,31 @@ compare:
         beq +
         eor #1
 +       rts
-_order: jsr obj_cmp                     ; -> A = $ff less, 0 equal, 1 greater
+_order: ; an instance: its own __lt__ / __gt__ / __le__ / __ge__, else the other side's
+        ; reflected one (as Python does: a >= b tries a.__ge__(b), then b.__le__(a))
+        lda r2
+        ldx r2+1
+        jsr type_of
+        cmp #T_INST
+        bne _refl
+        ldx bop
+        lda cmp_dunder-2,x
+        ldx #0
+        jsr inst_binop
+        bcs _refl
+        jmp obj_truth
+_refl:  lda r3
+        ldx r3+1
+        jsr type_of
+        cmp #T_INST
+        bne _3way
+        ldx bop
+        lda cmp_rdunder-2,x
+        ldx #0
+        jsr inst_rbinop
+        bcs _3way
+        jmp obj_truth
+_3way:  jsr obj_cmp                     ; -> A = $ff less, 0 equal, 1 greater
         cmp #2
         beq _f                          ; (unordered: a nan)
         ldx bop
@@ -1121,6 +1145,8 @@ _f:     lda #0
         rts
 _t:     lda #1
         rts
+cmp_dunder:     .byte S_LT, S_GT, S_LE, S_GE        ; < > <= >=
+cmp_rdunder:    .byte S_GT, S_LT, S_GE, S_LE        ; (the reflected ones)
 
 ; obj_cmp - order r2 vs r3 -> A = $ff (less), 0, 1 (greater)
 obj_cmp:

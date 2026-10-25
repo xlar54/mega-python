@@ -68,14 +68,17 @@ sym_base_addr:
         rts
 
 ; gsym - compiling a module: A/X = global symbol -> its hidden symbol (else unchanged)
-gsym:   ldy c_mod+1
+gsym:   ldy c_mod+1                     ; (the whole word: a fixed symbol such as
+        bne +                           ; sys is below 256)
+        ldy c_mod
         bne +
         rts
 +       sta ms_sym
         stx ms_sym+1
         lda c_mod
         sta ms_mod
-        sty ms_mod+1
+        lda c_mod+1
+        sta ms_mod+1
         lda ms_sym
         ldx ms_sym+1
         jsr sym_name

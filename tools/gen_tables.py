@@ -201,6 +201,9 @@ def main():
             osf.append("        .word %s" % used[b[0]])
             osf.append("        .byte %d, %d" % (i, b[2] == "P"))
     osf.append("        .word $ffff")
+    # the version (the VERSION file): the banner, and sys (tools/mkpy.py)
+    version = open(os.path.join(ROOT, "VERSION")).read().strip()
+    out.append('VERSION                 = "%s"' % version)
     os.makedirs(os.path.join(ROOT, "src", "gen"), exist_ok=True)
     with open(os.path.join(ROOT, "src", "gen", "tables.asm"), "w") as f:
         f.write("\n".join(out) + "\n")

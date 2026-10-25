@@ -16,6 +16,7 @@ OUT = os.path.join(ROOT, "target", "py")
 
 
 def main():
+    version = open(os.path.join(ROOT, "VERSION"), "rb").read().strip()
     os.makedirs(OUT, exist_ok=True)
     for old in glob.glob(os.path.join(OUT, "*.py")):
         os.remove(old)
@@ -27,6 +28,7 @@ def main():
             if len(name) > 16:
                 raise SystemExit("%s: name longer than 16 characters" % src)
             text = open(src, "rb").read().replace(b"\r\n", b"\n")
+            text = text.replace(b"@VERSION@", version)    # (lib/sys.py)
             if any(b > 126 for b in text):
                 raise SystemExit("%s: only ASCII is supported" % src)
             with open(os.path.join(OUT, name), "wb") as f:

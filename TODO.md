@@ -21,7 +21,8 @@ Language
   keeps its drive channel, and the drive will not remove it).
 * Modules (`lib/*.py`, using `peek`/`poke`/`os.sys`): text in graphics mode, 16-colour
   and bigger sprites (VIC-IV),
-  faster `plot`/`line` (machine code through `os.sys`), double buffering; `sys`, `gc`;
+  faster `plot`/`line` (machine code through `os.sys`), double buffering; `gc`; more of
+  `sys` (`modules`, `getrecursionlimit`, `getsizeof`);
   setting the RTC from `time`; `random` with CPython's Mersenne Twister (it needs
   unsigned 32-bit arithmetic: bigger ints).
 * `os.sys()` for code outside bank 0 (it would need a MAP of the target). (`math` is a class object; a real

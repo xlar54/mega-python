@@ -1,7 +1,7 @@
 MEGA65 Python
 =============
 
-Version 0.8.0.
+Version 0.8.0 (the `VERSION` file: the build puts it in the boot banner and in `sys`).
 
 A Python 3 interpreter for the MEGA65, written entirely in 45GS02 assembly (64tass). It
 boots to a `>>>` prompt, has a full-screen program editor, and loads and saves `.py`
@@ -19,8 +19,9 @@ Build
 
 Run `build.bat`. It:
 
-1. generates `src/gen/tables.asm` and `symnames.asm` (`tools/gen_tables.py`: symbols and
-   builtin tables) and `src/gen/fconst.asm` (`tools/gen_fconst.py`: float constants),
+1. generates `src/gen/tables.asm` and `symnames.asm` (`tools/gen_tables.py`: symbols,
+   builtin tables, the version) and `src/gen/fconst.asm` (`tools/gen_fconst.py`: float
+   constants),
 2. copies `examples/*.py` and `tests/*.py` to `target/py/` as disk files (`tools/mkpy.py`),
 3. assembles `src/main.asm` with the bundled 64tass into `target/image.bin`,
 4. splits the images into the program `target/mega-python.prg` and the file `mpy-ovl`
@@ -119,6 +120,11 @@ Two such modules come with it, written in Python with `peek`/`poke`:
   generator is the "minimal standard" Lehmer generator, not CPython's Mersenne Twister,
   so a seed gives other numbers than on a PC; without a seed it starts from the
   MEGA65's hardware random number generator (`$D7EF`). The `dice` example uses it.
+* `lib/sys.py`: Python's `sys` module: `version` (`'3.15.0 (MEGA65 Python 0.8.0, 45GS02
+  assembly)'`), `version_info` (the Python language level, 3.15), `implementation`
+  (`.name == 'mega65python'`, `.version`: this interpreter's version, 0.8.0),
+  `hexversion`, `platform` (`'mega65'`), `maxsize`, `byteorder`, `argv`, `path`,
+  `stdout`/`stderr` (`write()`), `stdin` (`readline()`) and `exit()`.
 * `lib/time.py`: Python's `time` module on the real-time clock (`$FFD7110`):
   `time()`, `localtime()`/`gmtime()` (a `struct_time`), `mktime`, `strftime`,
   `asctime`, `ctime`, `sleep` (counted in video frames), `perf_counter`/`monotonic`
@@ -219,6 +225,7 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_floats` | float literals and repr, arithmetic and mixing with ints, `//` `%` `**`, `float()`, `round()`, `%`/`format` specs, the `math` module |
 | `t_import` | a module from the disk (`tests/support/modtest.py`): its functions, classes and globals, `import as`, `from import`, one import only, `ImportError` |
 | `t_random` | `random`: seeds repeat, ranges, shuffle, sample, weighted choices, errors (properties that hold for CPython's generator too) |
+| `t_sys` | `sys`: the version values, `version_info` comparisons, `stdout.write`, `exit` |
 | `t_time` | `time`: `gmtime`, `strftime`, `asctime` of fixed times, `struct_time`, the clock's plausibility |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
