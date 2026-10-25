@@ -1,6 +1,8 @@
 MEGA65 Python
 =============
 
+Version 0.8.0.
+
 A Python 3 interpreter for the MEGA65, written entirely in 45GS02 assembly (64tass). It
 boots to a `>>>` prompt, has a full-screen program editor, and loads and saves `.py`
 files on the disk. Like CPython, it compiles each piece of source to bytecode in memory

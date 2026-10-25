@@ -53,7 +53,7 @@ entry:
         sta scr_color
         jmp repl_start
 
-banner: .text "MEGA65 Python 0.1 (a Python 3.15 subset)", 10
+banner: .text "MEGA65 Python 0.8.0 (a Python 3.15 subset)", 10
         .text "Type help() for the commands, edit() for the editor.", 10, 0
 
 boot_01:        .byte 0
