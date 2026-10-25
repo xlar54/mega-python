@@ -221,7 +221,7 @@ builtin_type_of_r2:
 type_builtin:
         .byte B_NONETYPE, B_INT, B_STR, B_LIST, B_TUPLE, B_DICT, B_NONETYPE, B_FUNCTION
         .byte B_FUNCTION, B_FUNCTION, B_TYPE, $ff, B_RANGE, B_OBJECT, B_FLOAT, B_NONETYPE
-        .byte B_BOOL, B_OBJECT, B_OBJECT, B_TEXTIOWRAPPER
+        .byte B_BOOL, B_OBJECT, B_OBJECT, B_TEXTIOWRAPPER, B_MODULE
 
 ; put_str - print string A/X
 put_str:
@@ -1861,6 +1861,7 @@ bi_round:
         jmp int_new
 
 bi_object:
+bi_moduletype:
 bi_filetype:
 bi_nonetype:
 bi_functype:
@@ -1932,16 +1933,27 @@ bi_peek:
         #NARGS 1, 1
         #ARG 0
         jsr need_int
-        ldq acc
-        stq fp0
-        ldz #0
-        lda [fp0],z
-        sta acc
+        jsr peek_addr
+        bne +
+        lda (fp0),y                     ; bank 0 as the CPU sees it: I/O at $D000
+        bra ++
++       lda [fp0],z
++       sta acc
         lda #0
         sta acc+1
         sta acc+2
         sta acc+3
         jmp int_new
+
+; peek_addr - fp0 = the address in acc; Z set if it is in bank 0 (Y = Z = 0)
+peek_addr:
+        ldq acc
+        stq fp0
+        ldy #0
+        ldz #0
+        lda acc+2
+        ora acc+3
+        rts
 
 bi_poke:
         #NARGS 2, 2
@@ -1951,12 +1963,14 @@ bi_poke:
         pha
         #ARG 0
         jsr need_int
-        ldq acc
-        stq fp0
+        jsr peek_addr
+        bne +
         pla
-        ldz #0
+        sta (fp0),y
+        bra ++
++       pla
         sta [fp0],z
-        lda #R_NONE
++       lda #R_NONE
         ldx #0
         rts
 

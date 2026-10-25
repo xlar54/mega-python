@@ -147,6 +147,256 @@ mem_u2:    .text " names", 0
 mem_u4:    .text " slots", 0
 
 ;---------------------------------------------------------------------------------------
+; xh_reset - (py_reset) a fresh interpreter: empty heap, symbols, globals and code,
+; the exception classes; py_reset then makes the builtins
+;---------------------------------------------------------------------------------------
+xh_reset:
+        lda #0
+        sta os_mod
+        sta os_mod+1
+        jsr heap_init
+        jsr sb_reset
+        jsr vm_reset
+        ; zero the symbol tables: hash buckets (attic) and globals (bank 1)
+        lda #<SYM_HASH
+        sta fp1
+        lda #>SYM_HASH
+        sta fp1+1
+        lda #<(SYM_HASH >> 16)
+        sta fp1+2
+        lda #>(SYM_HASH >> 16)
+        sta fp1+3
+        lda #<512
+        sta t0
+        lda #>512
+        sta t0+1
+        lda #0
+        jsr dma_fill
+        lda #<SYM_VAL
+        sta fp1
+        lda #>SYM_VAL
+        sta fp1+1
+        lda #`SYM_VAL
+        sta fp1+2
+        lda #0
+        sta fp1+3
+        lda #<(2*MAXSYMS)
+        sta t0
+        lda #>(2*MAXSYMS)
+        sta t0+1
+        lda #0
+        jsr dma_fill
+        lda #<SYM_BASE                  ; and the modules' hidden symbols
+        sta fp1
+        lda #>SYM_BASE
+        sta fp1+1
+        lda #<(SYM_BASE >> 16)
+        sta fp1+2
+        lda #>(SYM_BASE >> 16)
+        sta fp1+3
+        lda #<(2*MAXSYMS)
+        sta t0
+        lda #>(2*MAXSYMS)
+        sta t0+1
+        lda #0
+        jsr dma_fill
+        lda #0
+        sta nsyms
+        sta nsyms+1
+        ldx #0
+-       sta char_cache,x
+        inx
+        bne -
+        ; the code area
+        lda #<CODE_START
+        sta cp
+        lda #>CODE_START
+        sta cp+1
+        lda #CODE_BANK
+        sta cp+2
+        lda #0
+        sta cp+3
+        lda #<(LINETAB & $ffff)
+        sta linetab_end
+        lda #>(LINETAB & $ffff)
+        sta linetab_end+1
+        ; the fixed symbols, in order
+        lda #F_PERM
+        sta al_perm
+        lda #<sym_init_names
+        sta t6
+        lda #>sym_init_names
+        sta t6+1
+-       ldy #0
+        lda (t6),y
+        beq +
+        lda t6
+        ldx t6+1
+        jsr intern_cstr
+        ldy #0
+-       lda (t6),y
+        iny
+        cmp #0
+        bne -
+        tya
+        clc
+        adc t6
+        sta t6
+        bcc --
+        inc t6+1
+        bra --
++       lda #0
+        sta al_perm
+        jmp exc_init
+
+; exc_init - create the classes (perm) and bind them as globals. A subclass's base
+; may come later in the table (LookupError, ArithmeticError): bases are set in a
+; second pass.
+exc_init:
+        lda #F_PERM
+        sta al_perm
+        lda #0
+        sta t5                          ; class id
+        lda #<exc_defs
+        sta t6
+        lda #>exc_defs
+        sta t6+1
+_loop:  ldy #0
+        lda (t6),y
+        bne +
+        jmp _bases
++       lda t6
+        ldx t6+1
+        jsr intern_cstr                 ; A/X sym, int_ref = name
+        pha
+        phx
+        jsr _skip
+        ; class object (+4 name, +6 base, +8 dict)
+        lda #10
+        sta alloc_size
+        lda #0
+        sta alloc_size+1
+        lda #T_CLASS
+        jsr alloc
+        ldz #4
+        lda int_ref
+        sta [p0],z
+        inz
+        lda int_ref+1
+        sta [p0],z
+        ldx t5
+        lda p0
+        sta exc_cls_lo,x
+        sta r0
+        lda p0+1
+        sta exc_cls_hi,x
+        sta r0+1
+        jsr dict_new
+        sta t0
+        stx t0+1
+        lda r0
+        sta p0
+        lda r0+1
+        sta p0+1
+        ldz #8
+        lda t0
+        sta [p0],z
+        inz
+        lda t0+1
+        sta [p0],z
+        ; the global binding
+        plx
+        pla
+        jsr sym_val_addr
+        ldz #0
+        lda r0
+        sta [fp1],z
+        inz
+        lda r0+1
+        sta [fp1],z
+        inc t5
+        jmp _loop
+_skip:  ; t6 past the name and the base byte
+        ldy #0
+-       lda (t6),y
+        beq +
+        iny
+        bra -
++       iny
+        iny
+        tya
+        clc
+        adc t6
+        sta t6
+        bcc +
+        inc t6+1
++       rts
+_bases: ; second pass: the base of each class
+        lda #<exc_defs
+        sta t6
+        lda #>exc_defs
+        sta t6+1
+        lda #0
+        sta t5
+-       ldy #0
+        lda (t6),y
+        beq _init
+-       lda (t6),y                      ; Y -> the base byte
+        beq +
+        iny
+        bra -
++       iny
+        lda (t6),y
+        cmp #$ff
+        beq +
+        tax
+        ldy t5
+        lda exc_cls_lo,y
+        sta p0
+        lda exc_cls_hi,y
+        sta p0+1
+        ldz #6
+        lda exc_cls_lo,x
+        sta [p0],z
+        inz
+        lda exc_cls_hi,x
+        sta [p0],z
++       jsr _skip
+        inc t5
+        bra --
+_init:  ; BaseException.__init__ is a builtin that stores the args
+        ldx #EXC_BASE
+        lda exc_cls_lo,x
+        sta p0
+        lda exc_cls_hi,x
+        sta p0+1
+        ldz #8
+        lda [p0],z
+        sta r0
+        inz
+        lda [p0],z
+        sta r0+1
+        lda #<S_INIT
+        ldx #>S_INIT
+        jsr sym_name
+        sta r1
+        stx r1+1
+        lda #B_INIT
+        jsr builtin_obj
+        sta r2
+        stx r2+1
+        jsr dict_set
+        ; the MemoryError instance
+        lda #EXC_MEMORY
+        jsr exc_new_empty
+        sta mem_error
+        stx mem_error+1
+        lda #0
+        sta al_perm
+        jmp clear_rregs
+
+
+;---------------------------------------------------------------------------------------
 ; load() / save() / files() (from the REPL's requests) and the exception classes' names
 ;---------------------------------------------------------------------------------------
 disk_load:

@@ -662,7 +662,7 @@ xf_reset:
 ; the os module: remove / unlink, rename, listdir, and os.path.exists. Like math, a
 ; module is a (perm) class object; os is made at its first import, with os.path in it.
 ;---------------------------------------------------------------------------------------
-; xo_import - A/X = module symbol -> A/X = the module (os), or ImportError
+; xo_import - A/X = module symbol -> C set and A/X = the module if it is os
 xo_import:
         cmp #<S_OS
         bne _no
@@ -702,19 +702,10 @@ xo_import:
         sta r3+1
 _have:  lda os_mod
         ldx os_mod+1
+        sec
         rts
-_no:    sta fl_len
-        stx fl_len+1
-        jsr sb_mark_t5
-        #SBPRINT "No module named '"
-        lda fl_len
-        ldx fl_len+1
-        jsr sym_name
-        jsr sb_put_str
-        lda #"'"
-        jsr sb_putc
-        lda #EXC_IMPORT
-        jmp raise_sb
+_no:    clc
+        rts
 
 ; mod_make - a module named symbol X/Y with the functions of os_funcs whose last byte
 ; is A -> A/X (r0 = its dict)
@@ -1048,5 +1039,272 @@ xo_exists:
         stx r2+1
         jsr contains
         jmp bool_from_a
+
+;---------------------------------------------------------------------------------------
+; os.sys(address, a=0, x=0, y=0, z=0) -> (a, x, y, z, flags): call machine code in bank
+; 0 (as BASIC's SYS). It runs with base page 0 (it may use $02-$8F), interrupts off,
+; the ROMs unmapped and the interpreter's 16-bit stack; it returns with RTS.
+; $7E00-$7FFF is free for it.
+;---------------------------------------------------------------------------------------
+sys_regs:       .fill 5                 ; a x y z p
+sys_vec:        .word 0
+xo_sys:
+        #NARGS 1, 5
+        #ARG 0
+        jsr need_int
+        lda acc+2
+        ora acc+3
+        beq +
+        #RAISE EXC_VALUE, "os.sys() calls bank 0: the address must be 0-65535"
++       lda acc
+        sta sys_vec
+        lda acc+1
+        sta sys_vec+1
+        ldx #0
+-       stx fl_lfn
+        lda #0
+        sta sys_regs,x
+        inx
+        cpx npos
+        bcs +
+        txa
+        asl a
+        tay
+        lda argv,y
+        ldx argv+1,y
+        jsr need_int
+        ldx fl_lfn
+        lda acc
+        sta sys_regs,x
++       ldx fl_lfn
+        inx
+        cpx #4
+        bne -
+        lda #0                          ; base page 0 for the call
+        tab
+        lda sys_regs
+        ldx sys_regs+1
+        ldy sys_regs+2
+        ldz sys_regs+3
+        jsr _call
+        php
+        sta sys_regs
+        stx sys_regs+1
+        sty sys_regs+2
+        stz sys_regs+3
+        pla
+        sta sys_regs+4
+        lda #BP_PAGE
+        tab
+        sei
+        cld
+        lda #5                          ; (a, x, y, z, flags)
+        sta nitems
+        lda #0
+        sta nitems+1
+        jsr tuple_new
+        ldx #0
+        ldz #6
+-       lda sys_regs,x
+        asl a
+        ora #1
+        sta [p0],z
+        inz
+        lda #0
+        rol a
+        sta [p0],z
+        inz
+        inx
+        cpx #5
+        bne -
+        lda p0
+        ldx p0+1
+        rts
+_call:  jmp (sys_vec)
+
+;---------------------------------------------------------------------------------------
+; modules from the disk (the rest is in module.asm)
+;---------------------------------------------------------------------------------------
+; xm_load - (mod_import) name.py -> MODSRC, and the module object, bound to ms_key
+xm_load:
+        lda ms_sym
+        ldx ms_sym+1
+        jsr sym_name
+        jsr str_info
+        lda str_len+1
+        bne _none
+        lda str_len
+        cmp #13
+        bcs _none
+        tay
+        sta fname_len
+        ldz #0
+        ldx #0
+-       lda [fp0],z
+        sta FNAMEBUF,x
+        inz
+        inx
+        dey
+        bne -
+        ldy #0
+-       lda _py,y
+        sta FNAMEBUF,x
+        inx
+        iny
+        cpy #3
+        bne -
+        stx fname_len
+        lda #0
+        jsr make_kname
+        jsr kc_load
+        bcc +
+_none:  jsr sb_mark_t5
+        #SBPRINT "No module named '"
+        lda ms_sym
+        ldx ms_sym+1
+        jsr sym_name
+        jsr sb_put_str
+        lda #"'"
+        jsr sb_putc
+        lda #EXC_IMPORT
+        jmp raise_sb
++       lda #<STAGE
+        sta fp0
+        lda #>STAGE
+        sta fp0+1
+        lda #`STAGE
+        sta fp0+2
+        lda #0
+        sta fp0+3
+        lda #<MODSRC
+        sta fp1
+        lda #>MODSRC
+        sta fp1+1
+        lda #<(MODSRC >> 16)
+        sta fp1+2
+        lda #>(MODSRC >> 16)
+        sta fp1+3
+        lda t0
+        ora t0+1
+        beq +
+        lda t0
+        pha
+        lda t0+1
+        pha
+        jsr dma_copy
+        pla
+        sta fp1+1
+        pla
+        sta fp1
++       clc                             ; a zero after it
+        lda fp1
+        adc #<MODSRC
+        sta fp1
+        lda fp1+1
+        adc #>MODSRC
+        sta fp1+1
+        lda t0
+        ora t0+1
+        bne +
+        lda #<MODSRC
+        sta fp1
+        lda #>MODSRC
+        sta fp1+1
++       ldz #0
+        lda #0
+        sta [fp1],z
+        ; the module object, bound now (so an import cycle finds it)
+        lda #8
+        sta alloc_size
+        lda #0
+        sta alloc_size+1
+        lda #T_MODULE
+        jsr alloc
+        lda ms_sym
+        ldx ms_sym+1
+        jsr sym_name
+        ldz #4
+        sta [p0],z
+        inz
+        txa
+        sta [p0],z
+        inz
+        lda ms_sym
+        sta [p0],z
+        inz
+        lda ms_sym+1
+        sta [p0],z
+        lda ms_key
+        ldx ms_key+1
+        jsr sym_val_addr
+        ldz #0
+        lda p0
+        sta [fp1],z
+        inz
+        lda p0+1
+        sta [fp1],z
+        rts
+_py:    .text ".py"
+
+;---------------------------------------------------------------------------------------
+; module attributes: r0 = module, r1 = name string
+;---------------------------------------------------------------------------------------
+; mod_attr_sym - fp1 = &SYM_VAL of the module's hidden name for r1
+mod_attr_sym:
+        lda r0
+        sta p1
+        lda r0+1
+        sta p1+1
+        ldz #6
+        lda [p1],z
+        sta ms_mod
+        inz
+        lda [p1],z
+        sta ms_mod+1
+        lda r1
+        ldx r1+1
+        jsr mod_sym
+        jmp sym_val_addr
+
+; xm_getattr - -> A/X (AttributeError if it is not bound)
+xm_getattr:
+        jsr mod_attr_sym
+        ldz #1
+        lda [fp1],z
+        tax
+        dez
+        lda [fp1],z
+        cpx #0
+        bne +
+        cmp #0
+        bne +
+        jmp raise_attr
++       clc
+        rts
+
+; xm_setattr - r2 = the value
+xm_setattr:
+        jsr mod_attr_sym
+        ldz #0
+        lda r2
+        sta [fp1],z
+        inz
+        lda r2+1
+        sta [fp1],z
+        rts
+
+; xm_repr - <module 'name'>
+xm_repr:
+        sta p1
+        stx p1+1
+        #SBPRINT "<module '"
+        ldz #5
+        lda [p1],z
+        tax
+        dez
+        lda [p1],z
+        jsr sb_put_str
+        #SBPRINT "'>"
+        rts
 
         .include "gen/osfuncs.asm"

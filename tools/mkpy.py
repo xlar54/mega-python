@@ -1,4 +1,5 @@
-"""Copy examples/*.py and tests/*.py into target/py/ as MEGA65 PRG files.
+"""Copy examples/*.py, tests/*.py and lib/*.py (modules to import) into target/py/ as
+MEGA65 PRG files.
 
 The interpreter loads a .py file with the KERNAL, which skips a 2-byte load address, so
 each file gets one ($0000) in front of its plain ASCII text. Line ends become LF.
@@ -16,7 +17,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     for old in glob.glob(os.path.join(OUT, "*.py")):
         os.remove(old)
-    for d in ("examples", "tests"):
+    for d in ("examples", "tests", "lib"):
         for src in sorted(glob.glob(os.path.join(ROOT, d, "*.py"))):
             name = os.path.basename(src).lower()
             if len(name) > 16:

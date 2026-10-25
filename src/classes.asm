@@ -109,6 +109,9 @@ get_method:
 +       cmp #T_SUPER
         bne +
         jmp _super
++       cmp #T_MODULE
+        bne +
+        jmp module_getattr
 +       ; built-in types: their method tables
         jsr builtin_method
         bcs +
@@ -327,6 +330,10 @@ setattr:
         jsr type_of
         cmp #T_INST
         beq _inst
+        cmp #T_MODULE
+        bne +
+        jmp module_setattr
++
         cmp #T_CLASS
         bne _bad
         ldz #8

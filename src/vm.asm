@@ -367,7 +367,7 @@ global_addr:
 
 op_load_global:
         jsr global_addr
-        ldz #1
+_load:  ldz #1
         lda [fp1],z
         tax
         dez
@@ -375,7 +375,18 @@ op_load_global:
         bne +
         cpx #0
         bne +
+        lda vtmp                        ; a module's hidden name: try the plain one
+        ldx vtmp+1
+        jsr unmangle
+        cmp vtmp
+        bne _base
+        cpx vtmp+1
+        bne _base
         jmp raise_name_vtmp
+_base:  sta vtmp
+        stx vtmp+1
+        jsr sym_val_addr
+        bra _load
 +       #PUSH
         jmp vm_loop
 
@@ -2057,7 +2068,7 @@ op_build_string:
 
 op_import:
         #FETCHW
-        jsr import_module
+        jsr mod_import
         #PUSH
         jmp vm_loop
 

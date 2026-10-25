@@ -42,6 +42,7 @@ BUILTINS = [
     ("filter", "filter", "f"), ("round", "round", "f"), ("object", "object", "t"),
     ("super", "super", "f"), ("exit", "exit", "f"), ("quit", "exit", "f"),
     ("float", "float", "t"), ("open", "open", "f"), ("TextIOWrapper", "filetype", "T"),
+    ("module", "moduletype", "T"),
     ("NoneType", "nonetype", "T"), ("function", "functype", "T"),
     ("__init__", "exc_init", "-"),
     # MEGA65 / environment
@@ -61,7 +62,7 @@ BUILTINS = [
     ("copysign", "m_copysign", "M"), ("fmod", "m_fmod", "M"),
     # the os module, and os.path
     ("remove", "os_remove", "O"), ("unlink", "os_remove", "O"), ("rename", "os_rename", "O"),
-    ("listdir", "os_listdir", "O"), ("exists", "os_exists", "P"),
+    ("listdir", "os_listdir", "O"), ("sys", "os_sys", "O"), ("exists", "os_exists", "P"),
     # file methods
     ("read", "file_read", "m", "file"), ("readline", "file_readline", "m", "file"),
     ("readlines", "file_readlines", "m", "file"), ("write", "file_write", "m", "file"),

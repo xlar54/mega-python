@@ -27,7 +27,7 @@
         * = $2001
         .include "resident.asm"
 part1_end:
-        .cerror * > WINDOW, "resident part 1 overflows into the overlay window"
+        .cerror * > USERCODE, "resident part 1 overflows into the user's machine code area"
         * = WINDOW
 ovl_r_start:
         .include "builtins.asm"

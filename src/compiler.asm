@@ -429,6 +429,7 @@ emit_load_name:
 _global:
         lda tok_sym
         ldx tok_sym+1
+        jsr gsym                        ; (a module's names are hidden symbols)
         ldy #OP_LOAD_GLOBAL
         jmp emit_op_word
 
@@ -460,9 +461,10 @@ store_op_for_sym:
         rts
 _global:
         lda t4
+        ldx t4+1
+        jsr gsym
         sta t6
-        lda t4+1
-        sta t6+1
+        stx t6+1
         lda #OP_STORE_GLOBAL
         rts
 _class: lda t4
@@ -545,6 +547,7 @@ store_for_load:
         rts
 +       lda t6
         ldx t6+1
+        jsr unmangle                    ; (the attribute's own name)
         jsr sym_name
         sta t6
         stx t6+1
@@ -4219,6 +4222,7 @@ at_name:
         lda (sc),y
         tax
         pla
+        jsr gsym
         jsr emit_word
         ldy #0                          ; self = local 0
         jsr local_offset

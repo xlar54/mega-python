@@ -52,7 +52,7 @@ Commands at the prompt (they are Python functions):
 | `load('name')` / `save('name')` | load / save `name.py` on drive 8 |
 | `files()` | directory of the disk |
 | `cls()`, `mem()`, `gc()`, `help()` | clear screen, free memory per area (see "Memory"), collect garbage, help |
-| `peek(addr)`, `poke(addr, byte)` | 28-bit memory access (`peek(0xD020)`, `poke(0xD020, 2)`) |
+| `peek(addr)`, `poke(addr, byte)` | 28-bit memory access; in bank 0 (0-65535) as the CPU sees it, so `$D000-$DFFF` are the I/O registers (`poke(0xD020, 2)` makes the border red) |
 
 Floats are IEEE doubles, printed exactly as CPython prints them (`0.1 + 0.2` gives
 `0.30000000000000004`). `import math` gives `sqrt floor ceil trunc fabs isnan isinf
@@ -73,6 +73,33 @@ holding the text as it is (ASCII, `
 `. Up
 to 4 files can be open at once. `import os` gives `os.remove` (and `os.unlink`),
 `os.rename(src, dst)`, `os.listdir()` and `os.path.exists(name)`.
+
+Modules
+-------
+
+`import name` (also `import name as n` and `from name import x`) loads `name.py` from
+the disk, runs it once and gives a module with its own global names, as in CPython. A
+second import gets the same module. `import math` and `import os` are built in. The
+build copies `lib/*.py` to the disk too: that is the place for modules (`lib/modtest.py`
+is the one the tests use).
+
+For hardware access, `peek` and `poke` reach the I/O registers, and
+`os.sys(address, a=0, x=0, y=0, z=0)` calls machine code in bank 0, like BASIC's `SYS`,
+and returns `(a, x, y, z, flags)`. The code runs with base page 0 (so `$02-$8F` are
+free for it), interrupts off and the ROMs unmapped, and returns with `RTS`.
+`$7E00-$7FFF` is kept free for it:
+
+```
+>>> import os
+>>> for i, b in enumerate([0xE8, 0x8A, 0x60]):     # INX, TXA, RTS
+...     poke(0x7E00 + i, b)
+...
+>>> os.sys(0x7E00, 0, 41)
+(42, 42, 0, 0, 21)
+```
+
+A sound or graphics module is a `.py` file in `lib/` that uses these: for example
+`def border(c): poke(0xD020, c)`.
 
 ```
 >>> with open('notes', 'w') as f:
@@ -133,6 +160,7 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_builtins` | the builtin functions |
 | `t_memory` | allocation-heavy code (many garbage collections) |
 | `t_floats` | float literals and repr, arithmetic and mixing with ints, `//` `%` `**`, `float()`, `round()`, `%`/`format` specs, the `math` module |
+| `t_import` | a module from the disk (`lib/modtest.py`): its functions, classes and globals, `import as`, `from import`, one import only, `ImportError` |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
 Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, screenshot),
@@ -229,7 +257,7 @@ Differences from CPython
 * **Files**: text only (`'b'` in the mode is ignored and gives `str`), no `seek`/`tell`,
   file names of 1-16 characters on drive 8 (`os` refuses `* ? , : =` and quotes, which
   the drive would read as patterns or commands). `os` has only `remove`, `unlink`,
-  `rename`, `listdir` and `path.exists`; `listdir()` ignores its argument (one disk, no
+  `rename`, `listdir`, `path.exists` and `sys` (a MEGA65 addition); `listdir()` ignores its argument (one disk, no
   directories), and `os` and `os.path` print as classes. A file that is still open
   (one only partly read, without `with` or `close()`) cannot be removed: the drive
   reports no such file. A file
@@ -239,8 +267,11 @@ Differences from CPython
 * **`with`** calls `__exit__(None, None, None)` even when the block raises (the
   exception always goes on: `__exit__` cannot swallow it).
 * Not supported yet: sets, generators/`yield`, closures over enclosing function
-  variables (`nonlocal`), `*args`/`**kwargs`, decorators, multiple inheritance, `import`
-  of anything but `math`, the `bytes` type.
+  variables (`nonlocal`), `*args`/`**kwargs`, decorators, multiple inheritance,
+  `from module import *`, packages (`import a.b`), the `bytes` type.
+* **Modules**: a module's code and name are kept until `run()` or `new()`; a name a
+  module does not define falls back to the main program's global of that name (CPython
+  would raise `NameError`). Module names are up to 12 characters (`name.py` on the disk).
 * `dict.keys()`, `values()` and `items()` return lists (snapshots, not live views).
   `map()`, `filter()` and generator expressions produce lists.
 * `try`/`finally`: a `break`/`continue` out of the `try` body skips the `finally` block.

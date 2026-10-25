@@ -401,92 +401,9 @@ mt_addr_hi:     .byte >VSTACK, >$cff0, >$fef0
 ;---------------------------------------------------------------------------------------
 py_reset:
         jsr files_reset                 ; (the KERNAL's files of the old heap's file objects)
-        lda #0
-        sta os_mod
-        sta os_mod+1
-        jsr heap_init
-        jsr sb_reset
-        jsr vm_reset
-        ; zero the symbol tables: hash buckets (attic) and globals (bank 1)
-        lda #<SYM_HASH
-        sta fp1
-        lda #>SYM_HASH
-        sta fp1+1
-        lda #<(SYM_HASH >> 16)
-        sta fp1+2
-        lda #>(SYM_HASH >> 16)
-        sta fp1+3
-        lda #<512
-        sta t0
-        lda #>512
-        sta t0+1
-        lda #0
-        jsr dma_fill
-        lda #<SYM_VAL
-        sta fp1
-        lda #>SYM_VAL
-        sta fp1+1
-        lda #`SYM_VAL
-        sta fp1+2
-        lda #0
-        sta fp1+3
-        lda #<(2*MAXSYMS)
-        sta t0
-        lda #>(2*MAXSYMS)
-        sta t0+1
-        lda #0
-        jsr dma_fill
-        lda #0
-        sta nsyms
-        sta nsyms+1
-        ldx #0
--       sta char_cache,x
-        inx
-        bne -
-        ; the code area
-        lda #<CODE_START
-        sta cp
-        lda #>CODE_START
-        sta cp+1
-        lda #CODE_BANK
-        sta cp+2
-        lda #0
-        sta cp+3
-        lda #<(LINETAB & $ffff)
-        sta linetab_end
-        lda #>(LINETAB & $ffff)
-        sta linetab_end+1
-        ; the fixed symbols, in order
-        lda #F_PERM
-        sta al_perm
-        jsr need_h                      ; (the names are in tail H)
-        lda #<sym_init_names
-        sta t6
-        lda #>sym_init_names
-        sta t6+1
--       ldy #0
-        lda (t6),y
-        beq +
-        lda t6
-        ldx t6+1
-        jsr intern_cstr
-        ldy #0
--       lda (t6),y
-        iny
-        cmp #0
-        bne -
-        tya
-        clc
-        adc t6
-        sta t6
-        bcc --
-        inc t6+1
-        bra --
-+       lda #0
-        sta al_perm
-        jsr exc_init
-        jsr builtins_init
-        rts
+        jsr need_h                      ; the rest is in tail H
+        jsr xh_reset
+        jmp builtins_init
 
 ;---------------------------------------------------------------------------------------
 ; the REPL
@@ -896,5 +813,6 @@ os_mod:         .word 0                 ; the os module (made at the first impor
         .include "vm.asm"
         .include "arith.asm"
         .include "classes.asm"
+        .include "module.asm"
         .include "fcore.asm"
         .include "fbig.asm"

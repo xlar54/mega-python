@@ -74,7 +74,8 @@ KERNAL_SAVE             = $FFD8
 ;           $1800-$1DFF   CPU stack (16-bit SP)
 ;           $1E00-$1EFF   file name buffer for KERNAL calls
 ;           $1F00-$1FFF   decimal digits of a float being converted
-;           $2001-$7FFF   resident code, part 1
+;           $2001-$7DFF   resident code, part 1
+;           $7E00-$7FFF   free for the user's machine code (os.sys)
 ;           $8000-$CFFF   overlay window (20 KB): R (builtins, methods, floats) or
 ;                         C (compiler, editor), copied in from attic by DMA. With R
 ;                         in, its last 4 KB ($C000-) is float tail A (text
@@ -109,6 +110,7 @@ CPUSTACK_TOP            = $1DFF
 CPUSTACK_LIMIT          = $1880         ; RecursionError below this
 FNAMEBUF                = $1E00
 DIGBUF                  = $1F00         ; float <-> decimal digits (256)
+USERCODE                = $7E00         ; $7E00-$7FFF: free for os.sys() machine code
 WINDOW                  = $8000
 WINDOW_SIZE             = $5000
 PART2                   = $F000         ; resident part 2 runs here (up to $FEFF)
@@ -155,6 +157,8 @@ SRC_MAX                 = $FFF0
 SYM_NAME                = $8110000      ; ref of each symbol's interned name
 SYM_NEXT                = $8111000      ; hash chain (+1 = sym id, 0 = end)
 SYM_HASH                = $8112000      ; 256 bucket heads
+SYM_BASE                = $8113000      ; a module's hidden symbol -> its plain one
+MODSRC                  = $81C0000      ; the source of a module being imported (64 KB)
 MAXSYMS                 = 2048
 LINETAB                 = $8120000      ; (code offset, line) pairs
 LINETAB_END             = $8130000

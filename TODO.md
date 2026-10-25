@@ -19,8 +19,9 @@ Language
 * Files: `seek`/`tell`, binary mode (`bytes`), more of `os` (`getcwd`, `stat`,
   `path.getsize`), other drives, closing a forgotten file when it is collected (it
   keeps its drive channel, and the drive will not remove it).
-* `import` of built-in modules: `mega65` (graphics on the reserved bank-5 framebuffer,
-  sprites, sound), `time`, `random`, `sys`, `gc`. (`math` is a class object; a real
+* Modules (`lib/*.py`, using `peek`/`poke`/`os.sys`): `mega65` graphics on the reserved
+  bank-5 framebuffer, sprites, sound; and built-in `time`, `random`, `sys`, `gc`.
+* `os.sys()` for code outside bank 0 (it would need a MAP of the target). (`math` is a class object; a real
   module type would print as `<module 'math'>`.)
 * `StopIteration` from a user `__next__` should end a `for` loop (it propagates now).
 * `break`/`continue` inside `try` with `finally` should run the finally block.
