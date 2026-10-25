@@ -434,7 +434,8 @@ dict_del:
         sta fp0+3
         sta fp1+3
         jsr dma_copy
-_done:  clc
+_done:  jsr dict_reindex                ; (the pairs after it moved down)
+        clc
         rts
 
 ;---------------------------------------------------------------------------------------
@@ -667,24 +668,44 @@ _restore:
         ldx vtmp+1
         rts
 
-; inst_binop - r2 op r3 with r2's method A -> C clear, A/X
-inst_binop:
-        pha
-        lda r2
-        sta r0
-        lda r2+1
-        sta r0+1
-        lda r3
-        sta r1
-        lda r3+1
-        sta r1+1
-        pla
-        ldx #1
-        jmp inst_dunder
+; inst_binop - r2 op r3 with r2's method A -> C clear, A/X (C set: no such method)
 ; inst_rbinop - reflected: r3's method A with r2
+; inst_unary - r2's method A, no arguments
+; All keep r0-r3 (callers such as dict_scan keep their own state in r0/r1).
+inst_binop:
+        ldy #0
+        bra inst_r23
 inst_rbinop:
+        ldy #1
+        bra inst_r23
+inst_unary:
+        ldy #2
+inst_r23:
+        sta ir_sym
+        lda r0
         pha
+        lda r0+1
+        pha
+        lda r1
+        pha
+        lda r1+1
+        pha
+        ldx #1                          ; r0 = self, r1 = the argument
+        cpy #1
+        beq _refl
+        lda r2
+        sta r0
+        lda r2+1
+        sta r0+1
         lda r3
+        sta r1
+        lda r3+1
+        sta r1+1
+        cpy #2
+        bne _call
+        dex                             ; (unary: none)
+        bra _call
+_refl:  lda r3
         sta r0
         lda r3+1
         sta r0+1
@@ -692,19 +713,31 @@ inst_rbinop:
         sta r1
         lda r2+1
         sta r1+1
+_call:  lda ir_sym
+        jsr inst_dunder
+        sta ir_a
+        stx ir_x
+        php
         pla
-        ldx #1
-        jmp inst_dunder
-; inst_unary - r2's method A, no arguments
-inst_unary:
-        pha
-        lda r2
-        sta r0
-        lda r2+1
+        sta ir_p
+        pla
+        sta r1+1
+        pla
+        sta r1
+        pla
         sta r0+1
         pla
-        ldx #0
-        jmp inst_dunder
+        sta r0
+        lda ir_p
+        pha
+        lda ir_a
+        ldx ir_x
+        plp
+        rts
+ir_sym: .byte 0
+ir_a:   .byte 0
+ir_x:   .byte 0
+ir_p:   .byte 0
 
 ; inst_eq - r2 == r3 for instances: __eq__, else identity (already false) -> C
 inst_eq:

@@ -142,7 +142,7 @@ load_pieces:
         lda #>WINDOW_SIZE
         sta t0+1
         jsr dma_copy
-        lda #<(STAGE + WINDOW_SIZE)     ; then the tails B, H, F, S (in a row)
+        lda #<(STAGE + WINDOW_SIZE)     ; then the tails B, H, F, S, P, I (in a row)
         sta fp0
         lda #>(STAGE + WINDOW_SIZE)
         sta fp0+1
@@ -237,7 +237,9 @@ map_kernal:
         eom
         rts
 
-; ovl_runtime / ovl_compiler - put overlay R / C in the window
+; ovl_runtime / ovl_compiler - put overlay R (with tail A) / C in the window. R is saved
+; back to attic when C replaces it, so its variables survive a compile; C is not (it
+; keeps nothing between compiles)
 ovl_runtime:
         lda ovl_cur
         bne +
@@ -258,7 +260,30 @@ ovl_compiler:
         lda ovl_cur
         beq +
         rts
-+       lda #1
++       ; R and its tail go back to attic first, with their variables as they are now
+        ; (runtime code may be in mid-call: a module imported while it runs)
+        jsr tail_save
+        lda #<WINDOW
+        sta fp0
+        lda #>WINDOW
+        sta fp0+1
+        lda #0
+        sta fp0+2
+        sta fp0+3
+        lda #<OVL_R_ATTIC
+        sta fp1
+        lda #>OVL_R_ATTIC
+        sta fp1+1
+        lda #<(OVL_R_ATTIC >> 16)
+        sta fp1+2
+        lda #>(OVL_R_ATTIC >> 16)
+        sta fp1+3
+        lda #<(TAIL - WINDOW)
+        sta t0
+        lda #>(TAIL - WINDOW)
+        sta t0+1
+        jsr dma_copy
+        lda #1
         sta ovl_cur
         lda #<OVL_C_ATTIC
         sta fp0
@@ -282,36 +307,45 @@ ovl_load:
         sta t0+1
         jmp dma_copy
 
-; need_a / need_b / need_h / need_f / need_s - tail A / B / H / F / S into the window's
-; tail (overlay R must be in). Registers are kept.
-tail_cur:       .byte 0                 ; 0 = A, 1 = B, 2 = H, 3 = F, 4 = S
-need_a: pha
-        lda tail_cur
-        beq tail_ok
-        lda #0
-        sta tail_cur
+; The window's tail (its last 4 KB, with overlay R in) holds one of the tails. Code
+; reaches a tail routine through a #TAILCALL stub (tcall in tailcall.asm), which brings
+; the caller's tail back afterwards.
+tail_cur:       .byte 0                 ; the tail in the window (TAIL_x)
+TAIL_A          = 0                     ; float <-> text (the end of overlay R's image)
+TAIL_B          = 1                     ; the math module
+TAIL_H          = 2                     ; help(), mem(), load/save/files
+TAIL_F          = 3                     ; files, os, module loading
+TAIL_S          = 4                     ; str methods
+TAIL_P          = 5                     ; formatting, sorting
+TAIL_I          = 6                     ; interpreter setup (py_reset)
+; a stub for the tail routine target
+TAILCALL .macro tail, target
+        jsr tcall
+        .byte \tail
+        .word \target
+        .endm
+
+; need_tail - tail number A into the window (overlay R must be in). Registers are kept.
+; While tail routines are running (tail_depth: tcall counts them), the tail that leaves
+; goes back to its attic image first: a routine swapped out in mid-call finds its
+; variables as it left them. (An exception can skip tcall's count down: the count then
+; stays too high, which costs only unneeded saves; the REPL resets it.)
+tail_depth:     .byte 0
+need_tail:
+        cmp tail_cur
+        beq _done
+        pha
         phx
-        ldx #0
-        bra tail_load
-need_b: pha
-        lda #1
-        bra +
-need_h: pha
-        lda #2
-        bra +
-need_s: pha
-        lda #4
-        bra +
-need_f: pha
-        lda #3
-+       cmp tail_cur
-        beq tail_ok
+        pha
+        lda tail_depth
+        beq +
+        jsr tail_save
++       pla
         sta tail_cur
-        phx
         asl a
         asl a
         tax
-tail_load:
+        jsr tail_job
         lda tail_src,x
         sta dmaj_src
         lda tail_src+1,x
@@ -320,12 +354,6 @@ tail_load:
         sta dmaj_src_bank
         lda tail_src+3,x
         sta dmaj_src_mb
-        lda #DMACMD_COPY
-        sta dmaj_cmd
-        lda #<TAIL_SIZE
-        sta dmaj_count
-        lda #>TAIL_SIZE
-        sta dmaj_count+1
         lda #<TAIL
         sta dmaj_dst
         lda #>TAIL
@@ -335,8 +363,42 @@ tail_load:
         sta dmaj_dst_mb
         jsr dma_go
         plx
-tail_ok: pla
+        pla
+_done:  rts
+
+; tail_job - the DMA job's command and count for a 4 KB tail copy
+tail_job:
+        lda #DMACMD_COPY
+        sta dmaj_cmd
+        lda #<TAIL_SIZE
+        sta dmaj_count
+        lda #>TAIL_SIZE
+        sta dmaj_count+1
         rts
+
+; tail_save - the tail in the window back to its attic image
+tail_save:
+        lda tail_cur
+        asl a
+        asl a
+        tax
+        jsr tail_job
+        lda #<TAIL
+        sta dmaj_src
+        lda #>TAIL
+        sta dmaj_src+1
+        lda #0
+        sta dmaj_src_bank
+        sta dmaj_src_mb
+        lda tail_src,x
+        sta dmaj_dst
+        lda tail_src+1,x
+        sta dmaj_dst+1
+        lda tail_src+2,x
+        sta dmaj_dst_bank
+        lda tail_src+3,x
+        sta dmaj_dst_mb
+        jmp dma_go
 TAIL_A_ATTIC = OVL_R_ATTIC + TAIL - WINDOW
 tail_src:
         .byte <TAIL_A_ATTIC, >TAIL_A_ATTIC, (TAIL_A_ATTIC >> 16) & 15, TAIL_A_ATTIC >> 20
@@ -344,6 +406,8 @@ tail_src:
         .byte <OVL_H_ATTIC, >OVL_H_ATTIC, (OVL_H_ATTIC >> 16) & 15, OVL_H_ATTIC >> 20
         .byte <OVL_F_ATTIC, >OVL_F_ATTIC, (OVL_F_ATTIC >> 16) & 15, OVL_F_ATTIC >> 20
         .byte <OVL_S_ATTIC, >OVL_S_ATTIC, (OVL_S_ATTIC >> 16) & 15, OVL_S_ATTIC >> 20
+        .byte <OVL_P_ATTIC, >OVL_P_ATTIC, (OVL_P_ATTIC >> 16) & 15, OVL_P_ATTIC >> 20
+        .byte <OVL_I_ATTIC, >OVL_I_ATTIC, (OVL_I_ATTIC >> 16) & 15, OVL_I_ATTIC >> 20
 
 ; compile - compile_source with the compiler overlay in the window
 compile:
@@ -383,9 +447,12 @@ mt_addr_hi:     .byte >VSTACK, >$cff0, >$fef0
 ;---------------------------------------------------------------------------------------
 py_reset:
         jsr files_reset                 ; (the KERNAL's files of the old heap's file objects)
-        jsr need_h                      ; the rest is in tail H
-        jsr xh_reset
+        jsr h_reset                     ; the rest is in tail I
         jmp builtins_init
+h_reset:        #TAILCALL TAIL_I, xh_reset
+h_disk_load:    #TAILCALL TAIL_H, disk_load
+h_disk_save:    #TAILCALL TAIL_H, disk_save
+h_disk_dir:     #TAILCALL TAIL_H, disk_dir
 
 ;---------------------------------------------------------------------------------------
 ; the REPL
@@ -568,6 +635,7 @@ vm_reset_stacks:
         sta runlev
         sta exc_ip_set
         sta al_perm
+        sta tail_depth                  ; (no tail routine is running at the prompt)
         rts
 
 ; repl_append - LINEBUF (rl_len chars) + newline -> rp
@@ -710,21 +778,18 @@ _new:   cmp #REQ_NEW
         jmp repl_loop
 _load:  cmp #REQ_LOAD
         bne _save
-        jsr need_h
-        jsr disk_load
+        jsr h_disk_load
         lda #0
         sta ed_cur
         sta ed_cur+1
         jmp repl_loop
 _save:  cmp #REQ_SAVE
         bne _files
-        jsr need_h
-        jsr disk_save
+        jsr h_disk_save
         jmp repl_loop
 _files: cmp #REQ_FILES
         bne _done
-        jsr need_h
-        jsr disk_dir
+        jsr h_disk_dir
 _done:  jmp repl_loop
 
 ; do_run - a fresh interpreter, then compile and run the program in SRC
@@ -791,11 +856,11 @@ os_mod:         .word 0                 ; the os module (made at the first impor
         .include "keyboard.asm"
         .include "heap.asm"
         .include "obj.asm"
+        .include "dicthash.asm"
         .include "errors.asm"
         .include "opcodes.asm"
         .include "vm.asm"
         .include "arith.asm"
-        .include "classes.asm"
         .include "module.asm"
         .include "fcore.asm"
         .include "fbig.asm"

@@ -1,8 +1,8 @@
 ;=======================================================================================
-; Tail S (swapped in at TAIL by need_s): the str methods that never run Python code
-; (case, is*, find/index/count, replace, startswith/endswith, strip, split,
-; splitlines, join, center/ljust/rjust/zfill, title/capitalize). Overlay R has a
-; bi_str_* stub for each (methods.asm). str_find stays in R: "in" uses it.
+; Tail S: the str methods (case, is*, find/index/count, replace, startswith/endswith,
+; strip, split, splitlines, join, center/ljust/rjust/zfill, title/capitalize) and
+; list.insert / list.reverse. Overlay R has a TAILCALL stub for each (methods.asm).
+; str_find stays in R: "in" uses it.
 ;=======================================================================================
 ;---------------------------------------------------------------------------------------
 ; str
@@ -791,7 +791,7 @@ xs_str_join:
         #ARG 0                          ; the separator (Python code reuses argv)
         #PUSH
         #ARG 1
-        jsr list_from_iter_s            ; (it may run Python: back to tail S after)
+        jsr list_from_iterable          ; (may run Python: vm_call_nested brings S back)
         #PUSH
         lda sbp
         pha

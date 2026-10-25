@@ -124,6 +124,7 @@ vm_reset:
         sta runlev
         sta cur_exc
         sta cur_exc+1
+        sta nargc                       ; (no native call yet: NATIVE_SAVE keeps none)
         lda #CODE_BANK
         sta ip+2
         lda #0
@@ -788,7 +789,9 @@ call_native:
         dey
         dey
         bpl -
-_call:  lda c_func
+_call:  lda argc
+        sta nargc
+        lda c_func
         ldx c_func+1
         sta p0
         stx p0+1
@@ -1056,10 +1059,77 @@ _ret:   lda r0
         jmp store_result
 
 ;---------------------------------------------------------------------------------------
+; NATIVE_SAVE / NATIVE_RESTORE - keep native code's state on the CPU stack across Python
+; code it runs: the tail in the window and the arguments of the native call it is part
+; of (argv[0 .. 2 * nargc), nargc, npos, nkw, kwnames). A, X, Y are not kept.
+;---------------------------------------------------------------------------------------
+NATIVE_SAVE .macro
+        lda tail_cur
+        pha
+        lda kwnames
+        pha
+        lda kwnames+1
+        pha
+        lda nkw
+        pha
+        lda npos
+        pha
+        lda nargc
+        asl
+        tay                             ; Y = bytes left, X = index
+        ldx #0
+-       tya
+        beq +
+        lda argv,x
+        pha
+        inx
+        dey
+        bra -
++       lda nargc
+        pha
+        .endm
+NATIVE_RESTORE .macro
+        pla
+        sta nargc
+        asl
+        tax
+-       cpx #0
+        beq +
+        dex
+        pla
+        sta argv,x
+        bra -
++       pla
+        sta npos
+        pla
+        sta nkw
+        pla
+        sta kwnames+1
+        pla
+        sta kwnames
+        pla
+        jsr need_tail
+        .endm
+
+;---------------------------------------------------------------------------------------
 ; vm_call_nested - native code calls c_func with argc arguments it pushed (after
 ; pushing the callable). Returns A/X = the result, the stack popped back.
+; The caller's own state comes back afterwards, whatever the Python code did: its
+; arguments (argv, nargc, npos, nkw, kwnames: the native call it is part of) and its
+; tail (it may be tail code).
 ;---------------------------------------------------------------------------------------
 vm_call_nested:
+        #NATIVE_SAVE
+        jsr vcn_run
+        sta vcn_a
+        stx vcn_x
+        #NATIVE_RESTORE
+        lda vcn_a
+        ldx vcn_x
+        rts
+vcn_a:  .byte 0
+vcn_x:  .byte 0
+vcn_run:
         lda #0
         sta kwnames
         sta kwnames+1

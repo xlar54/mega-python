@@ -13,7 +13,7 @@ T_INT           = 1                     ; +4 dword
 T_STR           = 2                     ; +4 len word, +6 chars
 T_LIST          = 3                     ; +4 len, +6 cap, +8 items (T_ARR ref or 0)
 T_TUPLE         = 4                     ; +4 len, +6 refs
-T_DICT          = 5                     ; +4 count, +6 cap (pairs), +8 items (T_ARR)
+T_DICT          = 5                     ; +4 count, +6 cap (pairs), +8 items (T_ARR), +10 index
 T_ARR           = 6                     ; +4 refs
 T_FUNC          = 7                     ; +4 code, +6 nargs, +7 nlocals, +8 name, +10 defaults, +12 params
 T_BUILTIN       = 8                     ; +4 id, +5 flags, +6 name
@@ -673,7 +673,13 @@ _arr:   ldz #8
         bcc _refs
         inc p3+1
         bra _refs
-_dict:  ldz #4
+_dict:  ldz #11                         ; the hash index (a T_ARR of slots, no refs)
+        lda [p2],z
+        tax
+        dez
+        lda [p2],z
+        jsr gc_mark                     ; (uses p1, fp1)
+        ldz #4
         lda [p2],z
         asl
         sta gc_n

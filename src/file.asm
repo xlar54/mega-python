@@ -1,5 +1,5 @@
 ;=======================================================================================
-; Tail F (swapped in at TAIL by need_f): Python files - open(), read(), readline(),
+; Tail F: Python files - open(), read(), readline(),
 ; readlines(), write(), close(), with, for line in f - and the os module.
 ;
 ; A file is a sequential (SEQ) file on drive 8, opened through the KERNAL as logical

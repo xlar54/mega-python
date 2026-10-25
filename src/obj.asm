@@ -637,9 +637,9 @@ list_new:
         ldx p0+1
         rts
 
-; dict_new -> A/X ref (empty dict)
+; dict_new -> A/X ref (empty dict; +10 = its hash index, made when it grows: dicthash.asm)
 dict_new:
-        lda #10
+        lda #12
         sta alloc_size
         lda #0
         sta alloc_size+1
@@ -839,8 +839,9 @@ list_item_ptr:
         inc p1+1
 +       rts
 
-; dict_find - r0 = dict, r1 = key -> C clear if found, t3 = pair index, p1 -> pair
-dict_find:
+; dict_scan - dict_find for a dict without an index (dicthash.asm): r0 = dict, r1 =
+; key -> C clear if found, t3 = pair index, p1 -> pair. Compares every key.
+dict_scan:
         lda r0
         ldx r0+1
         sta p0
@@ -1021,7 +1022,7 @@ _room:  lda r0
         lda [p0],z
         adc #0
         sta [p0],z
-        rts
+        jmp dict_index_add
 
 ;---------------------------------------------------------------------------------------
 ; obj_eq - r2 == r3 -> C set if equal. Uses r2, r3 (restored), p0-p3, t0-t2.

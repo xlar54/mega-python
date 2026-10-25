@@ -1,9 +1,9 @@
 ;=======================================================================================
-; Builtin functions. A native routine gets its arguments in argv (argc of them, the
-; last nkw being keyword values named by kwnames) and returns its result in A/X.
-; Natives that can run Python code (str() of an instance, key functions...) must not
-; rely on argv/argc afterwards: the nested call reuses them. The arguments stay on
-; the value stack, though: argument i is at vsp + 2*(argc-1-i).
+; Builtin functions. A native routine gets its arguments in argv (nargc of them, the
+; last nkw being keyword values named by kwnames) and returns its result in A/X. They
+; stay valid across Python code it runs (vm_call_nested saves and restores them, with
+; npos); argc is for the calls it makes itself. The arguments are also on the value
+; stack: argument i is at vsp + 2*(nargc-1-i) while vsp is the call's.
 ;=======================================================================================
 ARG     .macro i
         lda argv+2*\i
@@ -15,12 +15,10 @@ NARGS   .macro lo, hi
         jsr check_nargs
         .endm
 
-npos:           .byte 0                 ; positional argument count
-
 ; check_nargs - X..Y positional arguments, and no keywords unless the routine reads them
 check_nargs:
         sec
-        lda argc
+        lda nargc
         sbc nkw
         sta npos
         cpx npos
@@ -215,7 +213,7 @@ kw_get:
         bra -
 _yes:   ; value: argv[npos + x]
         sec
-        lda argc
+        lda nargc
         sbc nkw
         stx t0
         clc
@@ -272,15 +270,12 @@ put_str:
         sta t6+1
         jmp put_far
 
-; A/X = argument i read from the value stack (valid while argc/vsp are this call's)
-; (used after nested calls via a saved pointer: see print)
-
 ;---------------------------------------------------------------------------------------
 ; print(*args, sep=' ', end='\n')
 ;---------------------------------------------------------------------------------------
 bi_print:
         sec
-        lda argc
+        lda nargc
         sbc nkw
         sta npos
         ; sep and end (None means the default)
@@ -307,7 +302,7 @@ bi_print:
         sta t2
         stx t2+1
         ; &arg0 = vsp + 2*(argc-1)
-        lda argc
+        lda nargc
         asl
         sec
         sbc #2
@@ -796,7 +791,7 @@ bi_max:
 minmax:
         sta t6+1                        ; the obj_cmp result that replaces the best
         sec
-        lda argc
+        lda nargc
         sbc nkw
         sta npos
         bne +
@@ -1619,13 +1614,25 @@ _end:   #DROP 1
         eor #1
         jmp bool_from_a
 
+; hash(): ints, floats and strings as CPython would (-1 -> -2); an instance's
+; __hash__(); tuples, frozensets and the rest by obj_hash (dicthash.asm). Unhashable
+; values (lists, dicts, sets, instances with __eq__ but no __hash__) raise TypeError.
 bi_hash:
         #NARGS 1, 1
         #ARG 0
         sta r2
         stx r2+1
         jsr int_val
-        bcc _int
+        bcs +
+        lda acc                         ; -1 hashes as -2
+        and acc+1
+        and acc+2
+        and acc+3
+        cmp #$ff
+        bne _int
+        dec acc
+        bra _int
++
         lda r2
         ldx r2+1
         jsr type_of
@@ -1673,7 +1680,27 @@ _end:   lda acc+3
 _int:   jmp int_new
 _id:    lda r2
         ldx r2+1
-        bra bi_id_ax
+        jsr need_hashable
+        jsr type_of
+        cmp #T_INST
+        bne _obj
+        lda #S_HASH
+        jsr inst_unary                  ; (r2 = the instance)
+        bcs _obj
+        rts
+_obj:   lda r2
+        ldx r2+1
+        jsr obj_hash
+        sta acc                         ; (16 bits, sign-extended)
+        stx acc+1
+        txa
+        asl a
+        lda #0
+        sbc #0
+        eor #$ff
+        sta acc+2
+        sta acc+3
+        jmp int_new
 
 bi_id:
         #NARGS 1, 1
@@ -1926,7 +1953,7 @@ bi_exit:
 
 ; BaseException.__init__(self, *args): self.args = args
 bi_exc_init:
-        lda argc
+        lda nargc
         beq _bad
         sec
         sbc #1
@@ -1938,7 +1965,7 @@ bi_exc_init:
         ldz #6
 -       txa
         lsr
-        cmp argc
+        cmp nargc
         bcs +
         lda argv,x
         sta [p0],z
@@ -2017,9 +2044,7 @@ bi_poke:
         rts
 
 ; mem() - print free heap memory
-bi_mem:
-        jsr need_h
-        jmp xh_mem
+bi_mem: #TAILCALL TAIL_H, xh_mem
 
 ; heap_free -> acc = bytes in the free list plus the untouched top
 heap_free:
@@ -2076,9 +2101,7 @@ bi_cls:
         ldx #0
         rts
 
-bi_help:
-        jsr need_h
-        jmp xh_help
+bi_help: #TAILCALL TAIL_H, xh_help
 
 ;---------------------------------------------------------------------------------------
 ; environment requests: handled by the REPL loop outside the VM
@@ -2200,7 +2223,7 @@ bi_enumerate:
         rts
 
 bi_zip:
-        lda argc
+        lda nargc
         sta nitems
         lda #0
         sta nitems+1

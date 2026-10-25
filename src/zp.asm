@@ -49,7 +49,9 @@ frp:            .dword ?                ; call frame stack pointer (bank 1)
 hsp:            .dword ?                ; handler stack pointer (bank 1)
 vtmp:           .word ?
 argp:           .word ?                 ; native call: first argument
-argc:           .byte ?
+argc:           .byte ?                 ; a call's argument count (VM, and natives' own calls)
+nargc:          .byte ?                 ; native call: its argument count (argv)
+npos:           .byte ?                 ; native call: positional ones (check_nargs)
 kwnames:        .word ?                 ; native call: keyword names tuple (0 = none)
 nkw:            .byte ?
 cur_exc:        .word ?
@@ -115,6 +117,7 @@ ff_i:           .word ?                 ; floats: layout digit index / count
 ff_cnt:         .word ?
 fd_dec:         .word ?                 ; floats: decimal point of the digits
 fd_exp:         .word ?                 ; floats: decimal exponent while parsing
+tcp:            .word ?                 ; tcall: the stub's data
 zp_end:
         .endv
         .cerror zp_end > $1700, "base page overflow"
