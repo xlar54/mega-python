@@ -112,7 +112,10 @@ class _Parser:
         self.i = 0
 
     def error(self, what):
-        raise JSONDecodeError('%s: char %d' % (what, self.i))
+        lines = self.s[:self.i].split('\n')
+        line = len(lines)
+        col = len(lines[-1]) + 1
+        raise JSONDecodeError('%s: line %d column %d (char %d)' % (what, line, col, self.i))
 
     def ws(self):
         s = self.s

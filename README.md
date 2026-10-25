@@ -206,6 +206,10 @@ Example programs on the disk:
 * `keys` (MEGA65 only): move a star with the cursor keys or a joystick in port 2
   (`keyboard`, `joystick`, `curses`)
 * `cursdemo` (MEGA65 only): `curses` windows, colours, attributes and a menu
+* `jsondemo`: a game save kept as JSON in a file (each run loads it, plays a level and
+  saves it again), pretty-printed with `indent`
+* `counter`: `Counter`, `defaultdict` and `deque` on a paragraph (letter and word
+  counts with a text bar chart)
 * `sprites` (MEGA65 only): bouncing ball sprites and a multicolour ship with `lib/sprite.py`
 * `dice` (MEGA65 only): dice, cards, a lottery draw and weighted coins with `random`
 * `clock` (MEGA65 only): the date in several formats, a stopwatch and a ticking clock
