@@ -109,6 +109,14 @@ Two such modules come with it, written in Python with `peek`/`poke`:
   cube), `grey(n)`, `wait_key()`, and the C64 colour names (`gfx.RED`, ...). Fills and
   clearing are DMA jobs, so they are fast; `plot` draws about 5000 pixels a second.
   The `gfxdemo` example draws a little scene.
+* `lib/sprite.py`: the 8 hardware sprites (24x21, over text or graphics) as a `Sprite`
+  class: `Sprite(n, shape, color)`, `shape(rows)` (strings of `.` and `X`; in
+  multicolour mode `1 2 3` for the three colours), `move(x, y)` in screen pixels,
+  `show()`, `hide()`, `color(c)`, `expand(wide, tall)`, `behind(flag)`,
+  `multicolor(flag)`; and `sprite.multicolors(c1, c2)`, `collisions()`, `hide_all()`,
+  `wait_frame()`. It corrects X on real hardware, which shows sprites 16 pixels
+  further left than Xemu. The `sprites` example bounces four balls over the text and
+  flies a multicolour ship.
 
 ```
 import gfx
@@ -121,7 +129,8 @@ gfx.text()
 
 `cls()` (and an error, so you see the traceback) also goes back to the text screen.
 Printing in graphics mode writes to the hidden text screen. `load()`, `files()`,
-`import` and `os.listdir()` load through bank 5, so they spoil the picture.
+`import` and `os.listdir()` load through bank 5, so they spoil the picture (and the
+sprite shapes, which are at its end: `$5FA00`).
 
 ```
 >>> with open('notes', 'w') as f:
@@ -142,6 +151,7 @@ Example programs on the disk:
   `os.rename`/`remove`/`listdir`)
 * `tune` (MEGA65 only): plays "Ode to Joy" with `lib/sound.py`
 * `gfxdemo` (MEGA65 only): draws a scene with `lib/gfx.py`; press a key to end it
+* `sprites` (MEGA65 only): bouncing ball sprites and a multicolour ship with `lib/sprite.py`
 
 Controls
 --------

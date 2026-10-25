@@ -27,9 +27,20 @@ scr_init:
         sta VIC4_KEY
         lda #$53
         sta VIC4_KEY
+        ldx #2                          ; (writing $D031 resets the sprite pointers'
+-       lda $D06C,x                     ; address: keep it, for lib/sprite.py)
+        pha
+        dex
+        bpl -
         lda VIC3_CTRL
         ora #%11100000                  ; H640, FAST, ATTR
         sta VIC3_CTRL
+        ldx #0
+-       pla
+        sta $D06C,x
+        inx
+        cpx #3
+        bne -
         lda #80
         sta VIC4_LINESTEP
         lda #0

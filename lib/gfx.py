@@ -79,6 +79,7 @@ def mode():
     """Switch to the 320x200 graphics screen and clear it."""
     poke(0xD02F, 0x47)                  # VIC-IV registers on
     poke(0xD02F, 0x53)
+    sprites = [peek(0xD06C), peek(0xD06D), peek(0xD06E)]
     poke(0xD031, peek(0xD031) & 0x7F)   # 40 columns
     poke(0xD054, peek(0xD054) | 5)      # 16-bit characters, full colour
     poke(0xD058, 80)                    # bytes per row
@@ -88,6 +89,8 @@ def mode():
     poke(0xD061, (CHARS >> 8) & 255)
     poke(0xD062, CHARS >> 16)
     poke(0xD063, 0)
+    for i in range(3):                  # ($D031 reset the sprite pointers' address)
+        poke(0xD06C + i, sprites[i])
     # each screen position shows its own character, numbered column by column
     first = BITMAP // 64
     if peek(CHARS) != first & 255 or peek(CHARS + 1998) != (first + 999) & 255:
