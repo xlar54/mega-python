@@ -78,8 +78,9 @@ KERNAL_SAVE             = $FFD8
 ;           $7E00-$7FFF   free for the user's machine code (os.sys)
 ;           $8000-$CFFF   overlay window (20 KB): R (builtins, methods, floats) or
 ;                         C (compiler, editor), copied in from attic by DMA. With R
-;                         in, its last 4 KB ($C000-) is float tail A (text
-;                         conversions) or B (the math module), swapped as needed
+;                         in, its last 4 KB ($C000-) is a "tail", swapped as needed:
+;                         A (float text), B (math), H (rare things), F (files, os,
+;                         imports) or S (str methods)
 ;           $E000-$EFFF   value stack (2048 refs, grows down); while compiling (the VM
 ;                         is idle) the compiler scopes use $E000-$E3FF
 ;           $F000-$FEFF   resident code, part 2 (loaded at $D000, moved by DMA at boot)
@@ -120,10 +121,12 @@ PART2_LOAD              = $D000         ; ... and its place in the build image
 OVL_R_ATTIC             = $8180000
 OVL_C_ATTIC             = $8190000
 OVL_B_ATTIC             = $81A0000      ; float tail B (the math module)
-OVL_H_ATTIC             = $81A8000      ; tail H (symbol names, help, load/save)
-OVL_F_ATTIC             = $81B0000      ; tail F (Python files: open())
+OVL_H_ATTIC             = $81A1000      ; tail H (symbol names, help, load/save)
+OVL_F_ATTIC             = $81A2000      ; tail F (Python files: open())
+OVL_S_ATTIC             = $81A3000      ; tail S (str methods)
+TAILS_N                 = 4             ; tails B, H, F, S: one after the other in mpy-ovl
 FILEBUF                 = $13C00        ; read buffers of open files 2-5 (4 x 256, bank 1)
-TAIL_SIZE               = $1000         ; the window's last 4 KB: float tail A or B
+TAIL_SIZE               = $1000         ; the window's last 4 KB: tail A, B, H, F or S
 TAIL                    = WINDOW + WINDOW_SIZE - TAIL_SIZE
 SCOPEMEM                = $E000         ; 5 compiler scopes x 192 bytes
 SCOPE_SIZE              = 192

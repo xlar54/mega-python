@@ -32,6 +32,7 @@ part1_end:
 ovl_r_start:
         .include "builtins.asm"
         .include "methods.asm"
+        .include "sets.asm"
         .include "modules.asm"
         .include "fmath.asm"
         .include "float.asm"
@@ -63,6 +64,12 @@ tail_f_start:
 tail_f_end:
         .cerror * > WINDOW + WINDOW_SIZE, "tail F is too big"
         .endv
+        .virtual TAIL
+tail_s_start:
+        .include "strmeth.asm"
+tail_s_end:
+        .cerror * > WINDOW + WINDOW_SIZE, "tail S is too big"
+        .endv
         * = PART2_LOAD
         .logical PART2
 part2_start:
@@ -88,6 +95,7 @@ part1_end:
 ovl_r_start:
         .include "builtins.asm"
         .include "methods.asm"
+        .include "sets.asm"
         .include "modules.asm"
         .include "fmath.asm"
         .include "float.asm"
@@ -135,11 +143,17 @@ tail_f_start:
         .include "file.asm"
 tail_f_end:
         .endlogical
+        * = $1000 + WINDOW_SIZE + 3 * TAIL_SIZE
+        .logical TAIL
+tail_s_start:
+        .include "strmeth.asm"
+tail_s_end:
+        .endlogical
         .endif
 
 part2_len = part2_end - part2_start
         .cerror PART2_LOAD + part2_len > $e000, "part 2's load image is too big"
 
         .if PASS == 1
-        .warn format("part 1 $%04x, overlay R $%04x + tail A $%04x / B $%04x / H $%04x / F $%04x, part 2 $%04x, overlay C $%04x bytes", part1_end - $2001, r_main_end - ovl_r_start, ovl_r_end - TAIL, tail_b_end - tail_b_start, tail_h_end - tail_h_start, tail_f_end - tail_f_start, part2_len, ovl_c_end - ovl_c_start)
+        .warn format("part 1 $%04x, overlay R $%04x + tail A $%04x / B $%04x / H $%04x / F $%04x / S $%04x, part 2 $%04x, overlay C $%04x bytes", part1_end - $2001, r_main_end - ovl_r_start, ovl_r_end - TAIL, tail_b_end - tail_b_start, tail_h_end - tail_h_start, tail_f_end - tail_f_start, tail_s_end - tail_s_start, part2_len, ovl_c_end - ovl_c_start)
         .endif

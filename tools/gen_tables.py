@@ -31,6 +31,7 @@ BUILTINS = [
     ("repr", "repr", "f"), ("abs", "abs", "f"), ("min", "min", "f"), ("max", "max", "f"),
     ("sum", "sum", "f"), ("chr", "chr", "f"), ("ord", "ord", "f"),
     ("list", "list", "t"), ("tuple", "tuple", "t"), ("dict", "dict", "t"),
+    ("set", "set", "t"), ("frozenset", "frozenset", "t"),
     ("bool", "bool", "t"), ("type", "type", "t"), ("isinstance", "isinstance", "f"),
     ("sorted", "sorted", "f"), ("enumerate", "enumerate", "f"), ("zip", "zip", "f"),
     ("hex", "hex", "f"), ("bin", "bin", "f"), ("oct", "oct", "f"),
@@ -99,8 +100,20 @@ BUILTINS = [
     ("update", "dict_update", "m", "dict"), ("clear", "dict_clear", "m", "dict"),
     ("copy", "dict_copy", "m", "dict"),
 ]
+# set methods (sets.asm); frozenset has the ones that do not change the set
+SET_READ = [("copy", "set_copy"), ("union", "set_union"),
+            ("intersection", "set_intersection"), ("difference", "set_difference"),
+            ("symmetric_difference", "set_symdiff"), ("issubset", "set_issubset"),
+            ("issuperset", "set_issuperset"), ("isdisjoint", "set_isdisjoint")]
+SET_WRITE = [("add", "set_add_m"), ("remove", "set_remove"), ("discard", "set_discard"),
+             ("pop", "set_pop"), ("clear", "set_clear"), ("update", "set_update"),
+             ("intersection_update", "set_inter_update"),
+             ("difference_update", "set_diff_update"),
+             ("symmetric_difference_update", "set_symdiff_update")]
+BUILTINS += [(n, l, "m", "set") for n, l in SET_READ + SET_WRITE]
+BUILTINS += [(n, l, "m", "frozenset") for n, l in SET_READ]
 
-OWNERS = ["list", "tuple", "str", "dict", "file"]
+OWNERS = ["list", "tuple", "str", "dict", "file", "set", "frozenset"]
 # other names the interpreter needs as symbols (modules and their constants)
 NAMES = "math pi e tau inf nan os path".split()
 

@@ -19,6 +19,8 @@ del target\%PROJECT%.prg 2>nul
 
 python tools\gen_tables.py
 if errorlevel 1 exit /b 1
+python tools\gen_fconst.py
+if errorlevel 1 exit /b 1
 python tools\mkpy.py
 if errorlevel 1 exit /b 1
 python tools\mkboot.py

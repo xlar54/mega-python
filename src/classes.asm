@@ -117,17 +117,22 @@ get_method:
         bcs +
         sec
         rts
-+       ; __name__ of functions, builtins
++       ; __name__ of functions (+8), builtins and builtin types (+6)
         lda r0
         ldx r0+1
         jsr type_of
+        ldy #9
         cmp #T_FUNC
+        beq +
+        ldy #7
+        cmp #T_BUILTIN
         bne _err
++       phy
         lda r1
         ldx r1+1
         jsr is_name_attr
+        plz
         bcc _err
-        ldz #9
         lda [p0],z
         tax
         dez

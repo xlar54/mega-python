@@ -265,6 +265,7 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_random` | `random`: seeds repeat, ranges, shuffle, sample, weighted choices, errors (properties that hold for CPython's generator too) |
 | `t_sys` | `sys`: the version values, `version_info` comparisons, `stdout.write`, `exit` |
 | `t_time` | `time`: `gmtime`, `strftime`, `asctime` of fixed times, `struct_time`, the clock's plausibility |
+| `t_sets` | set and frozenset literals, comprehensions, operators, subset comparisons, methods, `unhashable` errors |
 | `t_protocols` | user classes as iterators (`__iter__`/`__next__`, `StopIteration` ends the loop), `__contains__`, `__setitem__`, `__call__` |
 | `t_json` | `json`: `dumps` (indent, separators, sort_keys), `loads`, escapes, errors, `dump`/`load` with files |
 | `t_libs` | `string`, `bisect`, `heapq`, `functools`, `copy` |
@@ -309,7 +310,7 @@ What objects cost, roughly (4-byte header included):
 | str | 6 + its length (rounded up to even) |
 | list | 10, plus an item array of 4 + 2 per slot (it grows by doubling) |
 | tuple | 6 + 2 per item |
-| dict | 10, plus a pair array of 4 + 4 per slot |
+| dict, set | 10, plus a pair array of 4 + 4 per slot |
 | instance | 8, plus a dict for its attributes |
 
 Everything else is outside the heap (the bytecode, names, source and value stack lines of
@@ -376,7 +377,14 @@ Differences from CPython
   an existing file. `read()` returns at most 8 KB (the string builder's size).
 * **`with`** calls `__exit__(None, None, None)` even when the block raises (the
   exception always goes on: `__exit__` cannot swallow it).
-* Not supported yet: sets, generators/`yield`, closures over enclosing function
+* **Sets** (`{1, 2}`, `set()`, `frozenset()`, set comprehensions, `| & - ^`, `<=` and
+  the other subset comparisons, and the set methods) keep their members in the order
+  they were added, where CPython uses hash order: `print({3, 1, 2})` shows `{3, 1, 2}`
+  (CPython: `{1, 2, 3}`). Membership tests are linear, as for dicts, so big sets are
+  slow (300 members take about half a second to build). Methods that take other
+  iterables (`union`, `update`, ...) take one. `s |= t` makes a new set (CPython
+  changes `s`). `hash()` of a frozenset is its identity.
+* Not supported yet: generators/`yield`, closures over enclosing function
   variables (`nonlocal`), `*args`/`**kwargs`, decorators, multiple inheritance,
   `from module import *`, packages (`import a.b`), the `bytes` type.
 * **Modules**: a module's code and name are kept until `run()` or `new()`; a name a

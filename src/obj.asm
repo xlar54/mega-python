@@ -29,6 +29,18 @@ _heap:  sta p0
         stx p0+1
         ldz #0
         lda [p0],z
+        cmp #T_DICT
+        bne +
+        inz                             ; a set is a dict with F_SET (frozenset: F_FROZEN)
+        lda [p0],z
+        and #F_SET | F_FROZEN
+        beq _dict
+        lsr
+        lsr
+        lsr
+        adc #T_SET - 2                  ; ($10 -> T_SET, $18 -> T_FSET; C is clear)
++       rts
+_dict:  lda #T_DICT
         rts
 
 ;---------------------------------------------------------------------------------------
@@ -1056,8 +1068,14 @@ obj_eq:
         sec
         rts
 _notnum:
+        lda t2                          ; set == frozenset: as dicts (keys -> None)
+        cmp #T_SET
+        bcc +
+        lda t2+1
+        cmp #T_SET
+        bcs _dict
         lda t2
-        cmp t2+1
++       cmp t2+1
         bne _ne
         cmp #T_STR
         bne +
@@ -1652,6 +1670,7 @@ repr_tab:
         .word repr_builtin, repr_bound, repr_class, inst_repr
         .word repr_range, repr_iter, repr_float, repr_none
         .word repr_bool, repr_slice, repr_null, repr_file, repr_module
+        .word repr_set, repr_set
 
 repr_null:
         SBPRINT "<NULL>"

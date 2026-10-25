@@ -9,7 +9,8 @@ Language
   CPython's `hash()` for non-integral floats, faster `sin`/`cos`/`exp`/`log` (they sum
   ~15 series terms of 64-bit multiplies).
 * Arbitrary-precision ints (now 32-bit with OverflowError).
-* Sets (`{1, 2}`, `set()`), `frozenset`.
+* Sets: methods with several other iterables (`a.union(b, c)`), `|=` and friends
+  changing the set in place, CPython's hash order, `hash()` of frozensets by value.
 * Generators and `yield` (a frame object that keeps its locals off the value stack).
   Then real lazy `map`/`filter`/`zip`/generator expressions and `dict` views.
 * Closures / `nonlocal` (cells for captured locals).
@@ -31,7 +32,8 @@ Language
 * Libraries: `collections.namedtuple`/`OrderedDict`, `itertools`, `re`, `datetime`
   (some need generators or closures first).
 * `break`/`continue` inside `try` with `finally` should run the finally block.
-* Hash-based dicts (lookups are linear, fine for small dicts, slow for big ones).
+* Hash-based dicts and sets (lookups are linear, fine for small ones, slow for big
+  ones: a 300-member set takes 0.6 s to build).
 * `str` methods still missing: `partition`, `rsplit`, `swapcase`, `expandtabs`, ...
 * Tracebacks with the call chain (the frames hold the return ips).
 
@@ -48,8 +50,9 @@ Environment
 Memory
 ------
 
-* Code space is nearly full: part 1 has about 50 bytes free, overlay R about 140, part 2
-  about 290 (see the sizes `build.bat` prints). More code should go into tails (only code that never
+* Code space: part 1 has about 200 bytes free, overlay R about 370, part 2 about 280,
+  tail H about 120 (the fixed symbols' names grow with every builtin), tail S about
+  1.5 KB (see the sizes `build.bat` prints). More code should go into tails (only code that never
   runs Python code; see `docs/INTERNALS.md`) or overlay C (compile time).
 
 * Objects carry a 4-byte header; strings could drop their separate length word.

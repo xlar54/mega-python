@@ -74,3 +74,51 @@ print(b['a'], b['b'], b.d)
 t = Twice()
 print(t(21), sorted([3, 1, 2], key=t), list(map(t, [1, 2])))
 print(next(It([42])))
+
+
+class Halves:                           # (str.join runs this while it works)
+    def __init__(self, n):
+        self.n = n
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.n == 0:
+            raise StopIteration
+        self.n -= 1
+        return str(self.n * 0.5).upper()
+
+
+print('-'.join(Halves(4)), ', '.join(It(['a', 'b'])).title())
+
+
+class Gen:                              # runs Python code and builtins on each item
+    def __init__(self, items):
+        self.items = items
+        self.i = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.i >= len(self.items):
+            raise StopIteration
+        self.i += 1
+        x = self.items[self.i - 1]
+        str(len(str(x)) * 1.5).upper().split('.')
+        return x
+
+
+a = [9]
+a.extend(Gen([1, 2]))
+print(a, sorted(Gen([3, 1, 2]), key=lambda v: -v, reverse=True))
+print(sum(Gen([1, 2, 3]), 10), min(Gen([4, 2, 8]), key=lambda v: -v),
+      max(Gen([4, 2, 8]), default=0))
+print(list(enumerate(Gen(['a', 'b']), 5)), tuple(Gen([1, 2])), dict(Gen([(1, 2)])))
+print(list(zip(Gen([1, 2]), Gen('ab'))), list(map(abs, Gen([-1, -2]))),
+      list(filter(None, Gen([0, 1, 2]))), any(Gen([0, 1])), all(Gen([1, 0])))
+print(' '.join(Gen(['x', 'y'])), [v * 2 for v in Gen([1, 2])], 2 in Gen([1, 2]))
+d = {}
+d.update(Gen([('k', 1)]))
+print(d, list(Gen('hi')))

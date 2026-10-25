@@ -83,6 +83,30 @@ _next:  inc t6
         lda t6
         cmp #NBUILTINS
         bcc _loop
+        ; BaseException.__init__ is a builtin that stores the args (the classes are
+        ; made before the builtins: xh_reset)
+        ldx #EXC_BASE
+        lda exc_cls_lo,x
+        sta p0
+        lda exc_cls_hi,x
+        sta p0+1
+        ldz #8
+        lda [p0],z
+        sta r0
+        inz
+        lda [p0],z
+        sta r0+1
+        lda #<S_INIT
+        ldx #>S_INIT
+        jsr sym_name
+        sta r1
+        stx r1+1
+        lda #B_INIT
+        jsr builtin_obj
+        sta r2
+        stx r2+1
+        jsr dict_set
+        jsr clear_rregs
         lda #0
         sta al_perm
         jmp math_init
@@ -121,6 +145,14 @@ builtin_method:
         ldx #<meth_file
         ldy #>meth_file
         cmp #T_FILE
+        beq _search
+        ldx #<meth_set
+        ldy #>meth_set
+        cmp #T_SET
+        beq _search
+        ldx #<meth_frozenset
+        ldy #>meth_frozenset
+        cmp #T_FSET
         beq _search
         sec
         rts
@@ -221,7 +253,7 @@ builtin_type_of_r2:
 type_builtin:
         .byte B_NONETYPE, B_INT, B_STR, B_LIST, B_TUPLE, B_DICT, B_NONETYPE, B_FUNCTION
         .byte B_FUNCTION, B_FUNCTION, B_TYPE, $ff, B_RANGE, B_OBJECT, B_FLOAT, B_NONETYPE
-        .byte B_BOOL, B_OBJECT, B_OBJECT, B_TEXTIOWRAPPER, B_MODULE
+        .byte B_BOOL, B_OBJECT, B_OBJECT, B_TEXTIOWRAPPER, B_MODULE, B_SET, B_FROZENSET
 
 ; put_str - print string A/X
 put_str:
@@ -383,6 +415,8 @@ obj_len:
         beq _four
         cmp #T_DICT
         beq _four
+        cmp #T_SET                      ; (and T_FSET)
+        bcs _four
         cmp #T_RANGE
         beq _range
         cmp #T_INST
@@ -2217,4 +2251,141 @@ bi_zip:
         sta r0+1
         lda p0
         ldx p0+1
+        rts
+
+;---------------------------------------------------------------------------------------
+; tracebacks (in overlay R: the REPL brings R in before it reports an error)
+;---------------------------------------------------------------------------------------
+print_exception:
+        jsr scr_fresh_line
+        lda #COL_ERROR
+        sta scr_color
+        lda cur_exc
+        ldx cur_exc+1
+        sta r2
+        stx r2+1
+        ; syntax errors carry their own line; others: look the ip up
+        lda #EXC_SYNTAX
+        jsr exc_is
+        bcs _msg
+        lda exc_ip
+        ldx exc_ip+1
+        jsr line_of_ip
+        bcs _msg
+        pha
+        phx
+        #PRINT "Traceback: line "
+        plx
+        pla
+        sta acc
+        stx acc+1
+        lda #0
+        sta acc+2
+        sta acc+3
+        jsr sb_mark_t5
+        jsr sb_int
+        lda t5
+        ldx t5+1
+        jsr sb_flush
+        lda #10
+        jsr putc
+_msg:   ; "Name: message", or just "Name" when str(exc) is empty
+        lda sbp
+        pha
+        lda sbp+1
+        pha
+        lda cur_exc
+        ldx cur_exc+1
+        jsr sb_type_name
+        lda sbp
+        pha
+        lda sbp+1
+        pha
+        #SBPRINT ": "
+        lda sbp
+        pha
+        lda sbp+1
+        pha
+        lda cur_exc
+        ldx cur_exc+1
+        jsr obj_str
+        pla
+        sta t1+1
+        pla
+        sta t1
+        pla
+        sta t2+1
+        pla
+        sta t2
+        lda sbp
+        cmp t1
+        bne +
+        lda sbp+1
+        cmp t1+1
+        bne +
+        lda t2                          ; empty message: drop the ": "
+        sta sbp
+        lda t2+1
+        sta sbp+1
++       plx
+        pla
+        jsr sb_flush
+        lda #10
+        jsr putc
+        lda #COL_NORMAL
+        sta scr_color
+        rts
+
+; line_of_ip - code offset A/X -> A/X = line (C clear), C set if unknown.
+; The line table holds (offset, line) pairs in code order; take the last offset < ip.
+line_of_ip:
+        sta t0
+        stx t0+1
+        lda #<LINETAB
+        sta fp0
+        lda #>LINETAB
+        sta fp0+1
+        lda #<(LINETAB >> 16)
+        sta fp0+2
+        lda #>(LINETAB >> 16)
+        sta fp0+3
+        lda #0
+        sta t1                          ; best line
+        sta t1+1
+        lda #1
+        sta t2                          ; none found yet
+_loop:  lda fp0
+        cmp linetab_end
+        bne +
+        lda fp0+1
+        cmp linetab_end+1
+        beq _done
++       ldz #1
+        lda [fp0],z
+        cmp t0+1
+        bcc _take
+        bne _skip
+        dez
+        lda [fp0],z
+        cmp t0
+        bcs _skip
+_take:  ldz #2
+        lda [fp0],z
+        sta t1
+        inz
+        lda [fp0],z
+        sta t1+1
+        lda #0
+        sta t2
+_skip:  clc
+        lda fp0
+        adc #4
+        sta fp0
+        bcc _loop
+        inc fp0+1
+        bra _loop
+_done:  lda t2
+        lsr
+        lda t1
+        ldx t1+1
         rts
