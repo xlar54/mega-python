@@ -1614,13 +1614,25 @@ _end:   #DROP 1
         eor #1
         jmp bool_from_a
 
+; hash(): ints, floats and strings as CPython would (-1 -> -2); an instance's
+; __hash__(); tuples, frozensets and the rest by obj_hash (dicthash.asm). Unhashable
+; values (lists, dicts, sets, instances with __eq__ but no __hash__) raise TypeError.
 bi_hash:
         #NARGS 1, 1
         #ARG 0
         sta r2
         stx r2+1
         jsr int_val
-        bcc _int
+        bcs +
+        lda acc                         ; -1 hashes as -2
+        and acc+1
+        and acc+2
+        and acc+3
+        cmp #$ff
+        bne _int
+        dec acc
+        bra _int
++
         lda r2
         ldx r2+1
         jsr type_of
@@ -1668,7 +1680,27 @@ _end:   lda acc+3
 _int:   jmp int_new
 _id:    lda r2
         ldx r2+1
-        bra bi_id_ax
+        jsr need_hashable
+        jsr type_of
+        cmp #T_INST
+        bne _obj
+        lda #S_HASH
+        jsr inst_unary                  ; (r2 = the instance)
+        bcs _obj
+        rts
+_obj:   lda r2
+        ldx r2+1
+        jsr obj_hash
+        sta acc                         ; (16 bits, sign-extended)
+        stx acc+1
+        txa
+        asl a
+        lda #0
+        sbc #0
+        eor #$ff
+        sta acc+2
+        sta acc+3
+        jmp int_new
 
 bi_id:
         #NARGS 1, 1

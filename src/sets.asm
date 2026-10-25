@@ -29,32 +29,13 @@ set_kind:
         and #F_SET | F_FROZEN
         rts
 
-; set_add - r0 = set, r1 = member to add (TypeError for lists, dicts and sets)
+; set_add - r0 = set, r1 = member to add (TypeError for lists, dicts and sets: dict_find)
 set_add:
-        lda r1
-        ldx r1+1
-        jsr type_of
-        cmp #T_LIST
-        beq _unhash
-        cmp #T_DICT
-        beq _unhash
-        cmp #T_SET
-        beq _unhash
         lda #R_NONE
         sta r2
         lda #0
         sta r2+1
         jmp dict_set
-_unhash:
-        jsr sb_mark_t5
-        #SBPRINT "unhashable type: '"
-        lda r1
-        ldx r1+1
-        jsr sb_type_name
-        lda #"'"
-        jsr sb_putc
-        lda #EXC_TYPE
-        jmp raise_sb
 
 ; set_from_iter - A/X iterable, Y = flags -> A/X a new set of its items
 set_from_iter:
@@ -434,14 +415,7 @@ bi_set_pop:
 bi_set_clear:
         #NARGS 1, 1
         #ARG 0
-        sta p0
-        stx p0+1
-        ldz #4
-        lda #0
-        sta [p0],z
-        inz
-        sta [p0],z
-        #RET_NONE
+        jmp dict_clear
 
 ; the methods with another iterable: A = op (set_op) | $20 (other op self) | $40
 ; (return whether the result is empty) | $80 (make self the result, return None)
@@ -516,8 +490,8 @@ _empty: #POP
 +       lda #R_TRUE
         ldx #0
         rts
-_update:                                ; self takes the result's members (+4..+9)
-        #PEEK 0
+_update:                                ; self takes the result's members and index
+        #PEEK 0                         ; (+4..+11)
         sta p1
         stx p1+1
         #PEEK 2
@@ -527,7 +501,7 @@ _update:                                ; self takes the result's members (+4..+
 -       lda [p1],z
         sta [p0],z
         inz
-        cpz #10
+        cpz #12
         bne -
         #DROP 3
         #RET_NONE

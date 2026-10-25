@@ -266,6 +266,7 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_sys` | `sys`: the version values, `version_info` comparisons, `stdout.write`, `exit` |
 | `t_time` | `time`: `gmtime`, `strftime`, `asctime` of fixed times, `struct_time`, the clock's plausibility |
 | `t_sets` | set and frozenset literals, comprehensions, operators, subset comparisons, methods, `unhashable` errors |
+| `t_hash` | hashed dicts and sets: growth, deletes, keys equal across types, tuple/frozenset/instance keys (`__hash__`, `__eq__`), unhashable keys, order |
 | `t_protocols` | user classes as iterators (`__iter__`/`__next__`, `StopIteration` ends the loop), `__contains__`, `__setitem__`, `__call__` |
 | `t_json` | `json`: `dumps` (indent, separators, sort_keys), `loads`, escapes, errors, `dump`/`load` with files |
 | `t_libs` | `string`, `bisect`, `heapq`, `functools`, `copy` |
@@ -310,7 +311,7 @@ What objects cost, roughly (4-byte header included):
 | str | 6 + its length (rounded up to even) |
 | list | 10, plus an item array of 4 + 2 per slot (it grows by doubling) |
 | tuple | 6 + 2 per item |
-| dict, set | 10, plus a pair array of 4 + 4 per slot |
+| dict, set | 12, plus a pair array of 4 + 4 per slot; from 8 entries a hash index of 6 + 2 per slot (more than twice the entries) |
 | instance | 8, plus a dict for its attributes |
 
 Everything else is outside the heap (the bytecode, names, source and value stack lines of
@@ -380,10 +381,14 @@ Differences from CPython
 * **Sets** (`{1, 2}`, `set()`, `frozenset()`, set comprehensions, `| & - ^`, `<=` and
   the other subset comparisons, and the set methods) keep their members in the order
   they were added, where CPython uses hash order: `print({3, 1, 2})` shows `{3, 1, 2}`
-  (CPython: `{1, 2, 3}`). Membership tests are linear, as for dicts, so big sets are
-  slow (300 members take about half a second to build). Methods that take other
-  iterables (`union`, `update`, ...) take one. `s |= t` makes a new set (CPython
-  changes `s`). `hash()` of a frozenset is its identity.
+  (CPython: `{1, 2, 3}`). Methods that take other iterables (`union`, `update`, ...)
+  take one. `s |= t` makes a new set (CPython changes `s`).
+* **Dicts and sets** with 8 or more entries are hashed (smaller ones are searched one
+  by one, which is as fast for them). Keys follow CPython's rules: lists, dicts, sets
+  and instances whose class defines `__eq__` but not `__hash__` are unhashable
+  (`TypeError`); `1`, `1.0` and `True` are the same key. `hash()` gives CPython's
+  values for ints and integral floats; for strings, tuples and frozensets it gives
+  other numbers than CPython (whose string hashes change every run anyway).
 * Not supported yet: generators/`yield`, closures over enclosing function
   variables (`nonlocal`), `*args`/`**kwargs`, decorators, multiple inheritance,
   `from module import *`, packages (`import a.b`), the `bytes` type.

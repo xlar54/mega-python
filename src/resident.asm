@@ -856,6 +856,7 @@ os_mod:         .word 0                 ; the os module (made at the first impor
         .include "keyboard.asm"
         .include "heap.asm"
         .include "obj.asm"
+        .include "dicthash.asm"
         .include "errors.asm"
         .include "opcodes.asm"
         .include "vm.asm"

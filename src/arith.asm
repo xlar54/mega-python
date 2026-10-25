@@ -1381,7 +1381,7 @@ _ne:    lda #0
 op_in:
         txa
         lsr
-        sta t6                          ; OP_IN or OP_NOT_IN
+        pha                             ; OP_IN or OP_NOT_IN (contains may run anything)
         #PEEK 1
         sta r2
         stx r2+1
@@ -1389,7 +1389,7 @@ op_in:
         sta r3
         stx r3+1
         jsr contains                    ; r2 in r3 -> A
-        ldx t6
+        plx
         cpx #OP_IN
         beq +
         eor #1
@@ -1445,7 +1445,6 @@ _seq:   lda r3
         lda t0+1
         sta t5+1
         lda #0
-        sta t6+1                        ; t6 holds the IN/NOT_IN op: keep t6 lo
         sta t4
         sta t4+1
 -       lda t4

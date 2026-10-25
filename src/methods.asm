@@ -513,10 +513,15 @@ bi_dict_update:
 bi_dict_clear:
         #NARGS 1, 1
         #ARG 0
+dict_clear:                             ; (A/X = dict or set) no pairs, no index
         sta p0
         stx p0+1
         ldz #4
         lda #0
+        sta [p0],z
+        inz
+        sta [p0],z
+        ldz #10
         sta [p0],z
         inz
         sta [p0],z

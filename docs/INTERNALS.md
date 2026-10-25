@@ -11,6 +11,7 @@
 | `screen.asm`, `keyboard.asm` | 80x25 console, output transcript, `$D610` keys, line editor with history |
 | `heap.asm` | allocator (free list + bump), mark-and-sweep GC |
 | `obj.asm` | ints, strings, symbols/interning, tuples, lists, dicts, equality, truth, repr/str |
+| `dicthash.asm` | dict lookups by hash: `dict_find`, the index, `obj_hash`, `need_hashable` |
 | `errors.asm` | exception classes, raising from native code, tracebacks |
 | `lexer.asm`, `compiler.asm` | tokens with INDENT/DEDENT; the single-pass compiler |
 | `opcodes.asm`, `vm.asm` | bytecode, the dispatch loop, calls, frames, exception unwinding |
@@ -251,6 +252,27 @@ A module's attributes read and write its hidden symbols.
 
 `py_reset` (boot, `run()`, `new()`) is in tail I with the exception setup; only its
 call of `builtins_init` stays outside (that brings in tail B for `math`).
+
+## Dicts
+
+A dict (`T_DICT`, 12 bytes) keeps its pairs in insertion order in a `T_ARR` (`+4` count,
+`+6` capacity, `+8` the array), which iteration, `repr`, `==` and the GC walk. From 8
+pairs it also has a hash index at `+10` (`dicthash.asm`): a `T_ARR` with the mask at `+4`
+and 2^n 16-bit slots (0 = empty, i + 1 = pair i), open addressing with linear probing,
+kept below half full. `dict_find` hashes the key (`obj_hash`) and probes, comparing by
+identity and then `==`; smaller dicts (most instance and class dicts, keyword arguments)
+are searched pair by pair (`dict_scan`). `dict_set` enters a new pair in the slot the
+failed search found (`dict_index_add`) or rebuilds the index when it would be half full
+(`dict_reindex`, to more than twice the pairs); `dict_del` moves the later pairs down
+and rebuilds it. `clear` drops it.
+
+`obj_hash` gives 16 bits, equal for `==` keys across types (`1`, `1.0`, `True`: floats go
+through `float_hash`, so they hash like the equal int), tuples combine their items,
+frozensets use their size, instances call `__hash__` or use their identity.
+`need_hashable` rejects lists, dicts, sets and instances with `__eq__` but no
+`__hash__`, for every lookup, so small and big dicts agree. Both may run Python code
+(`__hash__`, `__eq__`), which is why `dict_find` keeps its probing state on the CPU stack
+around them, and why `op_in` keeps its operator there across `contains`.
 
 ## Sets
 

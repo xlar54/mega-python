@@ -10,7 +10,7 @@ Language
   ~15 series terms of 64-bit multiplies).
 * Arbitrary-precision ints (now 32-bit with OverflowError).
 * Sets: methods with several other iterables (`a.union(b, c)`), `|=` and friends
-  changing the set in place, CPython's hash order, `hash()` of frozensets by value.
+  changing the set in place, CPython's hash order.
 * Generators and `yield` (a frame object that keeps its locals off the value stack).
   Then real lazy `map`/`filter`/`zip`/generator expressions and `dict` views.
 * Closures / `nonlocal` (cells for captured locals).
@@ -32,8 +32,8 @@ Language
 * Libraries: `collections.namedtuple`/`OrderedDict`, `itertools`, `re`, `datetime`
   (some need generators or closures first).
 * `break`/`continue` inside `try` with `finally` should run the finally block.
-* Hash-based dicts and sets (lookups are linear, fine for small ones, slow for big
-  ones: a 300-member set takes 0.6 s to build).
+* Dicts: keep each key's hash next to it, so growing and deleting do not hash the
+  keys again; deletes are O(n) (the pairs move down and the index is rebuilt).
 * `str` methods still missing: `partition`, `rsplit`, `swapcase`, `expandtabs`, ...
 * Tracebacks with the call chain (the frames hold the return ips).
 
