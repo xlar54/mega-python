@@ -19,17 +19,18 @@ Run `build.bat`. It:
 1. generates `src/gen/tables.asm` (`tools/gen_tables.py`: symbols and builtin tables),
 2. copies `examples/*.py` and `tests/*.py` to `target/py/` as disk files (`tools/mkpy.py`),
 3. assembles `src/main.asm` with the bundled 64tass into `target/image.bin`,
-4. splits the image into the program `mega-python` and the file `mpy-ovl`
-   (`tools/split.py`), and
-5. writes `target/mega-python.d81` with c1541. The interpreter is the first file,
-   `autoboot.c65`; `mpy-ovl` and every `.py` file follow.
+4. splits the image into the program `target/mega-python.prg` and the file `mpy-ovl`
+   (`tools/split.py`), writes the boot program `autoboot.c65` (`tools/mkboot.py`), and
+5. writes `target/mega-python.d81` with c1541: `autoboot.c65` first, then the
+   interpreter `mega-python`, `mpy-ovl` and every `.py` file.
 
 Run
 ---
 
 `run.bat` builds and starts Xemu with the disk. On a real MEGA65, mount the D81 and
-reset: `AUTOBOOT.C65` starts the interpreter, which then loads `mpy-ovl` from the same
-disk.
+reset: `AUTOBOOT.C65` is a one-line BASIC program, `10 RUN "MEGA-PYTHON"`, so the
+interpreter starts by itself (or type `RUN "MEGA-PYTHON"`). It then loads `mpy-ovl` from
+the same disk.
 
 ```
 >>> 6 * 7
