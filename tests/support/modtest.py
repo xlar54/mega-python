@@ -1,4 +1,4 @@
-# modtest: a module for tests/t_import.py (import modtest)
+# modtest: a module for tests/t_import.py (import modtest) - only for that test
 NAME = 'modtest'
 count = 0
 

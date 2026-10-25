@@ -83,7 +83,7 @@ names, as in CPython. A second import gets the same module. `import math` and
 `import os` are built in. The disk has no directories, so the build writes the modules
 in `lib/` to it as `lib-<name>.py` (`lib/sprite.py` becomes `lib-sprite.py`, still
 imported as `import sprite`); a module you `save()` yourself is just `name.py`.
-`lib/modtest.py` is the one the tests use.
+(`tests/support/` holds modules that only the tests import, such as `modtest`.)
 
 For hardware access, `peek` and `poke` reach the I/O registers, and
 `os.sys(address, a=0, x=0, y=0, z=0)` calls machine code in bank 0, like BASIC's `SYS`,
@@ -199,7 +199,7 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_builtins` | the builtin functions |
 | `t_memory` | allocation-heavy code (many garbage collections) |
 | `t_floats` | float literals and repr, arithmetic and mixing with ints, `//` `%` `**`, `float()`, `round()`, `%`/`format` specs, the `math` module |
-| `t_import` | a module from the disk (`lib/modtest.py`): its functions, classes and globals, `import as`, `from import`, one import only, `ImportError` |
+| `t_import` | a module from the disk (`tests/support/modtest.py`): its functions, classes and globals, `import as`, `from import`, one import only, `ImportError` |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
 Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, screenshot),

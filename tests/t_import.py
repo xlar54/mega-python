@@ -1,4 +1,4 @@
-# import of a module from the disk (lib/modtest.py)
+# import of a module from the disk (tests/support/modtest.py)
 import modtest
 print(modtest.NAME, modtest.square(7), modtest.counter(), modtest.counter())
 print(modtest.count)
