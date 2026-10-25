@@ -1752,9 +1752,8 @@ op_build_dict:
         jsr clear_rregs
         jmp vm_loop
 
-op_build_set:
-        #RAISE EXC_NOTIMPL, "sets are not supported yet"
-op_set_add = op_build_set
+op_build_set:   jmp set_build_op            ; (sets.asm, overlay R)
+op_set_add = op_bad                         ; (unused: the compiler builds a list first)
 
 op_list_append:
         ; list at slot depth+1 (TOS = value)

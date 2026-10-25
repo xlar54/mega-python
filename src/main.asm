@@ -32,6 +32,7 @@ part1_end:
 ovl_r_start:
         .include "builtins.asm"
         .include "methods.asm"
+        .include "sets.asm"
         .include "modules.asm"
         .include "fmath.asm"
         .include "float.asm"
@@ -94,6 +95,7 @@ part1_end:
 ovl_r_start:
         .include "builtins.asm"
         .include "methods.asm"
+        .include "sets.asm"
         .include "modules.asm"
         .include "fmath.asm"
         .include "float.asm"

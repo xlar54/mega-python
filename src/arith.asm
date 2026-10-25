@@ -166,6 +166,9 @@ _notint:
         cmp #T_FLOAT
         bne +
         jmp float_binop
++       cmp #T_SET
+        bcc +
+        jmp set_binop                   ; set or frozenset | & - ^ (overlay R)
 +       cmp #T_STR
         beq _str
         cmp #T_LIST
@@ -1101,7 +1104,10 @@ _order: ; an instance: its own __lt__ / __gt__ / __le__ / __ge__, else the other
         lda r2
         ldx r2+1
         jsr type_of
-        cmp #T_INST
+        cmp #T_SET
+        bcc +
+        jmp set_compare                 ; subset / superset (overlay R)
++       cmp #T_INST
         bne _refl
         ldx bop
         lda cmp_dunder-2,x
@@ -1407,6 +1413,8 @@ contains:
         beq _seq
         cmp #T_DICT
         beq _dict
+        cmp #T_SET                      ; (and T_FSET: their keys)
+        bcs _dict
         cmp #T_STR
         beq _str
         cmp #T_RANGE

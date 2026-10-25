@@ -146,6 +146,14 @@ builtin_method:
         ldy #>meth_file
         cmp #T_FILE
         beq _search
+        ldx #<meth_set
+        ldy #>meth_set
+        cmp #T_SET
+        beq _search
+        ldx #<meth_frozenset
+        ldy #>meth_frozenset
+        cmp #T_FSET
+        beq _search
         sec
         rts
 _search:
@@ -245,7 +253,7 @@ builtin_type_of_r2:
 type_builtin:
         .byte B_NONETYPE, B_INT, B_STR, B_LIST, B_TUPLE, B_DICT, B_NONETYPE, B_FUNCTION
         .byte B_FUNCTION, B_FUNCTION, B_TYPE, $ff, B_RANGE, B_OBJECT, B_FLOAT, B_NONETYPE
-        .byte B_BOOL, B_OBJECT, B_OBJECT, B_TEXTIOWRAPPER, B_MODULE
+        .byte B_BOOL, B_OBJECT, B_OBJECT, B_TEXTIOWRAPPER, B_MODULE, B_SET, B_FROZENSET
 
 ; put_str - print string A/X
 put_str:
@@ -407,6 +415,8 @@ obj_len:
         beq _four
         cmp #T_DICT
         beq _four
+        cmp #T_SET                      ; (and T_FSET)
+        bcs _four
         cmp #T_RANGE
         beq _range
         cmp #T_INST

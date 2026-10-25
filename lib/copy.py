@@ -1,7 +1,7 @@
 # copy: shallow and deep copies, as Python's copy module
 #
-# Lists, dicts and tuples are copied; numbers, strings, None and functions are
-# shared (they cannot change). An object of a class is copied by its __copy__ or
+# Lists, dicts, sets and tuples are copied; numbers, strings, frozensets, None and
+# functions are shared (they cannot change). An object of a class is copied by its __copy__ or
 # __deepcopy__ method; without one, copy() raises TypeError here (CPython can make an
 # empty instance, which MEGA65 Python cannot).
 
@@ -19,9 +19,12 @@ def copy(x):
         return x[:]
     if isinstance(x, dict):
         return dict(x)
+    if isinstance(x, set):
+        return set(x)
     if hasattr(x, '__copy__'):
         return x.__copy__()
-    if isinstance(x, (int, float, str, bool, tuple, range)) or x is None or callable(x):
+    if isinstance(x, (int, float, str, bool, tuple, range, frozenset)) or x is None \
+            or callable(x):
         return x
     raise TypeError('cannot copy this object (give its class a __copy__ method)')
 
@@ -46,6 +49,11 @@ def deepcopy(x, memo=None):
     elif isinstance(x, tuple):
         y = tuple([deepcopy(item, memo) for item in x])
         memo[key] = y
+    elif isinstance(x, set):
+        y = set()
+        memo[key] = y
+        for item in x:
+            y.add(deepcopy(item, memo))
     elif hasattr(x, '__deepcopy__'):
         y = x.__deepcopy__(memo)
         memo[key] = y

@@ -49,3 +49,8 @@ x[2]['k'].append(8)
 print(s, d, s[1] is x[1], d[1] is x[1])
 t = ([1], 2)
 print(copy.deepcopy(t), copy.copy('str'), copy.copy(5), copy.deepcopy({'a': (1, [2])}))
+st = {1, (2, 3)}
+st2 = copy.copy(st)
+st2.add(4)
+fz = frozenset([5])
+print(sorted(st, key=str), sorted(copy.deepcopy(st2), key=str), copy.copy(fz) is fz)

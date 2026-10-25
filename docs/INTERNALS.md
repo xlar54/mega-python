@@ -25,6 +25,7 @@
 | `ftrans.asm`, `floatb.asm` | tail B: exp, log, sin, cos, atan, pow; the `math` module |
 | `tailh.asm` | tail H: the fixed symbols' and exception classes' names (for `py_reset`), `help()`, `mem()`, program load/save/directory |
 | `file.asm` | tail F: Python files (`open()` and the file methods), the `os` module, loading a module's file |
+| `sets.asm` | sets and frozensets (overlay R): operators, methods, `set()`, `BUILD_SET`, repr |
 | `strmeth.asm` | tail S: the `str` methods that never run Python code (`methods.asm` has their stubs) |
 | `module.asm` | modules from the disk: hidden global names, `import` (compile and run), attribute access |
 | `gen/mathfuncs.asm`, `gen/osfuncs.asm` | generated: the functions of `math` (tail B) and `os` / `os.path` (tail F) |
@@ -227,6 +228,21 @@ A module's attributes read and write its hidden symbols.
 
 `py_reset` (boot, `run()`, `new()`) is in tail H with the exception setup; only its
 call of `builtins_init` stays outside (that brings in tail B for `math`).
+
+## Sets
+
+A set is a `T_DICT` object (members are the keys, values `None`) with `F_SET` in its
+header flags, and a frozenset also has `F_FROZEN`. `type_of` returns `T_SET` / `T_FSET`
+for them, so code that dispatches on `type_of` (subscripts, dict methods, `isinstance`)
+does not take them for dicts, while code that reads the header byte itself (the GC,
+truth, `len`) handles them as dicts for free. `in`, iteration and `==` (`dict_eq`: a
+set equals a frozenset with the same members) use the dict code.
+
+`{a, b}` and `{x for ...}` compile to a list and `BUILD_SET`, which turns the list on
+top of the stack into a set. The operations (`set_op`: union, intersection, difference,
+symmetric difference) build a new set from lists of members on the value stack; a
+member's `__eq__` may run Python code at any point. The in-place methods
+(`update`, ...) compute the result and let `self` take over its count and pair array.
 
 ## with
 

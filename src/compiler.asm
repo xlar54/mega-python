@@ -4418,10 +4418,41 @@ at_dict:
         jsr expr
         lda tok
         cmp #TK_COLON
+        beq _dict
+        ; a set: {a, b} / {x for ...} - built as a list, then BUILD_SET makes it a set
+        cmp #KW_FOR
+        bne _set
+        plx
+        pla
+        ldy #0
+        jsr comprehension
+        bra _toset
+_set:   pla
+        pla
+        lda #1
+-       pha
+        lda tok
+        cmp #TK_COMMA
+        bne +
+        jsr lex
+        lda tok
+        cmp #TK_RBRACE
         beq +
-        jsr syntax_error
-        .text "sets are not supported yet", 0
-+       jsr lex
+        jsr expr
+        pla
+        inc a
+        bne -
+        jmp c_syntax
++       pla
+        ldy #OP_BUILD_LIST
+        ldx #0
+        jsr emit_op_word
+_toset: ldy #OP_BUILD_SET
+        lda #0
+        tax
+        jsr emit_op_word
+        bra _close
+_dict:  jsr lex
         jsr expr
         lda tok
         cmp #KW_FOR

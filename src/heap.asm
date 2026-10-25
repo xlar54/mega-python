@@ -28,11 +28,15 @@ T_BOOL          = 16
 T_SLICE         = 17                    ; +4 start, +6 stop, +8 step (refs)
 T_FILE          = 19                    ; +4 lfn, +5 mode, +6 flags, +8 pos, +9 len, +10 name
 T_MODULE        = 20                    ; +4 name, +6 module symbol (module.asm)
-T_NTYPES        = 21
+T_SET           = 21                    ; type_of only: a T_DICT with F_SET (keys -> None)
+T_FSET          = 22                    ; type_of only: ... with F_SET | F_FROZEN (frozenset)
+T_NTYPES        = 23
 
 F_MARK          = $80
 F_PERM          = $40                   ; never freed (compile-time constants, builtins)
 F_INTERN        = $20
+F_SET           = $10                   ; (dicts) a set: the GC and len() see a dict
+F_FROZEN        = $08                   ; (sets) a frozenset
 
 R_NULL          = 0
 R_NONE          = 2

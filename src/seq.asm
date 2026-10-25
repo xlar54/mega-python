@@ -882,6 +882,8 @@ get_iter:
         ldy #IT_DICT
         cmp #T_DICT
         beq _new
+        cmp #T_SET                      ; (and T_FSET: the keys)
+        bcs _new
         cmp #T_RANGE
         beq _range
         cmp #T_INST
