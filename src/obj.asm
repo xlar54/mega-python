@@ -1033,9 +1033,13 @@ obj_eq:
         sta t2+1
         ; numbers (int, bool) compare by value
         lda t2
+        cmp #T_FLOAT
+        beq _flt
         jsr is_inttype
         bcc _notnum
         lda t2+1
+        cmp #T_FLOAT
+        beq _flt
         jsr is_inttype
         bcc _ne
         lda r2
@@ -1069,6 +1073,7 @@ _notnum:
         jmp inst_eq
 _ne:    clc
         rts
+_flt:   jmp float_eq
 _dict:  jmp dict_eq
 _seq:   ; same length, then item by item
         jsr seq_info2
@@ -1360,6 +1365,8 @@ _heap:  bit #1
         lda [p0],z
         cmp #T_INT
         beq _t                          ; boxed ints are never zero
+        cmp #T_FLOAT
+        beq _float
         cmp #T_STR
         beq _len
         cmp #T_LIST
@@ -1377,6 +1384,16 @@ _len:   ldz #4
         lda [p0],z
         inz
         ora [p0],z
+        beq _f
+        bra _t
+_float: ldz #11                         ; +-0.0 is false
+        lda [p0],z
+        and #$7f
+-       dez
+        ora [p0],z
+        cpz #4
+        bne -
+        cmp #0
         beq _f
         bra _t
 
@@ -1633,7 +1650,7 @@ repr_tab:
         .word repr_null, repr_int, repr_str, repr_list
         .word repr_tuple, repr_dict, repr_null, repr_func
         .word repr_builtin, repr_bound, repr_class, inst_repr
-        .word repr_range, repr_iter, repr_null, repr_none
+        .word repr_range, repr_iter, repr_float, repr_none
         .word repr_bool, repr_slice
 
 repr_null:

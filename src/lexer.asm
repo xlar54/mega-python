@@ -10,7 +10,7 @@ TK_NAME         = 4                     ; tok_sym = symbol, tok_ref = name strin
 TK_INT          = 5                     ; tok_num
 TK_STR          = 6                     ; tok_ref
 TK_FSTR         = 7                     ; tok_num = far pointer to raw text, tok_sym = length
-TK_FLOAT        = 8
+TK_FLOAT        = 8                     ; tok_ref
 TK_LPAREN       = 16
 TK_RPAREN       = 17
 TK_LBRACK       = 18
@@ -564,12 +564,59 @@ _end:   lda t1
 +       lda #TK_INT
         sta tok
         rts
-_big:   jsr syntax_error
+_big:   ; too big for an int: a float if a '.' or exponent follows the digits
+        lda t1
+        cmp #10
+        bne _toobig
+-       #LXC
+        cmp #'_'
+        beq +
+        cmp #'0'
+        bcc ++
+        cmp #'9'+1
+        bcs ++
++       inw lx_ptr
+        bra -
++       cmp #'.'
+        beq lx_float
+        ora #$20
+        cmp #'e'
+        beq lx_float
+_toobig:
+        jsr syntax_error
         .text "integer literal too large (ints are 32-bit)", 0
 
+; a float literal: parsed again from its start
 lx_float:
+        ldx #3
+-       lda tok_start,x
+        sta fsp,x
+        dex
+        bpl -
+        jsr f_parse
+        bcc +
         jsr syntax_error
-        .text "floats are not supported yet", 0
+        .text "invalid decimal literal", 0
++       ldx #3
+-       lda fsp,x
+        sta lx_ptr,x
+        dex
+        bpl -
+        #LXC
+        ora #$20
+        cmp #'j'
+        bne +
+        jsr syntax_error
+        .text "complex numbers are not supported", 0
++       lda #TK_FLOAT
+        sta tok
+        lda lx_scan
+        bne +
+        jsr f_from_digits
+        jsr float_new_dbl
+        sta tok_ref
+        stx tok_ref+1
++       rts
 
 
 ;---------------------------------------------------------------------------------------

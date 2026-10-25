@@ -1255,11 +1255,17 @@ format_value:
         ; the body
         lda r2
         ldx r2+1
+        jsr is_float
+        bcs _float
+        lda r2
+        ldx r2+1
         jsr int_val
         bcs _notint
         lda fs_type
         cmp #'s'
         beq _notint
+        jsr float_type_code
+        bcs _float
         lda fs_align
         bne +
         lda #'>'
@@ -1331,6 +1337,12 @@ _rad:   sta t6
         bra _body
 _char:  lda acc
         jsr sb_putc
+        bra _body
+_float: lda fs_align
+        bne +
+        lda #'>'
+        sta fs_align
++       jsr format_float
         bra _body
 _notint:
         lda fs_align
@@ -1576,11 +1588,16 @@ _conv:  inw pc_pos
         jsr sb_putc
         inw pc_pos
         bra _loop
-+       ; flags, width
++       ; flags, width, precision
         lda #'>'
         sta fs_align
         lda #' '
         sta fs_fill
+        lda #'-'
+        sta fs_sign
+        lda #$ff
+        sta fs_prec
+        sta fs_prec+1
         lda #0
         sta fs_width
         sta fs_width+1
@@ -1590,6 +1607,13 @@ _flags: jsr pc_get
         bne +
         lda #'<'
         sta fs_align
+        inw pc_pos
+        bra _flags
++       cmp #'+'
+        beq _sgn
+        cmp #' '
+        bne +
+_sgn:   sta fs_sign
         inw pc_pos
         bra _flags
 +       cmp #'0'
@@ -1602,7 +1626,34 @@ _flags: jsr pc_get
         bra _flags
 _wid:   jsr pc_get
         bcs _bad
+        cmp #'.'
+        bne +
+        lda #0
+        sta fs_prec
+        sta fs_prec+1
+        inw pc_pos
+-       jsr pc_get                      ; the precision (up to 255)
+        bcs _bad
         cmp #'0'
+        bcc _type
+        cmp #'9'+1
+        bcs _type
+        and #15
+        pha
+        lda fs_prec
+        asl
+        asl
+        clc
+        adc fs_prec
+        asl
+        sta fs_prec
+        pla
+        clc
+        adc fs_prec
+        sta fs_prec
+        inw pc_pos
+        bra -
++       cmp #'0'
         bcc _type
         cmp #'9'+1
         bcs _type
@@ -1655,20 +1706,41 @@ _type:  inw pc_pos
         beq _int
         cmp #'c'
         beq _int
+        jsr float_type_code
+        bcs _flt
 _bad:   #RAISE EXC_VALUE, "unsupported format character"
 _few:   #RAISE EXC_TYPE, "not enough arguments for format string"
+_flt:   lda r2                          ; a number, as a float
+        ldx r2+1
+        jsr num_to_fa
+        bcs _need
+        jsr float_new
+        sta r2
+        stx r2+1
+        bra _fmt
+_need:  #RAISE EXC_TYPE, "must be real number"
 _int:   cmp #'i'
         bne +
         lda #'d'
         sta fs_type
-+       jsr pc_save
-        lda #'-'
-        sta fs_sign
-        lda #0
-        sta fs_comma
-        lda #$ff
++       lda r2                          ; %d of a float: its int
+        ldx r2+1
+        jsr is_float
+        bcc +
+        lda r2
+        ldx r2+1
+        jsr float_load
+        jsr f_unpack
+        jsr f_trunc
+        jsr f_int_result
+        sta r2
+        stx r2+1
++       lda #$ff
         sta fs_prec
         sta fs_prec+1
+_fmt:   jsr pc_save
+        lda #0
+        sta fs_comma
         jsr format_value
         jsr pc_restore
         jmp _loop

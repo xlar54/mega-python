@@ -108,6 +108,13 @@ ms_j:           .word ?
 ms_k:           .word ?
 src_len:        .word ?
 ed_cur:         .word ?
+bnA:            .dword ?                ; floats: bignum operands (bank 1)
+bnB:            .dword ?
+fsp:            .dword ?                ; floats: text being parsed
+ff_i:           .word ?                 ; floats: layout digit index / count
+ff_cnt:         .word ?
+fd_dec:         .word ?                 ; floats: decimal point of the digits
+fd_exp:         .word ?                 ; floats: decimal exponent while parsing
 zp_end:
         .endv
         .cerror zp_end > $1700, "base page overflow"

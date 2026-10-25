@@ -752,7 +752,6 @@ _call:  lda c_func
         stx p0+1
         ldz #4
         lda [p0],z
-        asl
         tax
         lda c_flags
         pha
@@ -808,8 +807,13 @@ store_result:
         plx
         pla
         rts                             ; back into vm_call_nested's caller
-native_jmp:
-        jmp (builtin_tab,x)
+native_jmp:                             ; X = builtin id
+        lda builtin_tab_lo,x
+        sta native_vec
+        lda builtin_tab_hi,x
+        sta native_vec+1
+        jmp (native_vec)
+native_vec:     .word 0
 
 ;---------------------------------------------------------------------------------------
 ; call_py - call the Python function c_func

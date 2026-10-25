@@ -50,16 +50,13 @@ _loop:  lda #8
         lda builtin_flags,x
         inz
         sta [p0],z
-        txa
-        asl
-        tax
         lda p0
-        sta builtin_refs,x
+        sta builtin_refs_lo,x
         lda p0+1
-        sta builtin_refs+1,x
-        lda builtin_name,x
+        sta builtin_refs_hi,x
+        lda builtin_name_lo,x
         sta t4
-        lda builtin_name+1,x
+        lda builtin_name_hi,x
         sta t4+1
         lda t4
         ldx t4+1
@@ -88,15 +85,14 @@ _next:  inc t6
         bcc _loop
         lda #0
         sta al_perm
-        rts
+        jmp math_init
 
 ; builtin_obj - A = builtin id -> A/X
 builtin_obj:
-        asl
         tax
-        lda builtin_refs,x
+        lda builtin_refs_lo,x
         pha
-        lda builtin_refs+1,x
+        lda builtin_refs_hi,x
         tax
         pla
         rts
@@ -220,7 +216,7 @@ builtin_type_of_r2:
 +       jmp builtin_obj
 type_builtin:
         .byte B_NONETYPE, B_INT, B_STR, B_LIST, B_TUPLE, B_DICT, B_NONETYPE, B_FUNCTION
-        .byte B_FUNCTION, B_FUNCTION, B_TYPE, $ff, B_RANGE, B_OBJECT, B_INT, B_NONETYPE
+        .byte B_FUNCTION, B_FUNCTION, B_TYPE, $ff, B_RANGE, B_OBJECT, B_FLOAT, B_NONETYPE
         .byte B_BOOL, B_OBJECT, B_OBJECT
 
 ; put_str - print string A/X
@@ -511,6 +507,16 @@ bi_int:
         #RAISE EXC_TYPE, "int() can't convert non-string with explicit base"
 +       lda r2
         ldx r2+1
+        jsr is_float
+        bcc +
+        lda r2
+        ldx r2+1
+        jsr float_load
+        jsr f_unpack
+        jsr f_trunc
+        jmp f_int_result
++       lda r2
+        ldx r2+1
         jsr int_val
         bcs _bad
         jmp int_new
@@ -689,6 +695,31 @@ bi_str:
         pla
         jmp sb_take
 
+bi_format:
+        #NARGS 1, 2
+        lda npos
+        cmp #2
+        beq +
+        jmp bi_str
++       lda sbp
+        pha
+        lda sbp+1
+        pha
+        #ARG 1
+        sta r3
+        stx r3+1
+        jsr type_of
+        cmp #T_STR
+        beq +
+        jmp raise_need_str
++       #ARG 0
+        sta r2
+        stx r2+1
+        jsr format_spec
+        plx
+        pla
+        jmp sb_take
+
 bi_repr:
         #NARGS 1, 1
         lda sbp
@@ -704,6 +735,11 @@ bi_repr:
 bi_abs:
         #NARGS 1, 1
         #ARG 0
+        jsr is_float
+        bcc +
+        #ARG 0
+        jmp float_abs
++       #ARG 0
         jsr need_int
         bit acc+3
         bpl +
@@ -1326,7 +1362,14 @@ hex_digits:     .text "0123456789abcdef"
 
 bi_divmod:
         #NARGS 2, 2
+        #ARG 0
+        jsr is_float
+        bcs +
         #ARG 1
+        jsr is_float
+        bcc ++
++       jmp float_divmod
++       #ARG 1
         jsr need_int
         ldq acc
         stq acc2
@@ -1540,7 +1583,12 @@ bi_hash:
         lda r2
         ldx r2+1
         jsr type_of
-        cmp #T_STR
+        cmp #T_FLOAT
+        bne +
+        lda r2
+        ldx r2+1
+        jmp float_hash
++       cmp #T_STR
         bne _id
         lda r2
         ldx r2+1
@@ -1801,6 +1849,10 @@ _done:  pla
 bi_round:
         #NARGS 1, 2
         #ARG 0
+        jsr is_float
+        bcc +
+        jmp float_round
++       #ARG 0
         jsr need_int
         jmp int_new
 
@@ -1977,26 +2029,8 @@ bi_cls:
         rts
 
 bi_help:
-        jsr scr_fresh_line
-        lda #COL_INFO
-        sta scr_color
-        lda #<help_text
-        ldx #>help_text
-        jsr puts
-        lda #COL_NORMAL
-        sta scr_color
-        lda #R_NONE
-        ldx #0
-        rts
-help_text:
-        .text "MEGA65 Python - commands:", 10
-        .text "  edit()          full-screen editor for the program (ESC = back, F5 = run)", 10
-        .text "  run()           run the program", 10
-        .text "  new()           clear the program and all variables", 10
-        .text "  load('name')    load name.py from disk;  save('name') saves it", 10
-        .text "  files()         list the .py files on the disk", 10
-        .text "  cls()  mem()  gc()  peek(addr)  poke(addr, byte)", 10
-        .text "Keys: cursor keys edit the line, up/down = history, RUN/STOP = break", 10, 0
+        jsr need_h
+        jmp xh_help
 
 ;---------------------------------------------------------------------------------------
 ; environment requests: handled by the REPL loop outside the VM

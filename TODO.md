@@ -4,8 +4,10 @@ TODO
 Language
 --------
 
-* Floats: a software float type (`T_FLOAT` is reserved) with `/`, `float()`, `math`.
-  The hardware multiplier/divider ($D770) can do the mantissa work.
+* Floats: `float` methods (`is_integer`, `hex`, `as_integer_ratio`), `math` functions
+  still missing (`factorial`, `gcd`, `isclose`, `modf`, `frexp`, `ldexp`, hyperbolics),
+  CPython's `hash()` for non-integral floats, faster `sin`/`cos`/`exp`/`log` (they sum
+  ~15 series terms of 64-bit multiplies).
 * Arbitrary-precision ints (now 32-bit with OverflowError).
 * Sets (`{1, 2}`, `set()`), `frozenset`.
 * Generators and `yield` (a frame object that keeps its locals off the value stack).
@@ -13,7 +15,8 @@ Language
 * Closures / `nonlocal` (cells for captured locals).
 * `*args`, `**kwargs`, keyword-only arguments, decorators, `with`.
 * `import` of built-in modules: `mega65` (graphics on the reserved bank-5 framebuffer,
-  sprites, sound), `time`, `random`, `math`, `sys`, `gc`.
+  sprites, sound), `time`, `random`, `sys`, `gc`. (`math` is a class object; a real
+  module type would print as `<module 'math'>`.)
 * `StopIteration` from a user `__next__` should end a `for` loop (it propagates now).
 * `break`/`continue` inside `try` with `finally` should run the finally block.
 * Hash-based dicts (lookups are linear, fine for small dicts, slow for big ones).
@@ -32,6 +35,10 @@ Environment
 
 Memory
 ------
+
+* Code space is nearly full: part 1 and overlay R have about 200 bytes free each (see
+  the sizes `build.bat` prints). More code should go into tails (only code that never
+  runs Python code; see `docs/INTERNALS.md`) or overlay C (compile time).
 
 * Objects carry a 4-byte header; strings could drop their separate length word.
 * The heap is one 64 KB bank (16-bit refs). A second heap bank would need wider refs or

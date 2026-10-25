@@ -3566,10 +3566,24 @@ unary:
         beq _inv
         jmp power
 _neg:   jsr lex
-        ; -<int literal>: fold
+        ; -<number literal>: fold (but not -2 ** 2, which is -(2 ** 2))
+        jsr peek_pow
+        bcs _nofold
         lda tok
-        cmp #TK_INT
+        cmp #TK_FLOAT
         bne +
+        lda tok_ref
+        ldx tok_ref+1
+        jsr float_load
+        lda fdbl+7
+        eor #$80
+        sta fdbl+7
+        jsr float_new_dbl
+        sta tok_ref
+        stx tok_ref+1
+        jmp power
++       cmp #TK_INT
+        bne _nofold
         lda tok_num
         sta acc
         lda tok_num+1
@@ -3585,7 +3599,8 @@ _neg:   jsr lex
         dex
         bpl -
         jmp power
-+       jsr unary
+_nofold:
+        jsr unary
         lda #OP_NEG
         bra _emit
 _pos:   jsr lex
@@ -3598,6 +3613,25 @@ _inv:   jsr lex
 _emit:  jsr emit
         lda #$ff
         sta c_last_op+1
+        rts
+
+; peek_pow - C set if the source after the current token starts with ** (after spaces)
+peek_pow:
+        ldz #0
+-       lda [lx_ptr],z
+        cmp #' '
+        bne +
+        inz
+        bra -
++       cmp #'*'
+        bne _no
+        inz
+        lda [lx_ptr],z
+        cmp #'*'
+        bne _no
+        sec
+        rts
+_no:    clc
         rts
 
 power:
@@ -3891,6 +3925,12 @@ atom:
         dex
         bpl -
         jsr int_new
+        jsr emit_const
+        jmp lex
++       cmp #TK_FLOAT
+        bne +
+        lda tok_ref
+        ldx tok_ref+1
         jsr emit_const
         jmp lex
 +       cmp #TK_STR

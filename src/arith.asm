@@ -132,17 +132,21 @@ binop:
         bcc _intother
         jmp int_binop
 _intother:
-        ; int * seq
+        lda bop_types+1
+        cmp #T_FLOAT
+        bne +
+        jmp float_binop
++       ; int * seq
         lda bop
         cmp #BOP_MUL
-        bne _try_inst
+        bne binop_inst
         lda bop_types+1
         cmp #T_STR
         beq _swapmul
         cmp #T_LIST
         beq _swapmul
         cmp #T_TUPLE
-        bne _try_inst
+        bne binop_inst
 _swapmul:
         lda r2
         ldx r2+1
@@ -159,13 +163,16 @@ _swapmul:
         jmp seq_repeat
 _notint:
         lda bop_types
-        cmp #T_STR
+        cmp #T_FLOAT
+        bne +
+        jmp float_binop
++       cmp #T_STR
         beq _str
         cmp #T_LIST
         beq _list
         cmp #T_TUPLE
         beq _tuple
-        bra _try_inst
+        bra binop_inst
 _str:   lda bop
         cmp #BOP_IADD
         beq +
@@ -173,18 +180,18 @@ _str:   lda bop
         bne _strmul
 +       lda bop_types+1
         cmp #T_STR
-        bne _try_inst
+        bne binop_inst
         jmp str_concat
 _strmul:
         cmp #BOP_MUL
         bne _strmod
         lda bop_types+1
         jsr is_inttype
-        bcc _try_inst
+        bcc binop_inst
         jmp seq_repeat
 _strmod:
         cmp #BOP_MOD
-        bne _try_inst
+        bne binop_inst
         jmp str_percent
 _list:  lda bop
         cmp #BOP_IADD
@@ -194,14 +201,14 @@ _list:  lda bop
         beq _extend
         cmp #T_TUPLE
         beq _extend
-        bra _try_inst
+        bra binop_inst
 _extend:
         jmp list_iadd
 +       cmp #BOP_ADD
         bne _seqmul
         lda bop_types+1
         cmp #T_LIST
-        bne _try_inst
+        bne binop_inst
         jmp seq_concat
 _tuple: lda bop
         cmp #BOP_ADD
@@ -210,16 +217,16 @@ _tuple: lda bop
         bne _seqmul
 +       lda bop_types+1
         cmp #T_TUPLE
-        bne _try_inst
+        bne binop_inst
         jmp seq_concat
 _seqmul:
         cmp #BOP_MUL
-        bne _try_inst
+        bne binop_inst
         lda bop_types+1
         jsr is_inttype
-        bcc _try_inst
+        bcc binop_inst
         jmp seq_repeat
-_try_inst:
+binop_inst:
         ; user classes: __add__ etc. (then the reflected __radd__)
         lda bop_types
         cmp #T_INST
@@ -290,7 +297,7 @@ iop_mul:
         bcs int_overflow
         bra iop_done
 iop_truediv:
-        #RAISE EXC_NOTIMPL, "true division needs floats (not supported yet); use //"
+        jmp float_binop
 iop_floordiv:
         jsr acc_divmod
         bra iop_done
@@ -302,7 +309,7 @@ iop_mod:
 iop_pow:
         bit acc2+3
         bpl +
-        #RAISE EXC_NOTIMPL, "negative powers need floats (not supported yet)"
+        jmp float_binop                 ; a negative power: a float
 +       ; acc3 = base, acc = 1; square-and-multiply on acc2
         ldq acc
         stq acc3
@@ -1084,6 +1091,8 @@ compare:
         eor #1
 +       rts
 _order: jsr obj_cmp                     ; -> A = $ff less, 0 equal, 1 greater
+        cmp #2
+        beq _f                          ; (unordered: a nan)
         ldx bop
         cpx #2
         bne +
@@ -1122,7 +1131,7 @@ obj_cmp:
         bcc _notint
         lda t2+1
         jsr is_inttype
-        bcc _bad
+        bcc _flt
         lda r3
         ldx r3+1
         jsr int_val
@@ -1154,6 +1163,8 @@ _eq:    lda #0
         rts
 _notint:
         lda t2
+        cmp #T_FLOAT
+        beq _flt
         cmp t2+1
         bne _bad
         cmp #T_STR
@@ -1166,6 +1177,7 @@ _notint:
         bne _bad
         jmp inst_cmp
 _bad:   jmp raise_cmp_types
+_flt:   jmp float_order
 _str:   lda r2
         ldx r2+1
         jsr str_info
@@ -1500,7 +1512,16 @@ op_unary:
         lda r2
         ldx r2+1
         jsr type_of
-        cmp #T_INST
+        cmp #T_FLOAT
+        bne +
+        lda r2
+        ldx r2+1
+        ldy t6
+        jsr float_unary
+        #POKE 0
+        jsr clear_rregs
+        jmp vm_loop
++       cmp #T_INST
         bne _bad
         ldx t6
         lda #S_NEG

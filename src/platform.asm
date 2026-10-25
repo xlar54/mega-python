@@ -73,9 +73,12 @@ KERNAL_SAVE             = $FFD8
 ;           $1700-$17FF   REPL line buffer
 ;           $1800-$1DFF   CPU stack (16-bit SP)
 ;           $1E00-$1EFF   file name buffer for KERNAL calls
+;           $1F00-$1FFF   decimal digits of a float being converted
 ;           $2001-$7FFF   resident code, part 1
 ;           $8000-$CFFF   overlay window (20 KB): R (builtins, methods, floats) or
-;                         C (compiler, editor), copied in from attic by DMA
+;                         C (compiler, editor), copied in from attic by DMA. With R
+;                         in, its last 4 KB ($C000-) is float tail A (text
+;                         conversions) or B (the math module), swapped as needed
 ;           $E000-$EFFF   value stack (2048 refs, grows down); while compiling (the VM
 ;                         is idle) the compiler scopes use $E000-$E3FF
 ;           $F000-$FEFF   resident code, part 2 (loaded at $D000, moved by DMA at boot)
@@ -104,6 +107,7 @@ CPUSTACK                = $1800
 CPUSTACK_TOP            = $1DFF
 CPUSTACK_LIMIT          = $1880         ; RecursionError below this
 FNAMEBUF                = $1E00
+DIGBUF                  = $1F00         ; float <-> decimal digits (256)
 WINDOW                  = $8000
 WINDOW_SIZE             = $5000
 PART2                   = $F000         ; resident part 2 runs here (up to $FEFF)
@@ -111,6 +115,10 @@ PART2_END               = $FF00         ; 0.FF00-0.FFFF is reserved
 PART2_LOAD              = $D000         ; ... and its place in the build image
 OVL_R_ATTIC             = $8180000
 OVL_C_ATTIC             = $8190000
+OVL_B_ATTIC             = $81A0000      ; float tail B (the math module)
+OVL_H_ATTIC             = $81A8000      ; tail H (symbol names, help)
+TAIL_SIZE               = $1000         ; the window's last 4 KB: float tail A or B
+TAIL                    = WINDOW + WINDOW_SIZE - TAIL_SIZE
 SCOPEMEM                = $E000         ; 5 compiler scopes x 192 bytes
 SCOPE_SIZE              = 192
 SCOPE_MAX               = 5

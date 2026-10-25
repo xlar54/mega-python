@@ -141,6 +141,32 @@ load_pieces:
         sta t0
         lda #>WINDOW_SIZE
         sta t0+1
+        jsr dma_copy
+        lda #<(STAGE + WINDOW_SIZE)     ; then float tail B
+        sta fp0
+        lda #>(STAGE + WINDOW_SIZE)
+        sta fp0+1
+        lda #<OVL_B_ATTIC
+        sta fp1
+        lda #>OVL_B_ATTIC
+        sta fp1+1
+        lda #<(OVL_B_ATTIC >> 16)
+        sta fp1+2
+        lda #>(OVL_B_ATTIC >> 16)
+        sta fp1+3
+        lda #<TAIL_SIZE
+        sta t0
+        lda #>TAIL_SIZE
+        sta t0+1
+        jsr dma_copy
+        lda #<(STAGE + WINDOW_SIZE + TAIL_SIZE)     ; and tail H
+        sta fp0
+        lda #>(STAGE + WINDOW_SIZE + TAIL_SIZE)
+        sta fp0+1
+        lda #<OVL_H_ATTIC
+        sta fp1
+        lda #>OVL_H_ATTIC
+        sta fp1+1
         jmp dma_copy
 ovl_name:       .text "mpy-ovl"
 ovl_name_len = * - ovl_name
@@ -227,6 +253,7 @@ ovl_runtime:
         rts
 +       lda #0
         sta ovl_cur
+        sta tail_cur
         lda #<OVL_R_ATTIC
         sta fp0
         lda #>OVL_R_ATTIC
@@ -263,6 +290,61 @@ ovl_load:
         lda #>WINDOW_SIZE
         sta t0+1
         jmp dma_copy
+
+; need_a / need_b / need_h - tail A / B / H into the window's tail (overlay R must be in).
+; Registers are kept.
+tail_cur:       .byte 0                 ; 0 = A, 1 = B, 2 = H
+need_a: pha
+        lda tail_cur
+        beq tail_ok
+        lda #0
+        sta tail_cur
+        phx
+        ldx #0
+        bra tail_load
+need_b: pha
+        lda #1
+        bra +
+need_h: pha
+        lda #2
++       cmp tail_cur
+        beq tail_ok
+        sta tail_cur
+        phx
+        asl a
+        asl a
+        tax
+tail_load:
+        lda tail_src,x
+        sta dmaj_src
+        lda tail_src+1,x
+        sta dmaj_src+1
+        lda tail_src+2,x
+        sta dmaj_src_bank
+        lda tail_src+3,x
+        sta dmaj_src_mb
+        lda #DMACMD_COPY
+        sta dmaj_cmd
+        lda #<TAIL_SIZE
+        sta dmaj_count
+        lda #>TAIL_SIZE
+        sta dmaj_count+1
+        lda #<TAIL
+        sta dmaj_dst
+        lda #>TAIL
+        sta dmaj_dst+1
+        lda #0
+        sta dmaj_dst_bank
+        sta dmaj_dst_mb
+        jsr dma_go
+        plx
+tail_ok: pla
+        rts
+TAIL_A_ATTIC = OVL_R_ATTIC + TAIL - WINDOW
+tail_src:
+        .byte <TAIL_A_ATTIC, >TAIL_A_ATTIC, (TAIL_A_ATTIC >> 16) & 15, TAIL_A_ATTIC >> 20
+        .byte <OVL_B_ATTIC, >OVL_B_ATTIC, (OVL_B_ATTIC >> 16) & 15, OVL_B_ATTIC >> 20
+        .byte <OVL_H_ATTIC, >OVL_H_ATTIC, (OVL_H_ATTIC >> 16) & 15, OVL_H_ATTIC >> 20
 
 ; compile - compile_source with the compiler overlay in the window
 compile:
@@ -356,6 +438,7 @@ py_reset:
         ; the fixed symbols, in order
         lda #F_PERM
         sta al_perm
+        jsr need_h                      ; (the names are in tail H)
         lda #<sym_init_names
         sta t6
         lda #>sym_init_names
@@ -773,7 +856,9 @@ c_made_func:    .byte 0
 c_repl:         .byte 0                 ; 1: the compiler prints expression statements
 linetab_end:    .word LINETAB & $ffff
 fname_len:      .byte 0
-builtin_refs:   .fill 2*NBUILTINS
+builtin_refs_lo: .fill NBUILTINS
+builtin_refs_hi: .fill NBUILTINS
+math_mod:       .word 0                 ; the math module (a perm class object)
 
         .include "dma.asm"
         .include "disk.asm"
@@ -786,3 +871,5 @@ builtin_refs:   .fill 2*NBUILTINS
         .include "vm.asm"
         .include "arith.asm"
         .include "classes.asm"
+        .include "fcore.asm"
+        .include "fbig.asm"

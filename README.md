@@ -6,9 +6,9 @@ boots to a `>>>` prompt, has a full-screen program editor, and loads and saves `
 files on the disk. Like CPython, it compiles each piece of source to bytecode in memory
 and runs that on a bytecode VM.
 
-It implements a large subset of Python 3: ints, strings, lists, tuples, dicts, functions,
-lambdas, classes with inheritance and `super()`, exceptions, comprehensions, f-strings and
-most everyday builtins. The test programs in `tests/` print exactly what CPython prints
+It implements a large subset of Python 3: ints, floats, strings, lists, tuples, dicts,
+functions, lambdas, classes with inheritance and `super()`, exceptions, comprehensions,
+f-strings, most everyday builtins and the `math` module. The test programs in `tests/` print exactly what CPython prints
 for them. See "Differences from CPython" below for what is missing.
 
 Build
@@ -16,10 +16,11 @@ Build
 
 Run `build.bat`. It:
 
-1. generates `src/gen/tables.asm` (`tools/gen_tables.py`: symbols and builtin tables),
+1. generates `src/gen/tables.asm` and `symnames.asm` (`tools/gen_tables.py`: symbols and
+   builtin tables) and `src/gen/fconst.asm` (`tools/gen_fconst.py`: float constants),
 2. copies `examples/*.py` and `tests/*.py` to `target/py/` as disk files (`tools/mkpy.py`),
 3. assembles `src/main.asm` with the bundled 64tass into `target/image.bin`,
-4. splits the image into the program `target/mega-python.prg` and the file `mpy-ovl`
+4. splits the images into the program `target/mega-python.prg` and the file `mpy-ovl`
    (`tools/split.py`), writes the boot program `autoboot.c65` (`tools/mkboot.py`), and
 5. writes `target/mega-python.d81` with c1541: `autoboot.c65` first, then the
    interpreter `mega-python`, `mpy-ovl` and every `.py` file.
@@ -51,6 +52,17 @@ Commands at the prompt (they are Python functions):
 | `files()` | directory of the disk |
 | `cls()`, `mem()`, `gc()`, `help()` | clear screen, free memory, collect garbage, help |
 | `peek(addr)`, `poke(addr, byte)` | 28-bit memory access (`peek(0xD020)`, `poke(0xD020, 2)`) |
+
+Floats are IEEE doubles, printed exactly as CPython prints them (`0.1 + 0.2` gives
+`0.30000000000000004`). `import math` gives `sqrt floor ceil trunc fabs isnan isinf
+isfinite exp log log10 log2 pow sin cos tan asin acos atan atan2 degrees radians hypot
+copysign fmod` and `pi e tau inf nan`.
+
+```
+>>> import math
+>>> math.sqrt(2), 7 / 2, f"{math.pi:.4f}", round(2.675, 2)
+(1.4142135623730951, 3.5, '3.1416', 2.67)
+```
 
 Example programs on the disk: `hello`, `primes`, `mandel` (fixed-point Mandelbrot),
 `bank` (classes and exceptions) and `guess` (uses `input()`).
@@ -98,6 +110,7 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_except` | try/except/else/finally, custom exceptions, re-raise, assert |
 | `t_builtins` | the builtin functions |
 | `t_memory` | allocation-heavy code (many garbage collections) |
+| `t_floats` | float literals and repr, arithmetic and mixing with ints, `//` `%` `**`, `float()`, `round()`, `%`/`format` specs, the `math` module |
 
 Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, screenshot),
 `tools\trace.py` (single-step from a debug hold point), `tools\disasm.py` (bytecode),
@@ -106,8 +119,8 @@ Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, scr
 Memory
 ------
 
-Python objects (every int that does not fit in 15 bits, and every string, list, tuple,
-dict, function, class and instance) live in a **64 KB object heap** in chip-RAM bank 4.
+Python objects (every int that does not fit in 15 bits, and every float, string, list,
+tuple, dict, function, class and instance) live in a **64 KB object heap** in chip-RAM bank 4.
 `mem()` runs a garbage collection and reports what is free in that heap; about
 61-62 KB is free after start-up (the rest holds the builtins, exception classes and the
 names of symbols). Small ints (-16384..16383), `None`, `True` and `False` take no heap
@@ -120,6 +133,7 @@ What objects cost, roughly (4-byte header included):
 | Object | Bytes |
 |---|---|
 | int outside -16384..16383 | 8 |
+| float | 12 |
 | str | 6 + its length (rounded up to even) |
 | list | 10, plus an item array of 4 + 2 per slot (it grows by doubling) |
 | tuple | 6 + 2 per item |
@@ -134,7 +148,8 @@ Everything else is outside the heap and does not count in `mem()`:
 | Compiled bytecode (program + REPL input that defines functions) | chip RAM bank 1 | 36 KB |
 | Global variables | chip RAM bank 1 | 2048 names |
 | Symbol names, line table, REPL text and history, sort scratch | attic RAM | a few hundred KB of the 8 MB |
-| The interpreter's two code overlays and the output transcript | attic RAM | 32 KB + 1 MB |
+| The interpreter's code overlays and tails, and the output transcript | attic RAM | 48 KB + 1 MB |
+| Float conversion workspace (bignums, digits) | chip RAM bank 1, bank 0 `$1F00` | 1 KB |
 | Value stack (locals, temporaries) | bank 0 | 2048 values: enough for 100-200 nested calls |
 | Bank 5 | chip RAM | 64 KB kept free for graphics; also the disk staging buffer |
 
@@ -152,19 +167,30 @@ Architecture
   otherwise an object in the 64 KB heap in bank 4. Bigger ints are boxed 32-bit.
   Mark-and-sweep garbage collector with a free list (`heap.asm`).
 * **Memory**: interrupts off, ROMs unmapped while Python runs; resident code at
-  `$2001-$7FFF` and `$E800-$FFF9`; a 16 KB overlay window at `$8000` holds either the
-  builtins or the compiler and editor, copied in from attic RAM by DMA. The KERNAL is
-  restored around each disk call. Bank 5 is kept free for graphics.
+  `$2001-$7FFF` and `$F000-$FEFF`; a 20 KB overlay window at `$8000` holds either the
+  builtins or the compiler and editor, copied in from attic RAM by DMA. With the builtins
+  in, the window's last 4 KB is one of three "tails" (float text conversion, the `math`
+  module, or rarely used data such as `help()`), swapped in by a 4 KB DMA when needed.
+  The KERNAL is restored around each disk call, and its memory areas are left alone as
+  the MEGA65 book's memory map asks. Bank 5 is kept free for graphics.
+* **Floats**: IEEE doubles computed in software with 64-bit mantissas (and the hardware
+  multiplier), correctly rounded; exact decimal conversion with bignums (shortest repr,
+  like CPython). See `docs/INTERNALS.md`.
 * Details: `docs/INTERNALS.md`.
 
 Differences from CPython
 ------------------------
 
 * **Integers are 32-bit**: results outside that range raise `OverflowError`.
-* **No floats yet**: `/` raises an error; use `//`. `round()` takes ints only.
+* **Floats**: `float` has no methods (`is_integer()`, `hex()`, ...); no `complex` (a
+  negative number to a fractional power raises `ValueError`). The `math` functions are
+  computed here, not by a C library, so a result can differ from CPython's in the last
+  digit (CPython's own results vary by platform the same way). Float literals and
+  `float()` keep 30 significant digits. `hash()` of a non-integral float differs from
+  CPython's. `math` is a class object: `print(math)` shows `<class 'math'>`.
 * Not supported yet: sets, generators/`yield`, `with`, closures over enclosing function
   variables (`nonlocal`), `*args`/`**kwargs`, decorators, multiple inheritance, `import`
-  (there are no modules yet), the `bytes` type.
+  of anything but `math`, the `bytes` type.
 * `dict.keys()`, `values()` and `items()` return lists (snapshots, not live views).
   `map()`, `filter()` and generator expressions produce lists.
 * `try`/`finally`: a `break`/`continue` out of the `try` body skips the `finally` block.
