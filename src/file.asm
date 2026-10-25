@@ -1125,21 +1125,31 @@ _call:  jmp (sys_vec)
 ;---------------------------------------------------------------------------------------
 ; modules from the disk (the rest is in module.asm)
 ;---------------------------------------------------------------------------------------
-; xm_load - (mod_import) name.py -> MODSRC, and the module object, bound to ms_key
+; xm_load - (mod_import) name.py, else lib-name.py (the build writes lib/*.py so) ->
+; MODSRC, and the module object, bound to ms_key
 xm_load:
-        lda ms_sym
+        lda #0                          ; name.py, then lib-name.py
+        sta fl_mode
+_try:   lda ms_sym
         ldx ms_sym+1
         jsr sym_name
         jsr str_info
         lda str_len+1
         bne _none
+        clc                             ; (the prefix, the name and ".py": 16 at most)
         lda str_len
-        cmp #13
+        adc fl_mode
+        cmp #14
         bcs _none
-        tay
-        sta fname_len
-        ldz #0
         ldx #0
+-       cpx fl_mode
+        beq +
+        lda _lib,x
+        sta FNAMEBUF,x
+        inx
+        bra -
++       ldy str_len
+        ldz #0
 -       lda [fp0],z
         sta FNAMEBUF,x
         inz
@@ -1158,6 +1168,11 @@ xm_load:
         jsr make_kname
         jsr kc_load
         bcc +
+        lda fl_mode
+        bne _none
+        lda #4
+        sta fl_mode
+        bra _try
 _none:  jsr sb_mark_t5
         #SBPRINT "No module named '"
         lda ms_sym
@@ -1245,6 +1260,7 @@ _none:  jsr sb_mark_t5
         sta [fp1],z
         rts
 _py:    .text ".py"
+_lib:   .text "lib-"
 
 ;---------------------------------------------------------------------------------------
 ; module attributes: r0 = module, r1 = name string

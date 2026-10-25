@@ -78,10 +78,12 @@ Modules
 -------
 
 `import name` (also `import name as n` and `from name import x`) loads `name.py` from
-the disk, runs it once and gives a module with its own global names, as in CPython. A
-second import gets the same module. `import math` and `import os` are built in. The
-build copies `lib/*.py` to the disk too: that is the place for modules (`lib/modtest.py`
-is the one the tests use).
+the disk, or else `lib-name.py`, runs it once and gives a module with its own global
+names, as in CPython. A second import gets the same module. `import math` and
+`import os` are built in. The disk has no directories, so the build writes the modules
+in `lib/` to it as `lib-<name>.py` (`lib/sprite.py` becomes `lib-sprite.py`, still
+imported as `import sprite`); a module you `save()` yourself is just `name.py`.
+`lib/modtest.py` is the one the tests use.
 
 For hardware access, `peek` and `poke` reach the I/O registers, and
 `os.sys(address, a=0, x=0, y=0, z=0)` calls machine code in bank 0, like BASIC's `SYS`,
@@ -309,7 +311,7 @@ Differences from CPython
   `from module import *`, packages (`import a.b`), the `bytes` type.
 * **Modules**: a module's code and name are kept until `run()` or `new()`; a name a
   module does not define falls back to the main program's global of that name (CPython
-  would raise `NameError`). Module names are up to 12 characters (`name.py` on the disk).
+  would raise `NameError`). Module names are up to 13 characters (`name.py`), or 9 for `lib-name.py`.
 * `dict.keys()`, `values()` and `items()` return lists (snapshots, not live views).
   `map()`, `filter()` and generator expressions produce lists.
 * `try`/`finally`: a `break`/`continue` out of the `try` body skips the `finally` block.

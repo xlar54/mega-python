@@ -1,5 +1,6 @@
-"""Copy examples/*.py, tests/*.py and lib/*.py (modules to import) into target/py/ as
-MEGA65 PRG files.
+"""Copy examples/*.py, tests/*.py and lib/*.py into target/py/ as MEGA65 PRG files.
+The modules in lib/ become lib-<name>.py (the disk has no directories; import <name>
+looks for <name>.py, then lib-<name>.py).
 
 The interpreter loads a .py file with the KERNAL, which skips a 2-byte load address, so
 each file gets one ($0000) in front of its plain ASCII text. Line ends become LF.
@@ -20,6 +21,8 @@ def main():
     for d in ("examples", "tests", "lib"):
         for src in sorted(glob.glob(os.path.join(ROOT, d, "*.py"))):
             name = os.path.basename(src).lower()
+            if d == "lib":
+                name = "lib-" + name            # (import name finds lib-name.py)
             if len(name) > 16:
                 raise SystemExit("%s: name longer than 16 characters" % src)
             text = open(src, "rb").read().replace(b"\r\n", b"\n")
