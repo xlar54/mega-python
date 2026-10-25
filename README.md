@@ -168,6 +168,8 @@ Example programs on the disk:
 * `dice` (MEGA65 only): dice, cards, a lottery draw and weighted coins with `random`
 * `clock` (MEGA65 only): the date in several formats, a stopwatch and a ticking clock
   with `time`
+* `analog` (MEGA65 only): an analog clock with hour, minute and second hands, drawn with
+  `gfx` and set by `time`; press a key to stop it
 
 Controls
 --------
