@@ -26,7 +26,8 @@ T_FLOAT         = 14                    ; +4 dword (reserved)
 T_NONE          = 15                    ; pseudo types returned by type_of
 T_BOOL          = 16
 T_SLICE         = 17                    ; +4 start, +6 stop, +8 step (refs)
-T_NTYPES        = 18
+T_FILE          = 19                    ; +4 lfn, +5 mode, +6 flags, +8 pos, +9 len, +10 name
+T_NTYPES        = 20
 
 F_MARK          = $80
 F_PERM          = $40                   ; never freed (compile-time constants, builtins)
@@ -708,12 +709,12 @@ _none:  rts
 gc_kind:
         .byte 0, 0, 0, 1, 2, 3, 0, 4    ; FREE INT STR LIST TUPLE DICT ARR FUNC
         .byte 0, 4, 4, 4, 0, 4, 0, 0    ; BUILTIN BOUND CLASS INST RANGE ITER FLOAT NONE
-        .byte 0, 4                      ; BOOL SLICE
+        .byte 0, 4, 4, 4                ; BOOL SLICE SUPER FILE
 gc_off:
         .byte 0, 0, 0, 0, 0, 0, 0, 8
         .byte 0, 4, 4, 4, 0, 6, 0, 0
-        .byte 0, 4
+        .byte 0, 4, 4, 10
 gc_cnt:
         .byte 0, 0, 0, 0, 0, 0, 0, 3
         .byte 0, 2, 3, 2, 0, 1, 0, 0
-        .byte 0, 3
+        .byte 0, 3, 2, 1

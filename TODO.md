@@ -13,7 +13,11 @@ Language
 * Generators and `yield` (a frame object that keeps its locals off the value stack).
   Then real lazy `map`/`filter`/`zip`/generator expressions and `dict` views.
 * Closures / `nonlocal` (cells for captured locals).
-* `*args`, `**kwargs`, keyword-only arguments, decorators, `with`.
+* `*args`, `**kwargs`, keyword-only arguments, decorators.
+* `with`: pass the exception to `__exit__` and let a true result swallow it; several
+  managers in one `with`.
+* Files: `seek`/`tell`, binary mode (`bytes`), an `os` module (`remove`, `rename`,
+  `listdir`), other drives, closing a forgotten write file when it is collected.
 * `import` of built-in modules: `mega65` (graphics on the reserved bank-5 framebuffer,
   sprites, sound), `time`, `random`, `sys`, `gc`. (`math` is a class object; a real
   module type would print as `<module 'math'>`.)

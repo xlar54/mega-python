@@ -15,6 +15,7 @@ import difflib
 import glob
 import os
 import subprocess
+import tempfile
 import sys
 import time
 
@@ -25,7 +26,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def expected(path):
-    r = subprocess.run([sys.executable, path], capture_output=True, text=True, timeout=60)
+    # (in a scratch directory: tests that write files leave them there)
+    with tempfile.TemporaryDirectory() as tmp:
+        r = subprocess.run([sys.executable, os.path.abspath(path)], capture_output=True,
+                           text=True, timeout=60, cwd=tmp)
     return r.stdout
 
 

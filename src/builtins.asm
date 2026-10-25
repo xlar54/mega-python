@@ -118,6 +118,10 @@ builtin_method:
         ldy #>meth_dict
         cmp #T_DICT
         beq _search
+        ldx #<meth_file
+        ldy #>meth_file
+        cmp #T_FILE
+        beq _search
         sec
         rts
 _search:
@@ -217,7 +221,7 @@ builtin_type_of_r2:
 type_builtin:
         .byte B_NONETYPE, B_INT, B_STR, B_LIST, B_TUPLE, B_DICT, B_NONETYPE, B_FUNCTION
         .byte B_FUNCTION, B_FUNCTION, B_TYPE, $ff, B_RANGE, B_OBJECT, B_FLOAT, B_NONETYPE
-        .byte B_BOOL, B_OBJECT, B_OBJECT
+        .byte B_BOOL, B_OBJECT, B_OBJECT, B_TEXTIOWRAPPER
 
 ; put_str - print string A/X
 put_str:
@@ -1857,6 +1861,7 @@ bi_round:
         jmp int_new
 
 bi_object:
+bi_filetype:
 bi_nonetype:
 bi_functype:
         #RAISE EXC_TYPE, "cannot create instances of this type"

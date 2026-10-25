@@ -237,6 +237,21 @@ float_round:    #TAILA xa_float_round
 float_hash:     #TAILA xa_float_hash
 float_divmod:   #TAILA xa_float_divmod
 math_init:      #TAILB xb_math_init
+TAILF   .macro target
+        jsr need_f
+        jmp \target
+        .endm
+bi_open:        #TAILF xf_open
+bi_file_read:   #TAILF xf_read
+bi_file_readline: #TAILF xf_readline
+bi_file_readlines: #TAILF xf_readlines
+bi_file_write:  #TAILF xf_write
+bi_file_close:  #TAILF xf_close
+bi_file_enter:  #TAILF xf_enter
+bi_file_exit:   #TAILF xf_exit
+file_iter_next: #TAILF xf_iter_next
+repr_file:      #TAILF xf_repr
+files_reset:    #TAILF xf_reset
 f_pow:          #TAILB xb_pow
 bi_m_sqrt:    #TAILB xb_m_sqrt
 bi_m_floor:   #TAILB xb_m_floor

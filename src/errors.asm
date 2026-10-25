@@ -29,38 +29,8 @@ EXC_OS          = 23
 EXC_EOF         = 24
 EXC_SYSTEM      = 25
 EXC_SYSEXIT     = 26
-EXC_N           = 27
-
-; name, base class (in id order; a base comes before its subclasses)
-exc_defs:
-        .text "BaseException", 0, $ff
-        .text "Exception", 0, EXC_BASE
-        .text "TypeError", 0, EXC_EXCEPTION
-        .text "ValueError", 0, EXC_EXCEPTION
-        .text "NameError", 0, EXC_EXCEPTION
-        .text "IndexError", 0, EXC_LOOKUP
-        .text "KeyError", 0, EXC_LOOKUP
-        .text "ZeroDivisionError", 0, EXC_ARITH
-        .text "AttributeError", 0, EXC_EXCEPTION
-        .text "OverflowError", 0, EXC_ARITH
-        .text "MemoryError", 0, EXC_EXCEPTION
-        .text "StopIteration", 0, EXC_EXCEPTION
-        .text "RuntimeError", 0, EXC_EXCEPTION
-        .text "SyntaxError", 0, EXC_EXCEPTION
-        .text "KeyboardInterrupt", 0, EXC_BASE
-        .text "AssertionError", 0, EXC_EXCEPTION
-        .text "NotImplementedError", 0, EXC_RUNTIME
-        .text "IndentationError", 0, EXC_SYNTAX
-        .text "UnboundLocalError", 0, EXC_NAME
-        .text "RecursionError", 0, EXC_RUNTIME
-        .text "LookupError", 0, EXC_EXCEPTION
-        .text "ArithmeticError", 0, EXC_EXCEPTION
-        .text "ImportError", 0, EXC_EXCEPTION
-        .text "OSError", 0, EXC_EXCEPTION
-        .text "EOFError", 0, EXC_EXCEPTION
-        .text "SystemError", 0, EXC_EXCEPTION
-        .text "SystemExit", 0, EXC_BASE
-        .byte 0
+EXC_FILENOTFOUND = 27
+EXC_N           = 28
 
 exc_cls_lo:     .fill EXC_N
 exc_cls_hi:     .fill EXC_N

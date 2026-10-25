@@ -84,7 +84,8 @@ KERNAL_SAVE             = $FFD8
 ;           $F000-$FEFF   resident code, part 2 (loaded at $D000, moved by DMA at boot)
 ;   bank 1  $12000-$12FFF global value of each symbol
 ;           $13000-$137FF GC mark stack
-;           $13800-$13FFF bignum workspace (float <-> decimal conversion)
+;           $13800-$13BFF bignum workspace (float <-> decimal conversion)
+;           $13C00-$13FFF read buffers of open Python files (4 x 256)
 ;           $14000-$15FFF string builder
 ;           $16000-$1DFFF bytecode (32 KB)
 ;           $1E000-$1E3FF call frame stack (128 x 8)
@@ -116,7 +117,9 @@ PART2_LOAD              = $D000         ; ... and its place in the build image
 OVL_R_ATTIC             = $8180000
 OVL_C_ATTIC             = $8190000
 OVL_B_ATTIC             = $81A0000      ; float tail B (the math module)
-OVL_H_ATTIC             = $81A8000      ; tail H (symbol names, help)
+OVL_H_ATTIC             = $81A8000      ; tail H (symbol names, help, load/save)
+OVL_F_ATTIC             = $81B0000      ; tail F (Python files: open())
+FILEBUF                 = $13C00        ; read buffers of open files 2-5 (4 x 256, bank 1)
 TAIL_SIZE               = $1000         ; the window's last 4 KB: float tail A or B
 TAIL                    = WINDOW + WINDOW_SIZE - TAIL_SIZE
 SCOPEMEM                = $E000         ; 5 compiler scopes x 192 bytes
@@ -136,7 +139,7 @@ VSTACK_END              = $F000         ; empty stack: vsp = VSTACK_END
 SYM_VAL                 = $12000        ; global value of each symbol
 MARKSTACK               = $13000        ; GC mark stack, 1024 refs
 MARKSTACK_N             = 1024
-BIGNUM                  = $13800        ; bignum workspace (2 KB)
+BIGNUM                  = $13800        ; bignum workspace (1 KB)
 SBUF                    = $14000        ; string builder, 8 KB
 SBUF_SIZE               = $2000
 CODE_BANK               = $01

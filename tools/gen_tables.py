@@ -18,7 +18,7 @@ finally for from global if import in is lambda nonlocal not or pass raise return
 while with yield""".split()
 
 SPECIAL = """__init__ __str__ __repr__ args __name__ __class__ __eq__ __lt__ __le__ __gt__
-__ge__ __ne__ __len__ __bool__ __getitem__ __setitem__ __iter__ __next__ __contains__
+__ge__ __ne__ __enter__ __exit__ __len__ __bool__ __getitem__ __setitem__ __iter__ __next__ __contains__
 __call__ __add__ __sub__ __mul__ __truediv__ __floordiv__ __mod__ __pow__ __lshift__
 __rshift__ __and__ __or__ __xor__ __iadd__ __radd__ __rsub__ __rmul__ __neg__ __pos__
 __invert__ __hash__ self super __main__ __dict__ sep end key reverse file flush""".split()
@@ -40,7 +40,7 @@ BUILTINS = [
     ("setattr", "setattr", "f"), ("hasattr", "hasattr", "f"), ("map", "map", "f"),
     ("filter", "filter", "f"), ("round", "round", "f"), ("object", "object", "t"),
     ("super", "super", "f"), ("exit", "exit", "f"), ("quit", "exit", "f"),
-    ("float", "float", "t"),
+    ("float", "float", "t"), ("open", "open", "f"), ("TextIOWrapper", "filetype", "T"),
     ("NoneType", "nonetype", "T"), ("function", "functype", "T"),
     ("__init__", "exc_init", "-"),
     # MEGA65 / environment
@@ -58,6 +58,11 @@ BUILTINS = [
     ("atan", "m_atan", "M"), ("atan2", "m_atan2", "M"), ("degrees", "m_degrees", "M"),
     ("radians", "m_radians", "M"), ("hypot", "m_hypot", "M"),
     ("copysign", "m_copysign", "M"), ("fmod", "m_fmod", "M"),
+    # file methods
+    ("read", "file_read", "m", "file"), ("readline", "file_readline", "m", "file"),
+    ("readlines", "file_readlines", "m", "file"), ("write", "file_write", "m", "file"),
+    ("close", "file_close", "m", "file"), ("__enter__", "file_enter", "m", "file"),
+    ("__exit__", "file_exit", "m", "file"),
     # list methods
     ("append", "list_append", "m", "list"), ("pop", "list_pop", "m", "list"),
     ("insert", "list_insert", "m", "list"), ("remove", "list_remove", "m", "list"),
@@ -90,7 +95,7 @@ BUILTINS = [
     ("copy", "dict_copy", "m", "dict"),
 ]
 
-OWNERS = ["list", "tuple", "str", "dict"]
+OWNERS = ["list", "tuple", "str", "dict", "file"]
 # other names the interpreter needs as symbols (modules and their constants)
 NAMES = "math pi e tau inf nan".split()
 

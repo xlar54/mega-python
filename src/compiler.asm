@@ -3,8 +3,10 @@
 ;
 ; Scopes (SCOPEMEM, one SCOPE_SIZE record per nesting level, sc -> current):
 ;   +0 kind  +1 nlocals  +2 nglobals  +3 nloops  +4 try depth  +5 class sym (word)
-;   +7 flags  +8 function_body state  +24 global syms (8)  +40 local syms (48)
-;   +136 loops (7 x 8: +0 continue target, +2 break chain, +4 try depth, +5 for)
+;   +7 flags  +8 function_body state  +20 open with blocks  +21 with statements so far
+;   +24 global syms (8)  +40 local syms (48)
+;   +136 loops (7 x 8: +0 continue target, +2 break chain, +4 try depth, +5 for,
+;   +6 open with blocks)
 ; Function locals are found by a token pre-scan of the body (prescan) before it is
 ; compiled, so a name is local everywhere in the function once it is assigned anywhere.
 ;
@@ -28,6 +30,8 @@ FB_PATCH        = 12                    ; MAKE_FUNCTION's code operand
 FB_JUMP         = 14                    ; the jump over the body
 FB_NDEF         = 16
 FB_PARAMS       = 18
+SC_WITH         = 20
+SC_WCOUNT       = 21
 SC_GLOBALS      = 24
 SC_LOCALS       = 40
 SC_LOOPS        = 136
@@ -804,6 +808,8 @@ compile_source:
         sta c_noin
         sta lx_scan
         sta lx_savesp
+        lda #0
+        sta w_sp
         lda #<CUTBUF
         sta cut_top
         lda #>CUTBUF
@@ -862,8 +868,7 @@ statement:
         jmp st_try
 +       cmp #KW_WITH
         bne +
-        jsr syntax_error
-        .text "'with' is not supported yet", 0
+        jmp st_with
 +       cmp #TK_AT
         bne +
         jsr syntax_error
@@ -1081,6 +1086,12 @@ loop_push:
         iny
         lda t1
         sta (sc),y
+        iny
+        phy
+        ldy #SC_WITH
+        lda (sc),y
+        ply
+        sta (sc),y
         rts
 
 ; A = loop index -> Y = offset of its record
@@ -1153,6 +1164,7 @@ st_break:
         jsr syntax_error
         .text "'break' outside loop", 0
 +       jsr pop_loop_trys
+        jsr loop_withs
         jsr loop_top
         tya
         clc
@@ -1193,6 +1205,7 @@ st_continue:
         jsr syntax_error
         .text "'continue' not properly in loop", 0
 +       jsr pop_loop_trys
+        jsr loop_withs
         jsr loop_top
         lda (sc),y
         pha
@@ -1293,6 +1306,199 @@ st_for:
         jsr lex
         jsr block
 +       jmp loop_pop
+
+;---------------------------------------------------------------------------------------
+; with m [as x]: body
+;   m; STORE w; LOAD w; LOAD_METHOD __enter__; CALL_METHOD 0; STORE x (or POP)
+;   SETUP_EXCEPT f; body; POP_BLOCK; <w.__exit__(None, None, None)>; JUMP done
+;   f: POP; <w.__exit__(None, None, None)>; RAISE 0; done:
+; w is a hidden variable (" w<n>", a local in functions: see prescan). break, continue
+; and return call the __exit__ of the with blocks they leave.
+;---------------------------------------------------------------------------------------
+w_stk:          .fill 2*16              ; the hidden variables of the open with blocks
+w_sp:           .byte 0
+w_name:         .text " w00", 0
+
+; with_sym - A = number -> A/X = the symbol of hidden variable number A
+with_sym:
+        pha
+        lsr a
+        lsr a
+        lsr a
+        lsr a
+        clc
+        adc #'a'
+        sta w_name+2
+        pla
+        and #15
+        clc
+        adc #'a'
+        sta w_name+3
+        lda #<w_name
+        ldx #>w_name
+        jmp intern_cstr
+
+st_with:
+        jsr lex
+        jsr expr                        ; the context manager
+        ldy #SC_WCOUNT
+        lda (sc),y
+        inc a
+        sta (sc),y
+        dec a
+        jsr with_sym
+        ldy w_sp
+        cpy #2*16
+        bcc +
+        jsr syntax_error
+        .text "with statements nested too deeply", 0
++       sta w_stk,y
+        txa
+        sta w_stk+1,y
+        iny
+        iny
+        sty w_sp
+        lda w_stk-2,y
+        jsr emit_store_sym
+        ldy w_sp
+        jsr w_load
+        lda #<S_ENTER
+        ldx #>S_ENTER
+        jsr sym_name
+        ldy #OP_LOAD_METHOD
+        jsr emit_op_word
+        ldy #OP_CALL_METHOD
+        lda #0
+        jsr emit_op_byte
+        lda #KW_AS
+        jsr accept
+        bcc _noas
+        lda tok
+        cmp #TK_NAME
+        beq +
+        jmp c_syntax
++       lda tok_sym
+        ldx tok_sym+1
+        jsr emit_store_sym
+        jsr lex
+        bra +
+_noas:  lda #OP_POP
+        jsr emit
++       ldy #OP_SETUP_EXCEPT
+        jsr emit_jump
+        pha                             ; CPU: [handler]
+        phx
+        ldy #SC_TRY
+        lda (sc),y
+        inc a
+        sta (sc),y
+        ldy #SC_WITH
+        lda (sc),y
+        inc a
+        sta (sc),y
+        jsr block
+        ldy #SC_TRY
+        lda (sc),y
+        dec a
+        sta (sc),y
+        ldy #SC_WITH
+        lda (sc),y
+        dec a
+        sta (sc),y
+        lda #OP_POP_BLOCK
+        jsr emit
+        lda #1
+        jsr w_exits
+        ldy #OP_JUMP
+        jsr emit_jump
+        sta t2
+        stx t2+1
+        plx                             ; the handler starts here
+        pla
+        jsr patch_here
+        lda t2                          ; CPU: [done]
+        pha
+        lda t2+1
+        pha
+        lda #OP_POP                     ; the exception value
+        jsr emit
+        lda #1
+        jsr w_exits
+        ldy #OP_RAISE
+        lda #0
+        jsr emit_op_byte
+        plx
+        pla
+        jsr patch_here
+        dec w_sp
+        dec w_sp
+        rts
+
+; w_load - emit a load of the hidden variable of with block w_stk[Y-2]
+w_load: lda tok_sym
+        pha
+        lda tok_sym+1
+        pha
+        lda w_stk-2,y
+        sta tok_sym
+        lda w_stk-1,y
+        sta tok_sym+1
+        jsr emit_load_name
+        pla
+        sta tok_sym+1
+        pla
+        sta tok_sym
+        rts
+
+; w_exits - emit the __exit__ calls of the innermost A with blocks (innermost first)
+w_exits:
+        cmp #0
+        beq _done
+        ldy w_sp
+_loop:  pha
+        phy
+        jsr w_load
+        lda #<S_EXIT
+        ldx #>S_EXIT
+        jsr sym_name
+        ldy #OP_LOAD_METHOD
+        jsr emit_op_word
+        lda #R_NONE
+        ldx #0
+        jsr emit_const
+        lda #R_NONE
+        ldx #0
+        jsr emit_const
+        lda #R_NONE
+        ldx #0
+        jsr emit_const
+        ldy #OP_CALL_METHOD
+        lda #3
+        jsr emit_op_byte
+        lda #OP_POP
+        jsr emit
+        ply
+        dey
+        dey
+        pla
+        dec a
+        bne _loop
+_done:  rts
+
+; loop_withs - break / continue: the __exit__ calls of the with blocks inside the loop
+loop_withs:
+        jsr loop_top
+        tya
+        clc
+        adc #6
+        tay
+        lda (sc),y
+        sta t0
+        ldy #SC_WITH
+        lda (sc),y
+        sec
+        sbc t0
+        jmp w_exits
 
 ;---------------------------------------------------------------------------------------
 ; try / except / else / finally
@@ -1852,9 +2058,11 @@ ps_annot:       .byte 0
 ps_cand:        .fill 16
 ps_last:        .word 0                 ; last name seen
 ps_single:      .byte 0                 ; one-line body (ends at NEWLINE)
+ps_wcount:      .byte 0                 ; with statements seen
 
 prescan:
         lda #0
+        sta ps_wcount
         sta ps_level
         sta ps_brk
         sta ps_ncand
@@ -1976,6 +2184,13 @@ _notname:
 +       cmp #KW_AS
         bne +
         jmp _as
++       cmp #KW_WITH
+        bne +
+        lda ps_wcount
+        inc ps_wcount
+        jsr with_sym
+        jsr local_add
+        jmp _next
 +       cmp #TK_AUG
         bcc _other
         cmp #TK_AUG+12
@@ -2197,7 +2412,10 @@ st_return:
 _none:  lda #R_NONE
         ldx #0
         jsr emit_const
-+       lda #OP_RETURN
++       ldy #SC_WITH                    ; close this function's with blocks
+        lda (sc),y
+        jsr w_exits
+        lda #OP_RETURN
         jmp emit
 
 st_global:

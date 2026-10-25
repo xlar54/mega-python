@@ -12,6 +12,7 @@ IT_ENUM         = 6                     ; +6 inner iterator, +8 count
 IT_ZIP          = 7                     ; +6 tuple of iterators
 IT_REV          = 8                     ; +6 seq, +8 index (counts down)
 IT_INST         = 9                     ; +6 instance with __next__
+IT_FILE         = 10                    ; +6 file (its lines)
 
 ;---------------------------------------------------------------------------------------
 ; index helpers
@@ -877,6 +878,9 @@ get_iter:
         beq _range
         cmp #T_INST
         beq _inst
+        ldy #IT_FILE
+        cmp #T_FILE
+        beq _new
         #RAISE EXC_TYPE, "object is not iterable"
 _self:  lda r0
         ldx r0+1
@@ -951,7 +955,14 @@ iter_next:
         jmp (iter_tab,x)
 iter_tab:
         .word it_seq, it_str, it_dict, it_range, it_items, it_values, it_enum
-        .word it_zip, it_rev, it_inst
+        .word it_zip, it_rev, it_inst, it_file
+it_file:
+        ldz #7
+        lda [p2],z
+        tax
+        dez
+        lda [p2],z
+        jmp file_iter_next
 
 ; p2 = iterator: t0 = index (+8), p0 = seq (+6); C set when index >= len
 it_index:

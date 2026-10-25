@@ -1651,7 +1651,7 @@ repr_tab:
         .word repr_tuple, repr_dict, repr_null, repr_func
         .word repr_builtin, repr_bound, repr_class, inst_repr
         .word repr_range, repr_iter, repr_float, repr_none
-        .word repr_bool, repr_slice
+        .word repr_bool, repr_slice, repr_null, repr_file
 
 repr_null:
         SBPRINT "<NULL>"

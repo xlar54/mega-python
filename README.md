@@ -8,8 +8,8 @@ and runs that on a bytecode VM.
 
 It implements a large subset of Python 3: ints, floats, strings, lists, tuples, dicts,
 functions, lambdas, classes with inheritance and `super()`, exceptions, comprehensions,
-f-strings, most everyday builtins and the `math` module. The test programs in `tests/` print exactly what CPython prints
-for them. See "Differences from CPython" below for what is missing.
+f-strings, `with`, most everyday builtins, files (`open()`) and the `math` module. The
+test programs in `tests/` print exactly what CPython prints for them. See "Differences from CPython" below for what is missing.
 
 Build
 -----
@@ -64,6 +64,24 @@ copysign fmod` and `pi e tau inf nan`.
 (1.4142135623730951, 3.5, '3.1416', 2.67)
 ```
 
+Programs can read and write files on drive 8 with `open(name, mode)`, as in CPython
+(no import): modes `'r'`, `'w'` and `'a'`, and `read([n])`, `readline()`,
+`readlines()`, `write(s)`, `close()`, `for line in f` and `with`. Files are SEQ files
+holding the text as it is (ASCII, `
+` line ends); a CR or CR LF reads as `
+`. Up
+to 4 files can be open at once.
+
+```
+>>> with open('notes', 'w') as f:
+...     f.write('hello' + chr(10))
+...
+6
+>>> open('notes').read()
+'hello
+'
+```
+
 Example programs on the disk: `hello`, `primes`, `mandel` (fixed-point Mandelbrot),
 `bank` (classes and exceptions), `guess` (uses `input()`) and `waves` (the `math`
 module: a sin/cos table and a damped sine wave drawn in text).
@@ -112,6 +130,7 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_builtins` | the builtin functions |
 | `t_memory` | allocation-heavy code (many garbage collections) |
 | `t_floats` | float literals and repr, arithmetic and mixing with ints, `//` `%` `**`, `float()`, `round()`, `%`/`format` specs, the `math` module |
+| `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError` |
 
 Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, screenshot),
 `tools\trace.py` (single-step from a debug hold point), `tools\disasm.py` (bytecode),
@@ -164,6 +183,7 @@ Everything else is outside the heap (the bytecode, names, source and value stack
 | Symbol names, line table, REPL text and history, sort scratch | attic RAM | a few hundred KB of the 8 MB |
 | The interpreter's code overlays and tails, and the output transcript | attic RAM | 48 KB + 1 MB |
 | Float conversion workspace (bignums, digits) | chip RAM bank 1, bank 0 `$1F00` | 1 KB |
+| Read buffers of open files | chip RAM bank 1 | 4 x 256 bytes |
 | Value stack (locals, temporaries) | bank 0 | 2048 values: enough for 100-200 nested calls |
 | Bank 5 | chip RAM | 64 KB kept free for graphics; also the disk staging buffer |
 
@@ -183,8 +203,9 @@ Architecture
 * **Memory**: interrupts off, ROMs unmapped while Python runs; resident code at
   `$2001-$7FFF` and `$F000-$FEFF`; a 20 KB overlay window at `$8000` holds either the
   builtins or the compiler and editor, copied in from attic RAM by DMA. With the builtins
-  in, the window's last 4 KB is one of three "tails" (float text conversion, the `math`
-  module, or rarely used data such as `help()`), swapped in by a 4 KB DMA when needed.
+  in, the window's last 4 KB is one of four "tails" (float text conversion, the `math`
+  module, files, or rarely used code and data such as `help()` and `load()`), swapped in
+  by a 4 KB DMA when needed.
   The KERNAL is restored around each disk call, and its memory areas are left alone as
   the MEGA65 book's memory map asks. Bank 5 is kept free for graphics.
 * **Floats**: IEEE doubles computed in software with 64-bit mantissas (and the hardware
@@ -202,7 +223,14 @@ Differences from CPython
   digit (CPython's own results vary by platform the same way). Float literals and
   `float()` keep 30 significant digits. `hash()` of a non-integral float differs from
   CPython's. `math` is a class object: `print(math)` shows `<class 'math'>`.
-* Not supported yet: sets, generators/`yield`, `with`, closures over enclosing function
+* **Files**: text only (`'b'` in the mode is ignored and gives `str`), no `seek`/`tell`,
+  no `os` module (no delete or rename), file names of 1-16 characters on drive 8. A file
+  read to its end gives its KERNAL channel back by itself; a file being written must be
+  closed (or used with `with`) to be complete on disk. `open()`'s mode `'w'` replaces
+  an existing file. `read()` returns at most 8 KB (the string builder's size).
+* **`with`** calls `__exit__(None, None, None)` even when the block raises (the
+  exception always goes on: `__exit__` cannot swallow it).
+* Not supported yet: sets, generators/`yield`, closures over enclosing function
   variables (`nonlocal`), `*args`/`**kwargs`, decorators, multiple inheritance, `import`
   of anything but `math`, the `bytes` type.
 * `dict.keys()`, `values()` and `items()` return lists (snapshots, not live views).

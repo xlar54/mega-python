@@ -1,6 +1,7 @@
 ;=======================================================================================
 ; Tail H (swapped in at TAIL by need_h): what is needed only now and then - the names
-; of the fixed symbols (for py_reset) and help().
+; of the fixed symbols and exception classes (for py_reset), help(), mem(), and the
+; program load / save / directory.
 ;=======================================================================================
 xh_help:
         jsr scr_fresh_line
@@ -144,5 +145,296 @@ mem_l4:    .text "value stack (bank 0)    ", 0
 mem_u0:    .text " bytes", 0
 mem_u2:    .text " names", 0
 mem_u4:    .text " slots", 0
+
+;---------------------------------------------------------------------------------------
+; load() / save() / files() (from the REPL's requests) and the exception classes' names
+;---------------------------------------------------------------------------------------
+disk_load:
+        lda #0
+        jsr make_kname
+        jsr kc_load
+        bcc +
+        jmp disk_error
++       lda t0
+        sta src_len
+        lda t0+1
+        sta src_len+1
+        ora t0
+        beq _done
+        ; STAGE -> SRC
+        lda #<STAGE
+        sta fp0
+        lda #>STAGE
+        sta fp0+1
+        lda #`STAGE
+        sta fp0+2
+        lda #0
+        sta fp0+3
+        lda #<SRC
+        sta fp1
+        lda #>SRC
+        sta fp1+1
+        lda #<(SRC >> 16)
+        sta fp1+2
+        lda #>(SRC >> 16)
+        sta fp1+3
+        jsr dma_copy
+_done:  jsr src_terminate
+        jsr src_clean
+        lda src_len
+        sta acc
+        lda src_len+1
+        sta acc+1
+        lda #0
+        sta acc+2
+        sta acc+3
+        jsr sb_mark_t5
+        jsr sb_int
+        #SBPRINT " bytes loaded"
+        lda t5
+        ldx t5+1
+        jsr sb_flush
+        lda #10
+        jmp putc
+
+; src_clean - CR or CR LF line ends -> LF; tabs stay (the lexer handles them)
+src_clean:
+        lda #<SRC
+        sta fp0
+        lda #>SRC
+        sta fp0+1
+        lda #<(SRC >> 16)
+        sta fp0+2
+        lda #>(SRC >> 16)
+        sta fp0+3
+        lda src_len
+        sta t1
+        lda src_len+1
+        sta t1+1
+-       lda t1
+        ora t1+1
+        beq +
+        ldz #0
+        lda [fp0],z
+        cmp #13
+        bne _n
+        lda #10                         ; CR -> LF; a following LF becomes a space
+        sta [fp0],z
+        inz
+        lda [fp0],z
+        cmp #10
+        bne _n
+        lda #' '
+        sta [fp0],z
+_n:     inw fp0
+        dew t1
+        bra -
++       rts
+
+disk_save:
+        ; SRC -> STAGE, then SAVE STAGE .. STAGE + len
+        lda src_len
+        ora src_len+1
+        beq +
+        lda #<SRC
+        sta fp0
+        lda #>SRC
+        sta fp0+1
+        lda #<(SRC >> 16)
+        sta fp0+2
+        lda #>(SRC >> 16)
+        sta fp0+3
+        lda #<STAGE
+        sta fp1
+        lda #>STAGE
+        sta fp1+1
+        lda #`STAGE
+        sta fp1+2
+        lda #0
+        sta fp1+3
+        lda src_len
+        sta t0
+        lda src_len+1
+        sta t0+1
+        jsr dma_copy
++       lda #1
+        jsr make_kname
+        jsr kc_setup
+        lda #<STAGE                     ; the start pointer lives at $FB (page 0)
+        sta $00fb
+        lda #>STAGE
+        sta $00fc
+        lda #$fb
+        sta kc_a
+        clc
+        lda #<STAGE
+        adc src_len
+        sta kc_x
+        lda #>STAGE
+        adc src_len+1
+        sta kc_y
+        #KCALL KERNAL_SAVE
+        lda kc_p
+        lsr
+        bcc +
+        jmp disk_error
++       #PRINT "saved"
+        lda #10
+        jmp putc
+
+disk_error:
+        lda #COL_ERROR
+        sta scr_color
+        #PRINT "disk error (file not found?)"
+        lda #10
+        jsr putc
+        lda #COL_NORMAL
+        sta scr_color
+        rts
+
+; disk_dir - LOAD "$" and print the listing (blocks and names). The listing is BASIC
+; lines: link (2), number (2) = blocks, text, 0; a zero link ends it. Some DOS versions
+; keep the load address ($0101) in front: skip it. Never read past the loaded bytes.
+; It is walked with fsp, not fp0: putc's screen scrolling (a DMA) uses fp0.
+disk_dir:
+        lda #'$'
+        sta kc_name
+        lda #1
+        sta kc_name_len
+        jsr kc_load
+        bcc +
+        jmp disk_error
++       clc                             ; dir_end = the end of the loaded data
+        lda #<STAGE
+        adc t0
+        sta dir_end
+        lda #>STAGE
+        adc t0+1
+        sta dir_end+1
+        lda #<STAGE
+        sta fsp
+        lda #>STAGE
+        sta fsp+1
+        lda #`STAGE
+        sta fsp+2
+        lda #0
+        sta fsp+3
+        ; a load address in front? ($01 $01, then a link, then line number 0)
+        ldz #0
+        lda [fsp],z
+        cmp #$01
+        bne _nohdr
+        inz
+        lda [fsp],z
+        cmp #$01
+        bne _nohdr
+        ldz #4
+        lda [fsp],z
+        inz
+        ora [fsp],z
+        bne _nohdr
+        inw fsp
+        inw fsp
+_nohdr: inw fsp                         ; skip the first link
+        inw fsp
+_line:  jsr _left                       ; room for the line number?
+        cmp #3
+        bcc _end
+        ldz #0
+        lda [fsp],z
+        sta acc
+        inz
+        lda [fsp],z
+        sta acc+1
+        lda #0
+        sta acc+2
+        sta acc+3
+        jsr sb_mark_t5
+        jsr sb_int
+        lda #' '
+        jsr sb_putc
+        lda t5
+        ldx t5+1
+        jsr sb_flush
+        inw fsp
+        inw fsp
+-       jsr _left                       ; the text, up to its zero
+        beq _nl
+        ldz #0
+        lda [fsp],z
+        beq +
+        jsr petscii_to_ascii
+        cmp #$12                        ; reverse-on in the header
+        beq _skip
+        cmp #32
+        bcc _skip
+        jsr putc
+_skip:  inw fsp
+        bra -
++       inw fsp
+        lda #10
+        jsr putc
+        jsr _left                       ; the next link: zero ends the listing
+        cmp #2
+        bcc _end
+        ldz #0
+        lda [fsp],z
+        inz
+        ora [fsp],z
+        beq _end
+        inw fsp
+        inw fsp
+        bra _line
+_nl:    lda #10
+        jsr putc
+_end:   rts
+; A = bytes left to read (255 when more than that), Z flag set when none
+_left:  sec
+        lda dir_end
+        sbc fsp
+        tax
+        lda dir_end+1
+        sbc fsp+1
+        bcc _none
+        bne _many
+        txa
+        rts
+_many:  lda #255
+        rts
+_none:  lda #0
+        rts
+dir_end:        .word 0
+
+; name, base class (in id order; a base comes before its subclasses)
+exc_defs:
+        .text "BaseException", 0, $ff
+        .text "Exception", 0, EXC_BASE
+        .text "TypeError", 0, EXC_EXCEPTION
+        .text "ValueError", 0, EXC_EXCEPTION
+        .text "NameError", 0, EXC_EXCEPTION
+        .text "IndexError", 0, EXC_LOOKUP
+        .text "KeyError", 0, EXC_LOOKUP
+        .text "ZeroDivisionError", 0, EXC_ARITH
+        .text "AttributeError", 0, EXC_EXCEPTION
+        .text "OverflowError", 0, EXC_ARITH
+        .text "MemoryError", 0, EXC_EXCEPTION
+        .text "StopIteration", 0, EXC_EXCEPTION
+        .text "RuntimeError", 0, EXC_EXCEPTION
+        .text "SyntaxError", 0, EXC_EXCEPTION
+        .text "KeyboardInterrupt", 0, EXC_BASE
+        .text "AssertionError", 0, EXC_EXCEPTION
+        .text "NotImplementedError", 0, EXC_RUNTIME
+        .text "IndentationError", 0, EXC_SYNTAX
+        .text "UnboundLocalError", 0, EXC_NAME
+        .text "RecursionError", 0, EXC_RUNTIME
+        .text "LookupError", 0, EXC_EXCEPTION
+        .text "ArithmeticError", 0, EXC_EXCEPTION
+        .text "ImportError", 0, EXC_EXCEPTION
+        .text "OSError", 0, EXC_EXCEPTION
+        .text "EOFError", 0, EXC_EXCEPTION
+        .text "SystemError", 0, EXC_EXCEPTION
+        .text "SystemExit", 0, EXC_BASE
+        .text "FileNotFoundError", 0, EXC_OS
+        .byte 0
 
         .include "gen/symnames.asm"

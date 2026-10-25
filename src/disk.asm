@@ -168,257 +168,45 @@ kc_load:
         clc
 +       rts
 
-disk_load:
-        lda #0
-        jsr make_kname
-        jsr kc_load
-        bcc +
-        jmp disk_error
-+       lda t0
-        sta src_len
-        lda t0+1
-        sta src_len+1
-        ora t0
-        beq _done
-        ; STAGE -> SRC
-        lda #<STAGE
-        sta fp0
-        lda #>STAGE
-        sta fp0+1
-        lda #`STAGE
-        sta fp0+2
-        lda #0
-        sta fp0+3
-        lda #<SRC
-        sta fp1
-        lda #>SRC
-        sta fp1+1
-        lda #<(SRC >> 16)
-        sta fp1+2
-        lda #>(SRC >> 16)
-        sta fp1+3
-        jsr dma_copy
-_done:  jsr src_terminate
-        jsr src_clean
-        lda src_len
-        sta acc
-        lda src_len+1
-        sta acc+1
-        lda #0
-        sta acc+2
-        sta acc+3
-        jsr sb_mark_t5
-        jsr sb_int
-        #SBPRINT " bytes loaded"
-        lda t5
-        ldx t5+1
-        jsr sb_flush
-        lda #10
-        jmp putc
 
-; src_clean - CR or CR LF line ends -> LF; tabs stay (the lexer handles them)
-src_clean:
-        lda #<SRC
-        sta fp0
-        lda #>SRC
-        sta fp0+1
-        lda #<(SRC >> 16)
-        sta fp0+2
-        lda #>(SRC >> 16)
-        sta fp0+3
-        lda src_len
-        sta t1
-        lda src_len+1
-        sta t1+1
--       lda t1
-        ora t1+1
-        beq +
-        ldz #0
-        lda [fp0],z
-        cmp #13
-        bne _n
-        lda #10                         ; CR -> LF; a following LF becomes a space
-        sta [fp0],z
-        inz
-        lda [fp0],z
-        cmp #10
-        bne _n
-        lda #' '
-        sta [fp0],z
-_n:     inw fp0
-        dew t1
-        bra -
-+       rts
-
-disk_save:
-        ; SRC -> STAGE, then SAVE STAGE .. STAGE + len
-        lda src_len
-        ora src_len+1
-        beq +
-        lda #<SRC
-        sta fp0
-        lda #>SRC
-        sta fp0+1
-        lda #<(SRC >> 16)
-        sta fp0+2
-        lda #>(SRC >> 16)
-        sta fp0+3
-        lda #<STAGE
-        sta fp1
-        lda #>STAGE
-        sta fp1+1
-        lda #`STAGE
-        sta fp1+2
-        lda #0
-        sta fp1+3
-        lda src_len
-        sta t0
-        lda src_len+1
-        sta t0+1
-        jsr dma_copy
-+       lda #1
-        jsr make_kname
-        jsr kc_setup
-        lda #<STAGE                     ; the start pointer lives at $FB (page 0)
-        sta $00fb
-        lda #>STAGE
-        sta $00fc
-        lda #$fb
-        sta kc_a
-        clc
-        lda #<STAGE
-        adc src_len
-        sta kc_x
-        lda #>STAGE
-        adc src_len+1
-        sta kc_y
-        #KCALL KERNAL_SAVE
-        lda kc_p
-        lsr
-        bcc +
-        jmp disk_error
-+       #PRINT "saved"
-        lda #10
-        jmp putc
-
-disk_error:
-        lda #COL_ERROR
-        sta scr_color
-        #PRINT "disk error (file not found?)"
-        lda #10
-        jsr putc
-        lda #COL_NORMAL
-        sta scr_color
-        rts
-
-; disk_dir - LOAD "$" and print the listing (blocks and names). The listing is BASIC
-; lines: link (2), number (2) = blocks, text, 0; a zero link ends it. Some DOS versions
-; keep the load address ($0101) in front: skip it. Never read past the loaded bytes.
-disk_dir:
-        lda #'$'
-        sta kc_name
-        lda #1
-        sta kc_name_len
-        jsr kc_load
-        bcc +
-        jmp disk_error
-+       clc                             ; dir_end = the end of the loaded data
-        lda #<STAGE
-        adc t0
-        sta dir_end
-        lda #>STAGE
-        adc t0+1
-        sta dir_end+1
-        lda #<STAGE
-        sta fp0
-        lda #>STAGE
-        sta fp0+1
-        lda #`STAGE
-        sta fp0+2
-        lda #0
-        sta fp0+3
-        ; a load address in front? ($01 $01, then a link, then line number 0)
-        ldz #0
-        lda [fp0],z
-        cmp #$01
-        bne _nohdr
-        inz
-        lda [fp0],z
-        cmp #$01
-        bne _nohdr
-        ldz #4
-        lda [fp0],z
-        inz
-        ora [fp0],z
-        bne _nohdr
-        inw fp0
-        inw fp0
-_nohdr: inw fp0                         ; skip the first link
-        inw fp0
-_line:  jsr _left                       ; room for the line number?
-        cmp #3
-        bcc _end
-        ldz #0
-        lda [fp0],z
-        sta acc
-        inz
-        lda [fp0],z
-        sta acc+1
-        lda #0
-        sta acc+2
-        sta acc+3
-        jsr sb_mark_t5
-        jsr sb_int
-        lda #' '
-        jsr sb_putc
-        lda t5
-        ldx t5+1
-        jsr sb_flush
-        inw fp0
-        inw fp0
--       jsr _left                       ; the text, up to its zero
-        beq _nl
-        ldz #0
-        lda [fp0],z
-        beq +
-        jsr petscii_to_ascii
-        cmp #$12                        ; reverse-on in the header
-        beq _skip
-        cmp #32
-        bcc _skip
-        jsr putc
-_skip:  inw fp0
-        bra -
-+       inw fp0
-        lda #10
-        jsr putc
-        jsr _left                       ; the next link: zero ends the listing
-        cmp #2
-        bcc _end
-        ldz #0
-        lda [fp0],z
-        inz
-        ora [fp0],z
-        beq _end
-        inw fp0
-        inw fp0
-        bra _line
-_nl:    lda #10
-        jsr putc
-_end:   rts
-; A = bytes left to read (255 when more than that), Z flag set when none
-_left:  sec
-        lda dir_end
-        sbc fp0
-        tax
-        lda dir_end+1
-        sbc fp0+1
-        bcc _none
-        bne _many
-        txa
-        rts
-_many:  lda #255
-        rts
-_none:  lda #0
-        rts
-dir_end:        .word 0
+;---------------------------------------------------------------------------------------
+; kio - Python files: runs inside the KERNAL (kernal_call with kc_addr = kio). Moves up
+; to kio_n bytes (1-255) between logical file kio_lfn and FNAMEBUF: kio_dir 0 = read,
+; 1 = write. -> kio_n = bytes moved, kio_st = READST ($40 = end of file; $ff = the
+; channel would not open)
+;---------------------------------------------------------------------------------------
+KERNAL_CHKOUT           = $FFC9
+KERNAL_CHROUT           = $FFD2
+kio_lfn:        .byte 0
+kio_dir:        .byte 0
+kio_n:          .byte 0
+kio_st:         .byte 0
+file_used:      .byte 0                 ; logical files 2-5 in use (bits 2-5)
+kio:    ldx kio_lfn
+        ldy #0
+        lda kio_dir
+        bne _w
+        jsr KERNAL_CHKIN
+        bcs _err
+-       jsr KERNAL_CHRIN
+        sta FNAMEBUF,y
+        iny
+        jsr KERNAL_READST
+        bne _end
+        cpy kio_n
+        bne -
+        bra _end
+_w:     jsr KERNAL_CHKOUT
+        bcs _err
+-       lda FNAMEBUF,y
+        jsr KERNAL_CHROUT
+        iny
+        jsr KERNAL_READST
+        bne _end
+        cpy kio_n
+        bne -
+_end:   sta kio_st
+        sty kio_n
+        jmp KERNAL_CLRCHN
+_err:   lda #$ff
+        bra _end

@@ -167,6 +167,19 @@ load_pieces:
         sta fp1
         lda #>OVL_H_ATTIC
         sta fp1+1
+        lda #<(OVL_H_ATTIC >> 16)
+        sta fp1+2
+        jsr dma_copy
+        lda #<(STAGE + WINDOW_SIZE + 2 * TAIL_SIZE)     ; and tail F
+        sta fp0
+        lda #>(STAGE + WINDOW_SIZE + 2 * TAIL_SIZE)
+        sta fp0+1
+        lda #<OVL_F_ATTIC
+        sta fp1
+        lda #>OVL_F_ATTIC
+        sta fp1+1
+        lda #<(OVL_F_ATTIC >> 16)
+        sta fp1+2
         jmp dma_copy
 ovl_name:       .text "mpy-ovl"
 ovl_name_len = * - ovl_name
@@ -291,9 +304,9 @@ ovl_load:
         sta t0+1
         jmp dma_copy
 
-; need_a / need_b / need_h - tail A / B / H into the window's tail (overlay R must be in).
+; need_a / need_b / need_h / need_f - tail A / B / H / F into the window's tail (overlay R must be in).
 ; Registers are kept.
-tail_cur:       .byte 0                 ; 0 = A, 1 = B, 2 = H
+tail_cur:       .byte 0                 ; 0 = A, 1 = B, 2 = H, 3 = F
 need_a: pha
         lda tail_cur
         beq tail_ok
@@ -307,6 +320,9 @@ need_b: pha
         bra +
 need_h: pha
         lda #2
+        bra +
+need_f: pha
+        lda #3
 +       cmp tail_cur
         beq tail_ok
         sta tail_cur
@@ -345,6 +361,7 @@ tail_src:
         .byte <TAIL_A_ATTIC, >TAIL_A_ATTIC, (TAIL_A_ATTIC >> 16) & 15, TAIL_A_ATTIC >> 20
         .byte <OVL_B_ATTIC, >OVL_B_ATTIC, (OVL_B_ATTIC >> 16) & 15, OVL_B_ATTIC >> 20
         .byte <OVL_H_ATTIC, >OVL_H_ATTIC, (OVL_H_ATTIC >> 16) & 15, OVL_H_ATTIC >> 20
+        .byte <OVL_F_ATTIC, >OVL_F_ATTIC, (OVL_F_ATTIC >> 16) & 15, OVL_F_ATTIC >> 20
 
 ; compile - compile_source with the compiler overlay in the window
 compile:
@@ -383,6 +400,7 @@ mt_addr_hi:     .byte >VSTACK, >$cff0, >$fef0
 ; py_reset - a fresh interpreter: empty heap, symbols, globals and code
 ;---------------------------------------------------------------------------------------
 py_reset:
+        jsr files_reset                 ; (the KERNAL's files of the old heap's file objects)
         jsr heap_init
         jsr sb_reset
         jsr vm_reset
@@ -789,6 +807,7 @@ _new:   cmp #REQ_NEW
         jmp repl_loop
 _load:  cmp #REQ_LOAD
         bne _save
+        jsr need_h
         jsr disk_load
         lda #0
         sta ed_cur
@@ -796,10 +815,12 @@ _load:  cmp #REQ_LOAD
         jmp repl_loop
 _save:  cmp #REQ_SAVE
         bne _files
+        jsr need_h
         jsr disk_save
         jmp repl_loop
 _files: cmp #REQ_FILES
         bne _done
+        jsr need_h
         jsr disk_dir
 _done:  jmp repl_loop
 
