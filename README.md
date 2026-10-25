@@ -21,8 +21,8 @@ Run `build.bat`. It:
 3. assembles `src/main.asm` with the bundled 64tass into `target/image.bin`,
 4. splits the image into the program `mega-python` and the file `mpy-ovl`
    (`tools/split.py`), and
-5. writes `target/mega-python.d81` with c1541 (`mega-python`, `autoboot.c65`, `mpy-ovl`,
-   and every `.py` file).
+5. writes `target/mega-python.d81` with c1541. The interpreter is the first file,
+   `autoboot.c65`; `mpy-ovl` and every `.py` file follow.
 
 Run
 ---

@@ -1,8 +1,9 @@
 @echo off
 setlocal
 REM MEGA65 Python build: generate tables, assemble with 64tass, write the D81 with c1541.
-REM The interpreter is the first file on the disk (Xemu -autoload RUNs it) and is also
-REM written as AUTOBOOT.C65. Example and test programs are added as .py files.
+REM The interpreter is the first file on the disk, AUTOBOOT.C65: a real MEGA65 boots it
+REM from the mounted disk, and Xemu -autoload RUNs the first file. mpy-ovl (the rest of
+REM the interpreter) follows, then the example and test programs as .py files.
 set PROJECT=mega-python
 if not exist target mkdir target
 REM c1541 writes its settings under the user profile: keep them inside target\
@@ -27,8 +28,6 @@ if errorlevel 1 exit /b 1
 
 cd target
 ..\c1541.exe -format "%PROJECT%,01" d81 %PROJECT%.d81 >nul
-if errorlevel 1 (cd .. & exit /b 1)
-..\c1541.exe -attach %PROJECT%.d81 -write %PROJECT% %PROJECT% >nul
 if errorlevel 1 (cd .. & exit /b 1)
 ..\c1541.exe -attach %PROJECT%.d81 -write %PROJECT% autoboot.c65 >nul
 if errorlevel 1 (cd .. & exit /b 1)
