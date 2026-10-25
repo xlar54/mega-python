@@ -122,3 +122,38 @@ print(' '.join(Gen(['x', 'y'])), [v * 2 for v in Gen([1, 2])], 2 in Gen([1, 2]))
 d = {}
 d.update(Gen([('k', 1)]))
 print(d, list(Gen('hi')))
+
+
+# builtins whose callbacks call other builtins (with other arguments) keep their own
+class Loud:
+    def __init__(self, v):
+        self.v = v
+
+    def __str__(self):
+        return '<%s>' % '|'.join([str(max(self.v, 1, 2)), format(self.v, '>3'), 'x' * 2])
+
+    def __lt__(self, other):
+        return sorted([self.v, other.v], reverse=True, key=abs)[0] == other.v
+
+
+def k(v):
+    return min([v, 9, 8], key=lambda w: -w) + len(str(v).zfill(4))
+
+
+print(sorted([3, 1, 2], key=k, reverse=True), sorted(Gen([5, 4]), key=k, reverse=True))
+print(Loud(7), Loud(0), sep=' / ', end=' .\n')
+print('{} {:>4} {a}'.format(Loud(1), 'r', a=Loud(2)), min(Loud(3), Loud(1)).v)
+print(max(Gen([1, 5, 3]), key=lambda v: str(v).center(5, '*')),
+      list(map(lambda v: sum([v, 1], 10), Gen([1, 2]))))
+# key functions that bring in other code (str methods, float text) in mid-sort, and
+# one that imports a module (a compile) while sorted() runs
+print(sorted([3, 1, 2], key=lambda v: len(str(v).zfill(4)), reverse=True),
+      sorted([0.5, 0.25, 2.0], key=lambda v: repr(v * 3).rjust(6)))
+
+
+def by_module(v):
+    import modtest
+    return -v
+
+
+print(sorted([1, 3, 2], key=by_module), '%s|%5.1f' % (Loud(4), 2.25))

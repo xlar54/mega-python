@@ -49,7 +49,9 @@ frp:            .dword ?                ; call frame stack pointer (bank 1)
 hsp:            .dword ?                ; handler stack pointer (bank 1)
 vtmp:           .word ?
 argp:           .word ?                 ; native call: first argument
-argc:           .byte ?
+argc:           .byte ?                 ; a call's argument count (VM, and natives' own calls)
+nargc:          .byte ?                 ; native call: its argument count (argv)
+npos:           .byte ?                 ; native call: positional ones (check_nargs)
 kwnames:        .word ?                 ; native call: keyword names tuple (0 = none)
 nkw:            .byte ?
 cur_exc:        .word ?

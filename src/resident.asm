@@ -237,7 +237,9 @@ map_kernal:
         eom
         rts
 
-; ovl_runtime / ovl_compiler - put overlay R / C in the window
+; ovl_runtime / ovl_compiler - put overlay R (with tail A) / C in the window. R is saved
+; back to attic when C replaces it, so its variables survive a compile; C is not (it
+; keeps nothing between compiles)
 ovl_runtime:
         lda ovl_cur
         bne +
@@ -258,7 +260,30 @@ ovl_compiler:
         lda ovl_cur
         beq +
         rts
-+       lda #1
++       ; R and its tail go back to attic first, with their variables as they are now
+        ; (runtime code may be in mid-call: a module imported while it runs)
+        jsr tail_save
+        lda #<WINDOW
+        sta fp0
+        lda #>WINDOW
+        sta fp0+1
+        lda #0
+        sta fp0+2
+        sta fp0+3
+        lda #<OVL_R_ATTIC
+        sta fp1
+        lda #>OVL_R_ATTIC
+        sta fp1+1
+        lda #<(OVL_R_ATTIC >> 16)
+        sta fp1+2
+        lda #>(OVL_R_ATTIC >> 16)
+        sta fp1+3
+        lda #<(TAIL - WINDOW)
+        sta t0
+        lda #>(TAIL - WINDOW)
+        sta t0+1
+        jsr dma_copy
+        lda #1
         sta ovl_cur
         lda #<OVL_C_ATTIC
         sta fp0
@@ -301,15 +326,26 @@ TAILCALL .macro tail, target
         .endm
 
 ; need_tail - tail number A into the window (overlay R must be in). Registers are kept.
+; While tail routines are running (tail_depth: tcall counts them), the tail that leaves
+; goes back to its attic image first: a routine swapped out in mid-call finds its
+; variables as it left them. (An exception can skip tcall's count down: the count then
+; stays too high, which costs only unneeded saves; the REPL resets it.)
+tail_depth:     .byte 0
 need_tail:
         cmp tail_cur
         beq _done
-        sta tail_cur
         pha
         phx
+        pha
+        lda tail_depth
+        beq +
+        jsr tail_save
++       pla
+        sta tail_cur
         asl a
         asl a
         tax
+        jsr tail_job
         lda tail_src,x
         sta dmaj_src
         lda tail_src+1,x
@@ -318,12 +354,6 @@ need_tail:
         sta dmaj_src_bank
         lda tail_src+3,x
         sta dmaj_src_mb
-        lda #DMACMD_COPY
-        sta dmaj_cmd
-        lda #<TAIL_SIZE
-        sta dmaj_count
-        lda #>TAIL_SIZE
-        sta dmaj_count+1
         lda #<TAIL
         sta dmaj_dst
         lda #>TAIL
@@ -335,6 +365,40 @@ need_tail:
         plx
         pla
 _done:  rts
+
+; tail_job - the DMA job's command and count for a 4 KB tail copy
+tail_job:
+        lda #DMACMD_COPY
+        sta dmaj_cmd
+        lda #<TAIL_SIZE
+        sta dmaj_count
+        lda #>TAIL_SIZE
+        sta dmaj_count+1
+        rts
+
+; tail_save - the tail in the window back to its attic image
+tail_save:
+        lda tail_cur
+        asl a
+        asl a
+        tax
+        jsr tail_job
+        lda #<TAIL
+        sta dmaj_src
+        lda #>TAIL
+        sta dmaj_src+1
+        lda #0
+        sta dmaj_src_bank
+        sta dmaj_src_mb
+        lda tail_src,x
+        sta dmaj_dst
+        lda tail_src+1,x
+        sta dmaj_dst+1
+        lda tail_src+2,x
+        sta dmaj_dst_bank
+        lda tail_src+3,x
+        sta dmaj_dst_mb
+        jmp dma_go
 TAIL_A_ATTIC = OVL_R_ATTIC + TAIL - WINDOW
 tail_src:
         .byte <TAIL_A_ATTIC, >TAIL_A_ATTIC, (TAIL_A_ATTIC >> 16) & 15, TAIL_A_ATTIC >> 20
@@ -571,6 +635,7 @@ vm_reset_stacks:
         sta runlev
         sta exc_ip_set
         sta al_perm
+        sta tail_depth                  ; (no tail routine is running at the prompt)
         rts
 
 ; repl_append - LINEBUF (rl_len chars) + newline -> rp

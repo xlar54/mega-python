@@ -769,7 +769,7 @@ pc_arg:         .byte 0
 ; str.format(*args, **kwargs): {} {0} {name} with optional :spec
 xp_bi_str_format:
         sec
-        lda argc
+        lda nargc
         sbc nkw
         sta npos
         ; keep the arguments as a tuple and a dict on the stack: [fmt][args][kw]
@@ -1034,7 +1034,7 @@ SORT_SAVE       = $8160000              ; the items, in their old order
 
 xp_bi_sorted:
         sec
-        lda argc
+        lda nargc
         sbc nkw
         cmp #1
         beq +
@@ -1048,7 +1048,7 @@ xp_bi_sorted:
         bra sort_common
 xp_bi_list_sort:
         sec
-        lda argc
+        lda nargc
         sbc nkw
         cmp #1
         beq +

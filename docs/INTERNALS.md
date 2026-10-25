@@ -86,10 +86,11 @@ The KERNAL's areas are left alone, as the MEGA65 book's chip RAM map asks:
 and `0.FF00-0.FFFF`. The NMI/IRQ vectors there are saved at boot and put back for every
 KERNAL call.
 
-Rule for the overlays: a variable used by resident code must not live in an overlay,
-because the window is reloaded from the attic image on every switch. Runtime code runs
-with R in the window. The compiler and the editor run with C in the window (`compile`,
-`ovl_compiler`).
+Runtime code runs with R in the window. The compiler and the editor run with C in the
+window (`compile`, `ovl_compiler`). R and its tail are written back to attic before C
+replaces them, so R's variables survive a compile in the middle of runtime code (a
+module imported by a key function, say); C keeps nothing between compiles. A variable
+that resident code uses while C is in must not live in R.
 
 Tails: with R in, the window's last 4 KB (`TAIL`) holds one of seven tails (A, B, H, F,
 S, P, I), swapped by a 4 KB DMA from attic (`need_id` in `resident.asm`; `ovl_runtime`
@@ -100,7 +101,10 @@ runs the target and, when it returns, loads the tail that was in before, passing
 Y and the flags through both ways. So tail code may call anything, including other
 tails' stubs and Python code: a nested Python call can bring in other tails, and
 `vm_call_nested` puts its caller's tail back when it returns (as does `it_inst`'s
-exception catcher). What tail code must not do is call into another tail directly
+exception catcher). A tail keeps its variables like ordinary memory: while tail
+routines are running (`tail_depth`, counted by `tcall`), a tail that leaves the window
+is written back to its attic image first, so a routine swapped out in mid-call finds
+them as it left them. What tail code must not do is call into another tail directly
 (not through a stub), or leave a tail routine other than by returning (`jmp vm_loop`
 from an opcode handler: those stay in R).
 
@@ -110,9 +114,15 @@ runtime code in a tail. More tails cost nothing but 4 KB of attic each (and a DM
 one is swapped in): add one in `platform.asm` (`OVL_x_ATTIC`, `TAILS_N`),
 `resident.asm` (`TAIL_x`, `tail_src`) and `main.asm` (both passes).
 
-Builtins read their arguments from `argv`, which any Python code they run (a key
-function, a user `__next__`) overwrites: keep what is still needed on the value stack
-first (`str.join`, `list.extend` and `in` do).
+Builtins read their arguments from `argv` (`nargc` of them, `npos` positional, `nkw`
+keywords named by `kwnames`). Python code a builtin runs (a key function, `__str__`, a
+user `__next__`) makes native calls of its own, which reuse those; `vm_call_nested`
+saves the caller's set on the CPU stack and puts it back afterwards
+(`NATIVE_SAVE`/`NATIVE_RESTORE`, also around `it_inst`'s catch), together with its
+tail. So a builtin can read its arguments at any point. `argc` is the count for the
+next call (the VM's, or one the builtin makes through `vm_call_nested`). Registers
+(`r0`-`r3`, `t0`-`t7`) are not saved: keep values that must survive Python code on the
+value stack or the CPU stack.
 
 Boot: the program file holds part 1, overlay R (already in the window, with tail A) and
 part 2 (at `$D000`, DMA'd to `$F000`). `mpy-ovl` holds overlay C and the other tails

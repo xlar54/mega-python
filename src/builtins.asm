@@ -1,9 +1,9 @@
 ;=======================================================================================
-; Builtin functions. A native routine gets its arguments in argv (argc of them, the
-; last nkw being keyword values named by kwnames) and returns its result in A/X.
-; Natives that can run Python code (str() of an instance, key functions...) must not
-; rely on argv/argc afterwards: the nested call reuses them. The arguments stay on
-; the value stack, though: argument i is at vsp + 2*(argc-1-i).
+; Builtin functions. A native routine gets its arguments in argv (nargc of them, the
+; last nkw being keyword values named by kwnames) and returns its result in A/X. They
+; stay valid across Python code it runs (vm_call_nested saves and restores them, with
+; npos); argc is for the calls it makes itself. The arguments are also on the value
+; stack: argument i is at vsp + 2*(nargc-1-i) while vsp is the call's.
 ;=======================================================================================
 ARG     .macro i
         lda argv+2*\i
@@ -15,12 +15,10 @@ NARGS   .macro lo, hi
         jsr check_nargs
         .endm
 
-npos:           .byte 0                 ; positional argument count
-
 ; check_nargs - X..Y positional arguments, and no keywords unless the routine reads them
 check_nargs:
         sec
-        lda argc
+        lda nargc
         sbc nkw
         sta npos
         cpx npos
@@ -215,7 +213,7 @@ kw_get:
         bra -
 _yes:   ; value: argv[npos + x]
         sec
-        lda argc
+        lda nargc
         sbc nkw
         stx t0
         clc
@@ -272,15 +270,12 @@ put_str:
         sta t6+1
         jmp put_far
 
-; A/X = argument i read from the value stack (valid while argc/vsp are this call's)
-; (used after nested calls via a saved pointer: see print)
-
 ;---------------------------------------------------------------------------------------
 ; print(*args, sep=' ', end='\n')
 ;---------------------------------------------------------------------------------------
 bi_print:
         sec
-        lda argc
+        lda nargc
         sbc nkw
         sta npos
         ; sep and end (None means the default)
@@ -307,7 +302,7 @@ bi_print:
         sta t2
         stx t2+1
         ; &arg0 = vsp + 2*(argc-1)
-        lda argc
+        lda nargc
         asl
         sec
         sbc #2
@@ -796,7 +791,7 @@ bi_max:
 minmax:
         sta t6+1                        ; the obj_cmp result that replaces the best
         sec
-        lda argc
+        lda nargc
         sbc nkw
         sta npos
         bne +
@@ -1926,7 +1921,7 @@ bi_exit:
 
 ; BaseException.__init__(self, *args): self.args = args
 bi_exc_init:
-        lda argc
+        lda nargc
         beq _bad
         sec
         sbc #1
@@ -1938,7 +1933,7 @@ bi_exc_init:
         ldz #6
 -       txa
         lsr
-        cmp argc
+        cmp nargc
         bcs +
         lda argv,x
         sta [p0],z
@@ -2196,7 +2191,7 @@ bi_enumerate:
         rts
 
 bi_zip:
-        lda argc
+        lda nargc
         sta nitems
         lda #0
         sta nitems+1

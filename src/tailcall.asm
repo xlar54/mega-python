@@ -47,6 +47,7 @@ tcall:
         dey
         lda (tcp),y
         jsr need_tail
+        inc tail_depth                  ; (a tail routine is running)
         lda tc_p
         pha
         lda tc_a
@@ -60,7 +61,10 @@ tcall_ret:
         php
         pla
         sta tc_p
-        pla
+        lda tail_depth
+        beq +
+        dec tail_depth
++       pla
         jsr need_tail
         lda tc_p
         pha
