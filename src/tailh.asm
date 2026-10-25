@@ -364,28 +364,7 @@ _bases: ; second pass: the base of each class
 +       jsr _skip
         inc t5
         bra --
-_init:  ; BaseException.__init__ is a builtin that stores the args
-        ldx #EXC_BASE
-        lda exc_cls_lo,x
-        sta p0
-        lda exc_cls_hi,x
-        sta p0+1
-        ldz #8
-        lda [p0],z
-        sta r0
-        inz
-        lda [p0],z
-        sta r0+1
-        lda #<S_INIT
-        ldx #>S_INIT
-        jsr sym_name
-        sta r1
-        stx r1+1
-        lda #B_INIT
-        jsr builtin_obj
-        sta r2
-        stx r2+1
-        jsr dict_set
+_init:  ; (BaseException.__init__ comes with the builtins: builtins_init)
         ; the MemoryError instance
         lda #EXC_MEMORY
         jsr exc_new_empty

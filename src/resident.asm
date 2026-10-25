@@ -142,7 +142,7 @@ load_pieces:
         lda #>WINDOW_SIZE
         sta t0+1
         jsr dma_copy
-        lda #<(STAGE + WINDOW_SIZE)     ; then float tail B
+        lda #<(STAGE + WINDOW_SIZE)     ; then the tails B, H, F, S (in a row)
         sta fp0
         lda #>(STAGE + WINDOW_SIZE)
         sta fp0+1
@@ -154,32 +154,10 @@ load_pieces:
         sta fp1+2
         lda #>(OVL_B_ATTIC >> 16)
         sta fp1+3
-        lda #<TAIL_SIZE
+        lda #<(TAILS_N * TAIL_SIZE)
         sta t0
-        lda #>TAIL_SIZE
+        lda #>(TAILS_N * TAIL_SIZE)
         sta t0+1
-        jsr dma_copy
-        lda #<(STAGE + WINDOW_SIZE + TAIL_SIZE)     ; and tail H
-        sta fp0
-        lda #>(STAGE + WINDOW_SIZE + TAIL_SIZE)
-        sta fp0+1
-        lda #<OVL_H_ATTIC
-        sta fp1
-        lda #>OVL_H_ATTIC
-        sta fp1+1
-        lda #<(OVL_H_ATTIC >> 16)
-        sta fp1+2
-        jsr dma_copy
-        lda #<(STAGE + WINDOW_SIZE + 2 * TAIL_SIZE)     ; and tail F
-        sta fp0
-        lda #>(STAGE + WINDOW_SIZE + 2 * TAIL_SIZE)
-        sta fp0+1
-        lda #<OVL_F_ATTIC
-        sta fp1
-        lda #>OVL_F_ATTIC
-        sta fp1+1
-        lda #<(OVL_F_ATTIC >> 16)
-        sta fp1+2
         jmp dma_copy
 ovl_name:       .text "mpy-ovl"
 ovl_name_len = * - ovl_name
@@ -304,9 +282,9 @@ ovl_load:
         sta t0+1
         jmp dma_copy
 
-; need_a / need_b / need_h / need_f - tail A / B / H / F into the window's tail (overlay R must be in).
-; Registers are kept.
-tail_cur:       .byte 0                 ; 0 = A, 1 = B, 2 = H, 3 = F
+; need_a / need_b / need_h / need_f / need_s - tail A / B / H / F / S into the window's
+; tail (overlay R must be in). Registers are kept.
+tail_cur:       .byte 0                 ; 0 = A, 1 = B, 2 = H, 3 = F, 4 = S
 need_a: pha
         lda tail_cur
         beq tail_ok
@@ -320,6 +298,9 @@ need_b: pha
         bra +
 need_h: pha
         lda #2
+        bra +
+need_s: pha
+        lda #4
         bra +
 need_f: pha
         lda #3
@@ -362,6 +343,7 @@ tail_src:
         .byte <OVL_B_ATTIC, >OVL_B_ATTIC, (OVL_B_ATTIC >> 16) & 15, OVL_B_ATTIC >> 20
         .byte <OVL_H_ATTIC, >OVL_H_ATTIC, (OVL_H_ATTIC >> 16) & 15, OVL_H_ATTIC >> 20
         .byte <OVL_F_ATTIC, >OVL_F_ATTIC, (OVL_F_ATTIC >> 16) & 15, OVL_F_ATTIC >> 20
+        .byte <OVL_S_ATTIC, >OVL_S_ATTIC, (OVL_S_ATTIC >> 16) & 15, OVL_S_ATTIC >> 20
 
 ; compile - compile_source with the compiler overlay in the window
 compile:

@@ -1417,12 +1417,18 @@ contains:
         jsr inst_rbinop
         bcs +
         jmp obj_truth
-+       ; anything iterable: walk it
++       ; anything iterable: walk it (keeping r2: the iteration may run Python code)
+        lda r2
+        ldx r2+1
+        #PUSH
         lda r3
         ldx r3+1
         jsr list_from_iterable
         sta r3
         stx r3+1
+        #POP
+        sta r2
+        stx r2+1
 _seq:   lda r3
         ldx r3+1
         jsr seq_len
