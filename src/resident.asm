@@ -535,6 +535,7 @@ repl_error:
 
 ; report_exception - print cur_exc (quietly for SystemExit)
 report_exception:
+        jsr scr_text                    ; (a program in graphics mode: show the error)
         lda cur_exc
         ldx cur_exc+1
         sta r2

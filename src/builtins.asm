@@ -2028,6 +2028,7 @@ bi_gc:
         rts
 
 bi_cls:
+        jsr scr_text
         jsr scr_clear
         lda #R_NONE
         ldx #0

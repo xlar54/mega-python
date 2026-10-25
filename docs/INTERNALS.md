@@ -55,7 +55,8 @@ and `$D030`, B = 0, the page-1 stack, `cli`.
 | `$13800` | bignum workspace (5 x 160 bytes, float conversions) |
 | `$13C00` | read buffers of open files (logical files 2-5, 256 bytes each) |
 | `$14000` | string builder (8 KB) |
-| `$16000-$1DFFF` | bytecode |
+| `$16000-$1D7FF` | bytecode |
+| `$1D800-$1DFCF` | graphics mode's 40 x 25 character pointers (`lib/gfx.py`) |
 | `$1E000-$1E3FF` / `$1E400-$1E7FF` | call frames / exception handlers |
 | `$1E800` | 80x25 screen |
 | `$40000-$4FFFF` | object heap |

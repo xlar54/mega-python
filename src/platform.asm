@@ -88,7 +88,8 @@ KERNAL_SAVE             = $FFD8
 ;           $13800-$13BFF bignum workspace (float <-> decimal conversion)
 ;           $13C00-$13FFF read buffers of open Python files (4 x 256)
 ;           $14000-$15FFF string builder
-;           $16000-$1DFFF bytecode (32 KB)
+;           $16000-$1D7FF bytecode (30 KB)
+;           $1D800-$1DFCF graphics mode's character pointers (lib/gfx.py)
 ;           $1E000-$1E3FF call frame stack (128 x 8)
 ;           $1E400-$1E7FF exception handler stack (128 x 8)
 ;           $1E800-$1EFCF 80x25 screen
@@ -145,8 +146,9 @@ BIGNUM                  = $13800        ; bignum workspace (1 KB)
 SBUF                    = $14000        ; string builder, 8 KB
 SBUF_SIZE               = $2000
 CODE_BANK               = $01
-CODE_START              = $6000         ; bytecode at $16000-$1DFFF
-CODE_END                = $E000
+CODE_START              = $6000         ; bytecode at $16000-$1D7FF
+CODE_END                = $D800
+GFXCHARS                = $1D800        ; graphics mode: the 40 x 25 character pointers
 HEAP_BANK               = $04
 HEAP_START              = $0100
 GFXMEM                  = $50000

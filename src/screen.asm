@@ -12,6 +12,16 @@ COL_INFO        = 15                    ; light grey
 COL_STATUS      = 14                    ; light blue
 ATTR_REVERSE    = $20
 
+; scr_text - back to the text screen if a graphics mode is on (16-bit or full-colour
+; characters, as lib/gfx.py sets): for cls() and the REPL's error reports
+scr_text:
+        lda $D054
+        and #%00000101
+        bne +
+        rts
++       lda $D054
+        and #%11111010
+        sta $D054
 scr_init:
         lda #$47
         sta VIC4_KEY

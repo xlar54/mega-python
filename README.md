@@ -81,8 +81,7 @@ Modules
 the disk, runs it once and gives a module with its own global names, as in CPython. A
 second import gets the same module. `import math` and `import os` are built in. The
 build copies `lib/*.py` to the disk too: that is the place for modules (`lib/modtest.py`
-is the one the tests use; `lib/sound.py` is a `Sound` class for the SID chips: notes,
-waveforms, envelopes, and tunes written as `'C4:8 E4:8 G4:16 R:4'`).
+is the one the tests use).
 
 For hardware access, `peek` and `poke` reach the I/O registers, and
 `os.sys(address, a=0, x=0, y=0, z=0)` calls machine code in bank 0, like BASIC's `SYS`,
@@ -99,8 +98,30 @@ free for it), interrupts off and the ROMs unmapped, and returns with `RTS`.
 (42, 42, 0, 0, 21)
 ```
 
-A sound or graphics module is a `.py` file in `lib/` that uses these: for example
-`def border(c): poke(0xD020, c)`.
+Two such modules come with it, written in Python with `peek`/`poke`:
+
+* `lib/sound.py`: a `Sound` class for the SID chips (notes, waveforms, envelopes,
+  tunes written as `'C4:8 E4:8 G4:16 R:4'`). The `tune` example plays "Ode to Joy".
+* `lib/gfx.py`: 320x200 graphics in 256 colours (the full-colour character mode, the
+  picture in bank 5). `gfx.mode()`, `text()`, `clear(c)`, `border(c)`,
+  `background(c)`, `plot`, `point`, `line`, `hline`, `vline`, `rect`, `fill_rect`,
+  `circle`, `fill_circle`, `palette(i, r, g, b)`, `rgb(r, g, b)` (a 6x6x6 colour
+  cube), `grey(n)`, `wait_key()`, and the C64 colour names (`gfx.RED`, ...). Fills and
+  clearing are DMA jobs, so they are fast; `plot` draws about 5000 pixels a second.
+  The `gfxdemo` example draws a little scene.
+
+```
+import gfx
+gfx.mode()
+gfx.fill_circle(160, 100, 40, gfx.rgb(5, 3, 0))
+gfx.line(0, 199, 319, 0, gfx.WHITE)
+gfx.wait_key()
+gfx.text()
+```
+
+`cls()` (and an error, so you see the traceback) also goes back to the text screen.
+Printing in graphics mode writes to the hidden text screen. `load()`, `files()`,
+`import` and `os.listdir()` load through bank 5, so they spoil the picture.
 
 ```
 >>> with open('notes', 'w') as f:
@@ -112,11 +133,15 @@ A sound or graphics module is a `.py` file in `lib/` that uses these: for exampl
 '
 ```
 
-Example programs on the disk: `hello`, `primes`, `mandel` (fixed-point Mandelbrot),
-`bank` (classes and exceptions), `guess` (uses `input()`) and `waves` (the `math`
-module: a sin/cos table and a damped sine wave drawn in text) and `files` (a high-score
-table kept in a file: `open()`, `with`, appending, and `os.rename`/`remove`/`listdir`) and `tune`
-(plays "Ode to Joy" with the `Sound` class of `lib/sound.py`, which pokes the SID chip).
+Example programs on the disk:
+
+* `hello`, `primes`, `mandel` (fixed-point Mandelbrot), `bank` (classes and exceptions),
+  `guess` (uses `input()`)
+* `waves`: the `math` module (a sin/cos table and a damped sine wave drawn in text)
+* `files`: a high-score table kept in a file (`open()`, `with`, appending, and
+  `os.rename`/`remove`/`listdir`)
+* `tune` (MEGA65 only): plays "Ode to Joy" with `lib/sound.py`
+* `gfxdemo` (MEGA65 only): draws a scene with `lib/gfx.py`; press a key to end it
 
 Controls
 --------
@@ -211,14 +236,15 @@ Everything else is outside the heap (the bytecode, names, source and value stack
 | What | Where | Size |
 |---|---|---|
 | Program source (the editor buffer) | attic RAM | up to 64 KB |
-| Compiled bytecode (program + REPL input that defines functions) | chip RAM bank 1 | 32 KB |
+| Compiled bytecode (program + REPL input that defines functions) | chip RAM bank 1 | 30 KB |
+| Graphics mode's character pointers (`lib/gfx.py`) | chip RAM bank 1 `$1D800` | 2000 bytes |
 | Global variables | chip RAM bank 1 | 2048 names |
 | Symbol names, line table, REPL text and history, sort scratch | attic RAM | a few hundred KB of the 8 MB |
 | The interpreter's code overlays and tails, and the output transcript | attic RAM | 48 KB + 1 MB |
 | Float conversion workspace (bignums, digits) | chip RAM bank 1, bank 0 `$1F00` | 1 KB |
 | Read buffers of open files | chip RAM bank 1 | 4 x 256 bytes |
 | Value stack (locals, temporaries) | bank 0 | 2048 values: enough for 100-200 nested calls |
-| Bank 5 | chip RAM | 64 KB kept free for graphics; also the disk staging buffer |
+| Bank 5 | chip RAM | the graphics picture (`lib/gfx.py`); also the disk staging buffer |
 
 Most of the 8 MB of attic RAM is unused. Python objects cannot live there because each
 value is a 16-bit reference to one 64 KB bank, and attic RAM is slower for the CPU to

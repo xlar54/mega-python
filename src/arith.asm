@@ -297,7 +297,13 @@ iop_mul:
         bcs int_overflow
         bra iop_done
 iop_truediv:
-        jmp float_binop
+        lda acc2                        ; int / 0 (CPython's message differs from 1.0 / 0)
+        ora acc2+1
+        ora acc2+2
+        ora acc2+3
+        bne +
+        #RAISE EXC_ZERODIV, "division by zero"
++       jmp float_binop
 iop_floordiv:
         jsr acc_divmod
         bra iop_done
