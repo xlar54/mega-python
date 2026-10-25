@@ -5,6 +5,7 @@
 #   gfx.border(gfx.BLUE)
 #   gfx.line(0, 0, 319, 199, gfx.YELLOW)
 #   gfx.circle(160, 100, 50, gfx.rgb(5, 2, 0))
+#   gfx.draw_text(10, 10, 'Hello', gfx.WHITE)
 #   gfx.wait_key()
 #   gfx.text()                       # back to the text screen (as cls() does)
 #
@@ -227,6 +228,43 @@ def fill_circle(xc, yc, r, c):
         else:
             x -= 1
             err += 2 * (y - x) + 1
+
+
+FONT = 0x29800                  # the text screen's font (8 bytes per character)
+
+
+def _code(ch):
+    """An ASCII character -> its glyph number in FONT."""
+    c = ord(ch) & 127
+    if c < 32:
+        return 32
+    if c < 64 or 64 < c < 91:
+        return c
+    if c == 64:
+        return 0
+    if c < 96:
+        return c - 64
+    if c == 96:
+        return 0x40
+    if c < 123:
+        return c - 96
+    return c - 32 if c < 127 else 0x66
+
+
+def draw_text(x, y, text, c, bg=None):
+    """Text in the 8x8 font, its top-left corner at x, y (bg: a background colour,
+    else the picture shows through). Returns the x after it."""
+    for ch in text:
+        glyph = FONT + _code(ch) * 8
+        for row in range(8):
+            bits = peek(glyph + row)
+            for col in range(8):
+                if bits & (128 >> col):
+                    plot(x + col, y + row, c)
+                elif bg is not None:
+                    plot(x + col, y + row, bg)
+        x += 8
+    return x
 
 
 def wait_key():

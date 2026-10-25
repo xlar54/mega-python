@@ -15,6 +15,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "target", "py")
 
 
+# library modules whose lib-<name>.py would be over 16 characters: their short names
+# (the same table is in src/file.asm, xm_alias)
+ALIASES = {"statistics": "stats", "collections": "colls"}
+
+
 def main():
     version = open(os.path.join(ROOT, "VERSION"), "rb").read().strip()
     os.makedirs(OUT, exist_ok=True)
@@ -24,7 +29,8 @@ def main():
         for src in sorted(glob.glob(os.path.join(ROOT, d, "*.py"))):
             name = os.path.basename(src).lower()
             if d == "lib":
-                name = "lib-" + name            # (import name finds lib-name.py)
+                base = name[:-3]
+                name = "lib-" + ALIASES.get(base, base) + ".py"   # (import finds it)
             if len(name) > 16:
                 raise SystemExit("%s: name longer than 16 characters" % src)
             text = open(src, "rb").read().replace(b"\r\n", b"\n")

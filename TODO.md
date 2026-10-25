@@ -19,7 +19,7 @@ Language
 * Files: `seek`/`tell`, binary mode (`bytes`), more of `os` (`getcwd`, `stat`,
   `path.getsize`), other drives, closing a forgotten file when it is collected (it
   keeps its drive channel, and the drive will not remove it).
-* Modules (`lib/*.py`, using `peek`/`poke`/`os.sys`): text in graphics mode, 16-colour
+* Modules (`lib/*.py`, using `peek`/`poke`/`os.sys`): 16-colour
   and bigger sprites (VIC-IV),
   faster `plot`/`line` (machine code through `os.sys`), double buffering; `gc`; more of
   `sys` (`modules`, `getrecursionlimit`, `getsizeof`);
@@ -27,7 +27,9 @@ Language
   unsigned 32-bit arithmetic: bigger ints).
 * `os.sys()` for code outside bank 0 (it would need a MAP of the target). (`math` is a class object; a real
   module type would print as `<module 'math'>`.)
-* `StopIteration` from a user `__next__` should end a `for` loop (it propagates now).
+* Class bodies: look names up in the class namespace first (`alias = method`).
+* Libraries: `collections.namedtuple`/`OrderedDict`, `itertools`, `re`, `datetime`
+  (some need generators or closures first).
 * `break`/`continue` inside `try` with `finally` should run the finally block.
 * Hash-based dicts (lookups are linear, fine for small dicts, slow for big ones).
 * `str` methods still missing: `partition`, `rsplit`, `swapcase`, `expandtabs`, ...
@@ -46,8 +48,8 @@ Environment
 Memory
 ------
 
-* Code space is nearly full: part 1 and overlay R have about 200 bytes free each (see
-  the sizes `build.bat` prints). More code should go into tails (only code that never
+* Code space is nearly full: part 1 has about 50 bytes free, overlay R about 140, part 2
+  about 290 (see the sizes `build.bat` prints). More code should go into tails (only code that never
   runs Python code; see `docs/INTERNALS.md`) or overlay C (compile time).
 
 * Objects carry a 4-byte header; strings could drop their separate length word.

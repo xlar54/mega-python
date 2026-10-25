@@ -692,9 +692,40 @@ do_call:
         sta c_func
         jsr insert_arg0
         bra do_call
-+       lda c_func
++       cmp #T_INST                     ; an instance: its class's __call__(self, ...)
+        bne _bad
+        jsr inst_call
+        jmp do_call
+_bad:   lda c_func
         ldx c_func+1
         jmp raise_not_callable
+
+; inst_call - c_func is an instance: c_func = its __call__, the instance argument 0
+inst_call:
+        lda c_func
+        sta r0
+        lda c_func+1
+        sta r0+1
+        lda #<S_CALL
+        ldx #>S_CALL
+        jsr sym_name
+        sta r1
+        stx r1+1
+        jsr get_method                  ; (AttributeError if there is none)
+        sta c_func
+        stx c_func+1
+        lda groot+10                    ; (the instance: get_method kept it there)
+        sta r0
+        lda groot+11
+        sta r0+1
+        lda #0
+        sta groot+10
+        sta groot+11
+        sta r1
+        sta r1+1
+        bcc +
+        jmp insert_arg0                 ; self
++       rts
 
 ; insert_arg0 - make r0 argument 0: it goes in the slot above the current argument 0
 ; (the callable's or the NULL slot); shifts nothing if that slot is c_slot.
@@ -1053,7 +1084,11 @@ _again: lda c_func
         jsr type_of
         cmp #T_FUNC
         beq _py
-        cmp #T_BOUND
+        cmp #T_INST
+        bne +
+        jsr inst_call
+        bra _again
++       cmp #T_BOUND
         bne _native
         ldz #4
         lda [p0],z

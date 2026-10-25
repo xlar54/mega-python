@@ -292,6 +292,8 @@ inst_method2:
         sta dun_sym
         lda r0
         ldx r0+1
+        sta _self                       ; (class_lookup uses r0)
+        stx _self+1
         jsr type_of
         ldz #4
         lda [p0],z
@@ -320,8 +322,8 @@ inst_method2:
         bcc +
         jmp setitem_bad
 +       #PUSH
-        lda r0
-        ldx r0+1
+        lda _self
+        ldx _self+1
         #PUSH
         pla
         tax
@@ -334,6 +336,7 @@ inst_method2:
         lda #3
         sta argc
         jmp vm_call_nested
+_self:  .word 0
 setitem_bad:
         #RAISE EXC_TYPE, "object does not support item assignment"
 
@@ -1313,13 +1316,97 @@ it_inst:
         inz
         lda [p2],z
         sta r2+1
+        ; __next__ under an error context of our own: StopIteration ends the loop
+        lda ip+2
+        pha
+        lda ip+1
+        pha
+        lda ip
+        pha
+        lda vfp+1
+        pha
+        lda vfp
+        pha
+        lda vsp+1
+        pha
+        lda vsp
+        pha
+        lda err_vec+1
+        pha
+        lda err_vec
+        pha
+        lda err_sp+1
+        pha
+        lda err_sp
+        pha
+        tsx
+        stx err_sp
+        tsy
+        sty err_sp+1
+        lda #<_catch
+        sta err_vec
+        lda #>_catch
+        sta err_vec+1
         lda #S_NEXT
         jsr inst_unary
-        bcs _bad
-        ; StopIteration from __next__ arrives as an exception; see TODO
+        sta _res
+        stx _res+1
+        lda #0
+        rol a                           ; 0 = a value, 1 = no __next__
+        bra _restore
+_catch: lda cur_exc                     ; (the stack is back at our context)
+        sta r2
+        lda cur_exc+1
+        sta r2+1
+        lda #EXC_STOPITER
+        jsr exc_is
+        lda #2                          ; 2 = StopIteration, 3 = anything else
+        bcs _restore
+        lda #3
+_restore:
+        sta _how
+        pla
+        sta err_sp
+        pla
+        sta err_sp+1
+        pla
+        sta err_vec
+        pla
+        sta err_vec+1
+        pla
+        sta vsp
+        pla
+        sta vsp+1
+        pla
+        sta vfp
+        pla
+        sta vfp+1
+        pla
+        sta ip
+        pla
+        sta ip+1
+        pla
+        sta ip+2
+        lda _how
+        beq _ok
+        cmp #2
+        bcc _bad
+        bne _throw
+        lda #0                          ; exhausted
+        sta cur_exc
+        sta cur_exc+1
+        sta exc_ip_set
+        jsr clear_rregs
+        sec
+        rts
+_throw: jmp throw                       ; (out to the enclosing handler)
+_ok:    lda _res
+        ldx _res+1
         clc
         rts
 _bad:   #RAISE EXC_TYPE, "iterator has no __next__"
+_res:   .word 0
+_how:   .byte 0
 
 ;---------------------------------------------------------------------------------------
 ; helpers for builtins

@@ -103,7 +103,7 @@ free for it), interrupts off and the ROMs unmapped, and returns with `RTS`.
 (42, 42, 0, 0, 21)
 ```
 
-Two such modules come with it, written in Python with `peek`/`poke`:
+These modules come with it, written in Python (the hardware ones with `peek`/`poke`):
 
 * `lib/sound.py`: a `Sound` class for the SID chips (notes, waveforms, envelopes,
   tunes written as `'C4:8 E4:8 G4:16 R:4'`). The `tune` example plays "Ode to Joy".
@@ -138,6 +138,37 @@ Two such modules come with it, written in Python with `peek`/`poke`:
   `wait_frame()`. It corrects X on real hardware, which shows sprites 16 pixels
   further left than Xemu. The `sprites` example bounces four balls over the text and
   flies a multicolour ship.
+* `lib/gfx.py` also has `draw_text(x, y, text, c, bg=None)`: text in the 8x8 font on
+  the graphics screen.
+* `lib/keyboard.py`: keys without waiting for RETURN, for games and menus:
+  `getkey()` (`''` if none), `waitkey()`, `getcode()`, `flush()`, the key names
+  `keyboard.UP`/`DOWN`/`LEFT`/`RIGHT`/`HOME`/`CLR`/`DEL`/`INST`/`ESC`/`F1`-`F8`, and
+  `shift()`, `ctrl()`, `mega()`, `alt()`.
+* `lib/joystick.py`: `Joystick(port=2)` with `read()` (bits: 1 up, 2 down, 4 left,
+  8 right, 16 fire), `up()`, `down()`, `left()`, `right()`, `fire()`, `direction()`
+  (`(dx, dy)`). The `keys` example moves a star with either.
+* `lib/curses.py`: a subset of Python's `curses` on the 80x25 text screen:
+  `wrapper`, `initscr`/`endwin`, `newwin`, windows with `addstr`, `addch`, `move`,
+  `getyx`, `getmaxyx`, `clear`, `clrtoeol`, `border`/`box`, `hline`/`vline`, `getch`
+  (with `KEY_UP` and the like), `getkey`, `getstr`, `nodelay`; colour pairs
+  (`init_pair`, `color_pair`) and the attributes `A_REVERSE`, `A_UNDERLINE`, `A_BLINK`,
+  `A_BOLD` (the VIC-III's: colours 16-31). The screen has one background colour, so
+  the last `init_pair` background wins. The `cursdemo` example has a menu.
+* Pure-Python versions of standard modules, as in CPython (subsets where noted):
+  * `json` (`dumps` with `indent`, `separators`, `sort_keys`; `loads`; `dump`/`load`
+    on files; `JSONDecodeError`);
+  * `string` (the constants, `capwords`);
+  * `bisect`, `heapq`;
+  * `functools` (`reduce`, `cmp_to_key`);
+  * `copy` (`copy`, `deepcopy`);
+  * `textwrap` (`wrap`, `fill`, `shorten`, `dedent`, `indent`);
+  * `statistics` (`mean`, `fmean`, `geometric_mean`, `harmonic_mean`, `median` and
+    `median_low`/`_high`, `mode`, `multimode`, `variance`, `pvariance`, `stdev`,
+    `pstdev`);
+  * `collections` (`deque`, `Counter`, `defaultdict`).
+
+  `statistics` and `collections` are `lib-stats.py` and `lib-colls.py` on the disk
+  (`lib-statistics.py` would be too long a name); `import statistics` finds them.
 
 ```
 import gfx
@@ -171,7 +202,14 @@ Example programs on the disk:
 * `files`: a high-score table kept in a file (`open()`, `with`, appending, and
   `os.rename`/`remove`/`listdir`)
 * `tune` (MEGA65 only): plays "Ode to Joy" with `lib/sound.py`
-* `gfxdemo` (MEGA65 only): draws a scene with `lib/gfx.py`; press a key to end it
+* `gfxdemo` (MEGA65 only): draws a scene (and text) with `lib/gfx.py`; press a key to end it
+* `keys` (MEGA65 only): move a star with the cursor keys or a joystick in port 2
+  (`keyboard`, `joystick`, `curses`)
+* `cursdemo` (MEGA65 only): `curses` windows, colours, attributes and a menu
+* `jsondemo`: a game save kept as JSON in a file (each run loads it, plays a level and
+  saves it again), pretty-printed with `indent`
+* `counter`: `Counter`, `defaultdict` and `deque` on a paragraph (letter and word
+  counts with a text bar chart)
 * `sprites` (MEGA65 only): bouncing ball sprites and a multicolour ship with `lib/sprite.py`
 * `dice` (MEGA65 only): dice, cards, a lottery draw and weighted coins with `random`
 * `clock` (MEGA65 only): the date in several formats, a stopwatch and a ticking clock
@@ -227,6 +265,11 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_random` | `random`: seeds repeat, ranges, shuffle, sample, weighted choices, errors (properties that hold for CPython's generator too) |
 | `t_sys` | `sys`: the version values, `version_info` comparisons, `stdout.write`, `exit` |
 | `t_time` | `time`: `gmtime`, `strftime`, `asctime` of fixed times, `struct_time`, the clock's plausibility |
+| `t_protocols` | user classes as iterators (`__iter__`/`__next__`, `StopIteration` ends the loop), `__contains__`, `__setitem__`, `__call__` |
+| `t_json` | `json`: `dumps` (indent, separators, sort_keys), `loads`, escapes, errors, `dump`/`load` with files |
+| `t_libs` | `string`, `bisect`, `heapq`, `functools`, `copy` |
+| `t_stats` | `statistics` |
+| `t_colls` | `collections` (`deque`, `Counter`, `defaultdict`) and `textwrap` |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
 Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, screenshot),
@@ -338,7 +381,11 @@ Differences from CPython
   `from module import *`, packages (`import a.b`), the `bytes` type.
 * **Modules**: a module's code and name are kept until `run()` or `new()`; a name a
   module does not define falls back to the main program's global of that name (CPython
-  would raise `NameError`). Module names are up to 13 characters (`name.py`), or 9 for `lib-name.py`.
+  would raise `NameError`). Module names are up to 13 characters (`name.py`), or 9 for
+  `lib-name.py` (longer library names have a short disk name: `statistics` and
+  `collections`).
+* A class body cannot use a name it defined earlier (`clear = erase` looks for a
+  global `erase`); write such an alias as a method.
 * `dict.keys()`, `values()` and `items()` return lists (snapshots, not live views).
   `map()`, `filter()` and generator expressions produce lists.
 * `try`/`finally`: a `break`/`continue` out of the `try` body skips the `finally` block.

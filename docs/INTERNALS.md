@@ -134,6 +134,15 @@ Exceptions: `SETUP_EXCEPT` pushes a handler (ip, vsp, frp, vfp); `throw` resets 
 stack to the run level and jumps to the newest handler of that level. `RETURN` drops the
 handlers of the returning function.
 
+Native code can catch an exception too: `it_inst` (a user iterator's `__next__`,
+`seq.asm`) pushes `ip`, `vsp`, `vfp`, `err_sp` and `err_vec` on the CPU stack and points
+`err_sp`/`err_vec` at itself. An exception that leaves the nested run lands there:
+`StopIteration` ends the iteration, and anything else is thrown on with the outer
+context restored.
+
+Calling an instance (`do_call`, `vm_call_nested`) looks up `__call__` with
+`get_method` and inserts the instance as argument 0 (`inst_call`).
+
 ## Compiler notes
 
 * Assignment targets are found after the fact: an expression is compiled as loads; on
@@ -196,7 +205,9 @@ no such file). `listdir` and `path.exists` load `$` and take the quoted names.
 
 `import name` (`mod_import`) tries `math` and `os`, then the hidden global `"name."`,
 which holds the module object once it is imported. Otherwise it loads `name.py` to
-`MODSRC`, binds a `T_MODULE` object there, compiles the source after the running code
+`MODSRC` (`xm_load`, tail F; failing that `lib-name.py`, where `xm_alias` shortens a
+long name such as `statistics` to `stats`, the same table as `tools/mkpy.py`'s
+`ALIASES`), binds a `T_MODULE` object there, compiles the source after the running code
 (the compiler overlay comes in and goes out; a compile error comes back through an error
 context that restores the runtime overlay first), and runs the module's top level as a
 nested VM run. `c_made_func` is set so the REPL keeps the new code.
