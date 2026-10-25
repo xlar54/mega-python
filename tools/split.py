@@ -1,22 +1,19 @@
-"""Cut the raw build image (target/image.bin, assembled from $2001) into the two disk files.
+"""Make the two disk files from the two build passes.
 
-  target/mega-python.prg  PRG at $2001: resident part 1 and overlay R (in the window)
-  target/mpy-ovl       resident part 2 then overlay C (compiler, lexer, editor), loaded
-                       at boot to $50000 and moved into place
-
-The split point is $C000.
+  target/image.bin  (pass 1, from $2001) -> target/mega-python.prg: resident part 1,
+                    overlay R (in the window) and resident part 2 (at $D000)
+  target/image2.bin (pass 2)             -> target/mpy-ovl: overlay C (compiler, lexer,
+                    editor), loaded at boot to $50000 and kept in attic
 """
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = 0x2001
-SPLIT = 0xC000
 
 
 def main():
-    img = open(os.path.join(ROOT, "target", "image.bin"), "rb").read()
-    cut = SPLIT - BASE
-    main_part, ovl = img[:cut], img[cut:]
+    main_part = open(os.path.join(ROOT, "target", "image.bin"), "rb").read()
+    ovl = open(os.path.join(ROOT, "target", "image2.bin"), "rb").read()
     if BASE + len(main_part) > 0xF6FF:
         raise SystemExit("the main program is too big to load")
     with open(os.path.join(ROOT, "target", "mega-python.prg"), "wb") as f:

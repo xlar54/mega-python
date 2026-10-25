@@ -36,7 +36,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 D81 = os.environ.get('MEGA65_D81') or os.path.join(ROOT, 'target', 'mega-python.d81')
 LBL = os.environ.get('MEGA65_LBL') or os.path.join(ROOT, 'target', 'mega-python.lbl')
 PORT = int(os.environ.get('MEGA65_PORT', '4510'))
-SCREEN = 0x0800
+SCREEN = 0x1E800
 LOG = 0x8000000
 
 KEYS = {'n': 0x0D, 'e': 0x1B, 's': 0x03, '5': 0xF5, 't': 0x09, 'b': 0x14,

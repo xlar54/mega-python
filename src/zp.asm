@@ -35,7 +35,7 @@ groot:          .fill 16
 scr_row:        .byte ?
 scr_col:        .byte ?
 scr_color:      .byte ?
-scr_ptr:        .word ?                 ; bank-0 address of the cursor cell
+scr_ptr:        .dword ?                ; screen address of the cursor cell
 cur_ptr:        .dword ?                ; colour RAM address of the cursor cell
 ; heap
 heap_top:       .word ?
@@ -45,8 +45,8 @@ alloc_size:     .word ?
 ip:             .dword ?                ; bytecode pointer (bank 5)
 vsp:            .word ?                 ; value stack: next free slot
 vfp:            .word ?                 ; locals base of the running function
-frp:            .word ?                 ; call frame stack pointer
-hsp:            .word ?                 ; handler stack pointer
+frp:            .dword ?                ; call frame stack pointer (bank 1)
+hsp:            .dword ?                ; handler stack pointer (bank 1)
 vtmp:           .word ?
 argp:           .word ?                 ; native call: first argument
 argc:           .byte ?

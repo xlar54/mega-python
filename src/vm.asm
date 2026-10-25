@@ -114,6 +114,12 @@ vm_reset:
         sta hsp
         lda #>HSTACK
         sta hsp+1
+        lda #<(FSTACK >> 16)            ; (both stacks are in bank 1)
+        sta frp+2
+        sta hsp+2
+        lda #0
+        sta frp+3
+        sta hsp+3
         lda #0
         sta runlev
         sta cur_exc
@@ -236,29 +242,29 @@ _handler:
         lda hsp+1
         sbc #0
         sta hsp+1
-        ldy #0
-        lda (hsp),y
+        ldz #0
+        lda [hsp],z
         sta ip
-        iny
-        lda (hsp),y
+        inz
+        lda [hsp],z
         sta ip+1
-        iny
-        lda (hsp),y
+        inz
+        lda [hsp],z
         sta vsp
-        iny
-        lda (hsp),y
+        inz
+        lda [hsp],z
         sta vsp+1
-        iny
-        lda (hsp),y
+        inz
+        lda [hsp],z
         sta frp
-        iny
-        lda (hsp),y
+        inz
+        lda [hsp],z
         sta frp+1
-        iny
-        lda (hsp),y
+        inz
+        lda [hsp],z
         sta vfp
-        iny
-        lda (hsp),y
+        inz
+        lda [hsp],z
         sta vfp+1
         lda cur_exc
         ldx cur_exc+1
@@ -891,27 +897,27 @@ _locals:
         bcc +
         jmp raise_recursion
 +       ; push the frame
-        ldy #0
+        ldz #0
         lda ip
-        sta (frp),y
-        iny
+        sta [frp],z
+        inz
         lda ip+1
-        sta (frp),y
-        iny
+        sta [frp],z
+        inz
         lda vfp
-        sta (frp),y
-        iny
+        sta [frp],z
+        inz
         lda vfp+1
-        sta (frp),y
-        iny
+        sta [frp],z
+        inz
         lda c_slot
-        sta (frp),y
-        iny
+        sta [frp],z
+        inz
         lda c_slot+1
-        sta (frp),y
-        iny
+        sta [frp],z
+        inz
         lda c_flags
-        sta (frp),y
+        sta [frp],z
         clc
         lda frp
         adc #8
@@ -945,26 +951,26 @@ op_return:
         lda frp+1
         sbc #0
         sta frp+1
-        ldy #0
-        lda (frp),y
+        ldz #0
+        lda [frp],z
         sta ip
-        iny
-        lda (frp),y
+        inz
+        lda [frp],z
         sta ip+1
-        iny
-        lda (frp),y
+        inz
+        lda [frp],z
         sta vfp
-        iny
-        lda (frp),y
+        inz
+        lda [frp],z
         sta vfp+1
-        iny
-        lda (frp),y
+        inz
+        lda [frp],z
         sta vsp
-        iny
-        lda (frp),y
+        inz
+        lda [frp],z
         sta vsp+1
-        iny
-        lda (frp),y
+        inz
+        lda [frp],z
         sta c_flags
         ; drop the exception handlers the returning function left (return in a try)
 -       lda hsp
@@ -976,23 +982,27 @@ op_return:
 +       sec
         lda hsp
         sbc #8
-        sta t0
+        sta fp2
         lda hsp+1
         sbc #0
-        sta t0+1
-        ldy #5                          ; the handler's frame pointer
-        lda (t0),y
+        sta fp2+1
+        lda #<(HSTACK >> 16)
+        sta fp2+2
+        lda #0
+        sta fp2+3
+        ldz #5                          ; the handler's frame pointer
+        lda [fp2],z
         cmp frp+1
         bcc _ret
         bne +
-        dey
-        lda (t0),y
+        dez
+        lda [fp2],z
         cmp frp
         bcc _ret
         beq _ret
-+       lda t0
++       lda fp2
         sta hsp
-        lda t0+1
+        lda fp2+1
         sta hsp+1
         bra -
 _ret:   lda r0
@@ -1839,29 +1849,29 @@ op_setup_except:
         bcc +
         jmp raise_recursion
 +       #FETCHW
-        ldy #0
-        sta (hsp),y
-        iny
+        ldz #0
+        sta [hsp],z
+        inz
         txa
-        sta (hsp),y
-        iny
+        sta [hsp],z
+        inz
         lda vsp
-        sta (hsp),y
-        iny
+        sta [hsp],z
+        inz
         lda vsp+1
-        sta (hsp),y
-        iny
+        sta [hsp],z
+        inz
         lda frp
-        sta (hsp),y
-        iny
+        sta [hsp],z
+        inz
         lda frp+1
-        sta (hsp),y
-        iny
+        sta [hsp],z
+        inz
         lda vfp
-        sta (hsp),y
-        iny
+        sta [hsp],z
+        inz
         lda vfp+1
-        sta (hsp),y
+        sta [hsp],z
         clc
         lda hsp
         adc #8

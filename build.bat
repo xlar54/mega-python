@@ -24,7 +24,9 @@ if errorlevel 1 exit /b 1
 python tools\mkboot.py
 if errorlevel 1 exit /b 1
 
-.\64tass.exe --nostart -C -I src src\main.asm -l target\%PROJECT%.lbl -L target\%PROJECT%.lst -o target\image.bin
+.\64tass.exe --nostart -C -I src -D PASS=1 src\main.asm -l target\%PROJECT%.lbl -L target\%PROJECT%.lst -o target\image.bin
+if errorlevel 1 exit /b 1
+.\64tass.exe --nostart -C -I src -D PASS=2 src\main.asm -o target\image2.bin
 if errorlevel 1 exit /b 1
 python tools\split.py
 if errorlevel 1 exit /b 1

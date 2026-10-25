@@ -1,6 +1,6 @@
 ;=======================================================================================
-; 80x25 text console. Characters are ASCII; font A (ROM $29800, the lower-case half)
-; has the ASCII punctuation, so ascii2scr maps ASCII to its screen codes.
+; 80x25 text console, screen RAM in bank 1 (SCREEN). Characters are ASCII: font A (ROM
+; $29800, the lower-case half) has the ASCII punctuation; ascii2scr maps to its codes.
 ; Colour RAM bit 5 (VIC-III attributes on) is used as reverse video for the cursor.
 ;=======================================================================================
 COLS            = 80
@@ -26,13 +26,7 @@ scr_init:
         sta VIC4_LINESTEP+1
         lda #80
         sta VIC4_CHRCOUNT
-        lda #<SCREEN
-        sta VIC4_SCRNPTR
-        lda #>SCREEN
-        sta VIC4_SCRNPTR+1
-        lda #0
-        sta VIC4_SCRNPTR+2
-        sta VIC4_SCRNPTR+3
+        jsr scr_setptr
         lda #$00                        ; font A, lower/upper case half
         sta VIC4_CHARPTR
         lda #$98
@@ -50,8 +44,9 @@ scr_clear:
         sta fp1
         lda #>SCREEN
         sta fp1+1
-        lda #0
+        lda #<(SCREEN >> 16)
         sta fp1+2
+        lda #0
         sta fp1+3
         lda #<(COLS*ROWS)
         sta t0
@@ -82,10 +77,26 @@ scr_sync:
         clc
         adc #>SCREEN
         sta scr_ptr+1
+        lda #<(SCREEN >> 16)
+        sta scr_ptr+2
+        lda #0
+        sta scr_ptr+3
         lda #<(COLRAM >> 16)
         sta cur_ptr+2
         lda #>(COLRAM >> 16)
         sta cur_ptr+3
+        rts
+
+; scr_setptr - point the VIC-IV at the screen (also after KERNAL calls)
+scr_setptr:
+        lda #<SCREEN
+        sta VIC4_SCRNPTR
+        lda #>SCREEN
+        sta VIC4_SCRNPTR+1
+        lda #<(SCREEN >> 16)
+        sta VIC4_SCRNPTR+2
+        lda #0
+        sta VIC4_SCRNPTR+3
         rts
 
 set_fp1_colram:
@@ -121,9 +132,8 @@ putc:
         bcc _out
         tax
         lda ascii2scr,x
-        ldy #0
-        sta (scr_ptr),y
         ldz #0
+        sta [scr_ptr],z
         lda scr_color
         sta [cur_ptr],z
         inw scr_ptr
@@ -168,15 +178,17 @@ scr_scroll:
         sta fp0
         lda #>(SCREEN+COLS)
         sta fp0+1
-        lda #0
+        lda #<(SCREEN >> 16)
         sta fp0+2
+        lda #0
         sta fp0+3
         lda #<SCREEN
         sta fp1
         lda #>SCREEN
         sta fp1+1
-        lda #0
+        lda #<(SCREEN >> 16)
         sta fp1+2
+        lda #0
         sta fp1+3
         lda #<(COLS*(ROWS-1))
         sta t0
