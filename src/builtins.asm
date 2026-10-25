@@ -2017,9 +2017,7 @@ bi_poke:
         rts
 
 ; mem() - print free heap memory
-bi_mem:
-        jsr need_h
-        jmp xh_mem
+bi_mem: #TAILCALL TAIL_H, xh_mem
 
 ; heap_free -> acc = bytes in the free list plus the untouched top
 heap_free:
@@ -2076,9 +2074,7 @@ bi_cls:
         ldx #0
         rts
 
-bi_help:
-        jsr need_h
-        jmp xh_help
+bi_help: #TAILCALL TAIL_H, xh_help
 
 ;---------------------------------------------------------------------------------------
 ; environment requests: handled by the REPL loop outside the VM

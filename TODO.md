@@ -50,9 +50,9 @@ Environment
 Memory
 ------
 
-* Code space: part 1 has about 200 bytes free, overlay R about 370, part 2 about 280,
-  tail H about 120 (the fixed symbols' names grow with every builtin), tail S about
-  1.5 KB (see the sizes `build.bat` prints). More code should go into tails (only code that never
+* Code space (see the sizes `build.bat` prints): part 1 has about 1.9 KB free, overlay R
+  about 2 KB, part 2 about 190 bytes; each tail has room left, and more tails can be
+  added (`docs/INTERNALS.md`, "Tails"). More code should go into tails (only code that never
   runs Python code; see `docs/INTERNALS.md`) or overlay C (compile time).
 
 * Objects carry a 4-byte header; strings could drop their separate length word.

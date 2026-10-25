@@ -1,5 +1,5 @@
 ;=======================================================================================
-; Floats, tail A (swapped in at TAIL by need_a): float <-> text for repr(), format(),
+; Floats, tail A: float <-> text for repr(), format(),
 ; float(), and round(), hash(), divmod().
 ;=======================================================================================
 ; float_hash - hash() of the float A/X: the int's hash when integral

@@ -145,8 +145,7 @@ mod_import:
         cpx #0
         beq _load
         rts
-_load:  jsr need_f                        ; name.py -> MODSRC, the module object bound
-        jsr xm_load
+_load:  jsr module_load                   ; name.py -> MODSRC, the module object bound
         ; compile it (the compiler's scopes use the bottom of the value stack)
         lda vsp+1
         cmp #>(SCOPEMEM + $500)
@@ -272,12 +271,7 @@ ms_key:         .word 0
 ;---------------------------------------------------------------------------------------
 ; module attributes and repr: in tail F
 ;---------------------------------------------------------------------------------------
-module_getattr:
-        jsr need_f
-        jmp xm_getattr
-module_setattr:
-        jsr need_f
-        jmp xm_setattr
-repr_module:
-        jsr need_f
-        jmp xm_repr
+module_getattr: #TAILCALL TAIL_F, xm_getattr
+module_setattr: #TAILCALL TAIL_F, xm_setattr
+repr_module:    #TAILCALL TAIL_F, xm_repr
+module_load:    #TAILCALL TAIL_F, xm_load

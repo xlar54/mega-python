@@ -1319,6 +1319,8 @@ it_inst:
         lda [p2],z
         sta r2+1
         ; __next__ under an error context of our own: StopIteration ends the loop
+        lda tail_cur                    ; (our caller may be tail code)
+        pha
         lda ip+2
         pha
         lda ip+1
@@ -1389,6 +1391,8 @@ _restore:
         sta ip+1
         pla
         sta ip+2
+        pla
+        jsr need_tail
         lda _how
         beq _ok
         cmp #2

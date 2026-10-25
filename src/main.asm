@@ -33,12 +33,13 @@ ovl_r_start:
         .include "builtins.asm"
         .include "methods.asm"
         .include "sets.asm"
+        .include "classes.asm"
         .include "modules.asm"
         .include "fmath.asm"
         .include "float.asm"
         .include "gen/tables.asm"
 r_main_end:
-        .cerror * > TAIL, "overlay R runs into the float tail"
+        .cerror * > TAIL, "overlay R runs into the tail"
         * = TAIL
         .include "fdtoa.asm"
         .include "floata.asm"
@@ -50,7 +51,7 @@ tail_b_start:
         .include "floatb.asm"
         .include "gen/fconst.asm"
 tail_b_end:
-        .cerror * > WINDOW + WINDOW_SIZE, "float tail B is too big"
+        .cerror * > WINDOW + WINDOW_SIZE, "tail B is too big"
         .endv
         .virtual TAIL
 tail_h_start:
@@ -70,10 +71,23 @@ tail_s_start:
 tail_s_end:
         .cerror * > WINDOW + WINDOW_SIZE, "tail S is too big"
         .endv
+        .virtual TAIL
+tail_p_start:
+        .include "fmtsort.asm"
+tail_p_end:
+        .cerror * > WINDOW + WINDOW_SIZE, "tail P is too big"
+        .endv
+        .virtual TAIL
+tail_i_start:
+        .include "taili.asm"
+tail_i_end:
+        .cerror * > WINDOW + WINDOW_SIZE, "tail I is too big"
+        .endv
         * = PART2_LOAD
         .logical PART2
 part2_start:
         .include "seq.asm"
+        .include "tailcall.asm"
 part2_end:
         .cerror * > PART2_END, "resident part 2 overflows into the reserved 0.FF00 page"
         .endlogical
@@ -96,12 +110,13 @@ ovl_r_start:
         .include "builtins.asm"
         .include "methods.asm"
         .include "sets.asm"
+        .include "classes.asm"
         .include "modules.asm"
         .include "fmath.asm"
         .include "float.asm"
         .include "gen/tables.asm"
 r_main_end:
-        .cerror * > TAIL, "overlay R runs into the float tail"
+        .cerror * > TAIL, "overlay R runs into the tail"
         * = TAIL
         .include "fdtoa.asm"
         .include "floata.asm"
@@ -111,6 +126,7 @@ ovl_r_end:
         .virtual PART2
 part2_start:
         .include "seq.asm"
+        .include "tailcall.asm"
 part2_end:
         .cerror * > PART2_END, "resident part 2 overflows into the reserved 0.FF00 page"
         .endv
@@ -149,11 +165,24 @@ tail_s_start:
         .include "strmeth.asm"
 tail_s_end:
         .endlogical
+        * = $1000 + WINDOW_SIZE + 4 * TAIL_SIZE
+        .logical TAIL
+tail_p_start:
+        .include "fmtsort.asm"
+tail_p_end:
+        .endlogical
+        * = $1000 + WINDOW_SIZE + 5 * TAIL_SIZE
+        .logical TAIL
+tail_i_start:
+        .include "taili.asm"
+tail_i_end:
+        .endlogical
+        .cerror TAILS_N != 6, "TAILS_N must count the tails written after overlay C"
         .endif
 
 part2_len = part2_end - part2_start
         .cerror PART2_LOAD + part2_len > $e000, "part 2's load image is too big"
 
         .if PASS == 1
-        .warn format("part 1 $%04x, overlay R $%04x + tail A $%04x / B $%04x / H $%04x / F $%04x / S $%04x, part 2 $%04x, overlay C $%04x bytes", part1_end - $2001, r_main_end - ovl_r_start, ovl_r_end - TAIL, tail_b_end - tail_b_start, tail_h_end - tail_h_start, tail_f_end - tail_f_start, tail_s_end - tail_s_start, part2_len, ovl_c_end - ovl_c_start)
+        .warn format("part 1 $%04x, overlay R $%04x + tail A $%04x / B $%04x / H $%04x / F $%04x / S $%04x / P $%04x / I $%04x, part 2 $%04x, overlay C $%04x bytes", part1_end - $2001, r_main_end - ovl_r_start, ovl_r_end - TAIL, tail_b_end - tail_b_start, tail_h_end - tail_h_start, tail_f_end - tail_f_start, tail_s_end - tail_s_start, tail_p_end - tail_p_start, tail_i_end - tail_i_start, part2_len, ovl_c_end - ovl_c_start)
         .endif

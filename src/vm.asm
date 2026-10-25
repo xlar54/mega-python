@@ -1057,9 +1057,20 @@ _ret:   lda r0
 
 ;---------------------------------------------------------------------------------------
 ; vm_call_nested - native code calls c_func with argc arguments it pushed (after
-; pushing the callable). Returns A/X = the result, the stack popped back.
+; pushing the callable). Returns A/X = the result, the stack popped back. The Python
+; code may bring in other tails: the caller's comes back (it may be tail code).
 ;---------------------------------------------------------------------------------------
 vm_call_nested:
+        lda tail_cur
+        pha
+        jsr vcn_run
+        sta vcn_a
+        pla
+        jsr need_tail                     ; (keeps X)
+        lda vcn_a
+        rts
+vcn_a:  .byte 0
+vcn_run:
         lda #0
         sta kwnames
         sta kwnames+1

@@ -220,15 +220,13 @@ float_type_code:
 _codes: .text "feg%"
 
 ;---------------------------------------------------------------------------------------
-; entries into the tails (floata.asm, floatb.asm): bring the tail in, then go
+; entries into the tails (floata.asm, floatb.asm, file.asm): TAILCALL stubs
 ;---------------------------------------------------------------------------------------
 TAILA   .macro target
-        jsr need_a
-        jmp \target
+        #TAILCALL TAIL_A, \target
         .endm
 TAILB   .macro target
-        jsr need_b
-        jmp \target
+        #TAILCALL TAIL_B, \target
         .endm
 repr_float:     #TAILA xa_repr_float
 format_float:   #TAILA xa_format_float
@@ -238,8 +236,7 @@ float_hash:     #TAILA xa_float_hash
 float_divmod:   #TAILA xa_float_divmod
 math_init:      #TAILB xb_math_init
 TAILF   .macro target
-        jsr need_f
-        jmp \target
+        #TAILCALL TAIL_F, \target
         .endm
 bi_open:        #TAILF xf_open
 bi_file_read:   #TAILF xf_read
