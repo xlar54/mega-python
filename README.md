@@ -50,7 +50,7 @@ Commands at the prompt (they are Python functions):
 | `new()` | clear the program and all variables |
 | `load('name')` / `save('name')` | load / save `name.py` on drive 8 |
 | `files()` | directory of the disk |
-| `cls()`, `mem()`, `gc()`, `help()` | clear screen, free memory, collect garbage, help |
+| `cls()`, `mem()`, `gc()`, `help()` | clear screen, free memory per area (see "Memory"), collect garbage, help |
 | `peek(addr)`, `poke(addr, byte)` | 28-bit memory access (`peek(0xD020)`, `poke(0xD020, 2)`) |
 
 Floats are IEEE doubles, printed exactly as CPython prints them (`0.1 + 0.2` gives
@@ -122,8 +122,20 @@ Memory
 
 Python objects (every int that does not fit in 15 bits, and every float, string, list,
 tuple, dict, function, class and instance) live in a **64 KB object heap** in chip-RAM bank 4.
-`mem()` runs a garbage collection and reports what is free in that heap; about
-61-62 KB is free after start-up (the rest holds the builtins, exception classes and the
+`mem()` runs a garbage collection and shows what is free in that heap and in the other
+areas a program fills up:
+
+```
+>>> mem()
+objects (heap, bank 4)  60350 of 65264 bytes free
+bytecode (bank 1)       32761 of 32768 bytes free
+names (symbol table)     1808 of  2048 names free
+program source (attic)  65520 of 65520 bytes free
+value stack (bank 0)     2047 of  2048 slots free
+bank 5 (64 KB) is kept for graphics.
+```
+
+About 60 KB of the heap is free after start-up (the rest holds the builtins, exception classes and the
 names of symbols). Small ints (-16384..16383), `None`, `True` and `False` take no heap
 space. The heap is shared by everything a program creates, so it is the limit that
 matters for big data. When a collection frees less than 1 KB, the program gets a
@@ -141,12 +153,13 @@ What objects cost, roughly (4-byte header included):
 | dict | 10, plus a pair array of 4 + 4 per slot |
 | instance | 8, plus a dict for its attributes |
 
-Everything else is outside the heap and does not count in `mem()`:
+Everything else is outside the heap (the bytecode, names, source and value stack lines of
+`mem()` show the ones a program fills up):
 
 | What | Where | Size |
 |---|---|---|
 | Program source (the editor buffer) | attic RAM | up to 64 KB |
-| Compiled bytecode (program + REPL input that defines functions) | chip RAM bank 1 | 36 KB |
+| Compiled bytecode (program + REPL input that defines functions) | chip RAM bank 1 | 32 KB |
 | Global variables | chip RAM bank 1 | 2048 names |
 | Symbol names, line table, REPL text and history, sort scratch | attic RAM | a few hundred KB of the 8 MB |
 | The interpreter's code overlays and tails, and the output transcript | attic RAM | 48 KB + 1 MB |

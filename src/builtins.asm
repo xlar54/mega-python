@@ -1957,22 +1957,8 @@ bi_poke:
 
 ; mem() - print free heap memory
 bi_mem:
-        jsr gc_collect
-        jsr heap_free
-        lda sbp
-        pha
-        lda sbp+1
-        pha
-        jsr sb_int
-        #SBPRINT " bytes free"
-        plx
-        pla
-        jsr sb_flush
-        lda #10
-        jsr putc
-        lda #R_NONE
-        ldx #0
-        rts
+        jsr need_h
+        jmp xh_mem
 
 ; heap_free -> acc = bytes in the free list plus the untouched top
 heap_free:
