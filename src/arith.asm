@@ -1411,7 +1411,13 @@ contains:
         beq _str
         cmp #T_RANGE
         beq _range
-        ; anything iterable: walk it
+        cmp #T_INST
+        bne +
+        lda #S_CONTAINS                 ; an instance: its __contains__(r2)
+        jsr inst_rbinop
+        bcs +
+        jmp obj_truth
++       ; anything iterable: walk it
         lda r3
         ldx r3+1
         jsr list_from_iterable

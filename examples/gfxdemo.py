@@ -40,6 +40,10 @@ for x in range(0, 320, 2):
 for i in range(216):
     gfx.vline(52 + i, 192, 199, 16 + i)
 
+# text in the 8x8 font
+gfx.draw_text(8, 6, 'MEGA65 Python', gfx.WHITE)
+gfx.draw_text(64, 146, 'home', gfx.YELLOW, gfx.BLACK)
+
 gfx.wait_key()
 gfx.text()
 print('gfxdemo: done')

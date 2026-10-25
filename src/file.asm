@@ -1128,19 +1128,35 @@ _call:  jmp (sys_vec)
 ; xm_load - (mod_import) name.py, else lib-name.py (the build writes lib/*.py so) ->
 ; MODSRC, and the module object, bound to ms_key
 xm_load:
-        lda #0                          ; name.py, then lib-name.py
-        sta fl_mode
-_try:   lda ms_sym
+        lda ms_sym                      ; the name -> xm_name
         ldx ms_sym+1
         jsr sym_name
         jsr str_info
         lda str_len+1
         bne _none
-        clc                             ; (the prefix, the name and ".py": 16 at most)
         lda str_len
-        adc fl_mode
         cmp #14
         bcs _none
+        sta xm_len
+        tay
+        ldz #0
+        ldx #0
+-       lda [fp0],z
+        sta xm_name,x
+        inz
+        inx
+        dey
+        bne -
+        lda #0                          ; name.py, then lib-<short name>.py
+        sta fl_mode
+_try:   lda fl_mode
+        beq +
+        jsr xm_alias
++       clc                             ; (the prefix, the name and ".py": 16 at most)
+        lda xm_len
+        adc fl_mode
+        cmp #14
+        bcs _next
         ldx #0
 -       cpx fl_mode
         beq +
@@ -1148,13 +1164,12 @@ _try:   lda ms_sym
         sta FNAMEBUF,x
         inx
         bra -
-+       ldy str_len
-        ldz #0
--       lda [fp0],z
++       ldy #0
+-       lda xm_name,y
         sta FNAMEBUF,x
-        inz
         inx
-        dey
+        iny
+        cpy xm_len
         bne -
         ldy #0
 -       lda _py,y
@@ -1168,7 +1183,7 @@ _try:   lda ms_sym
         jsr make_kname
         jsr kc_load
         bcc +
-        lda fl_mode
+_next:  lda fl_mode
         bne _none
         lda #4
         sta fl_mode
@@ -1261,6 +1276,51 @@ _none:  jsr sb_mark_t5
         rts
 _py:    .text ".py"
 _lib:   .text "lib-"
+xm_name:        .fill 14
+xm_len:         .byte 0
+
+; xm_alias - xm_name: a library whose name is too long for "lib-name.py" (16
+; characters) has a short one on the disk (tools/mkpy.py has the same table)
+xm_alias:
+        ldx #0
+_entry: lda _aliases,x                  ; (a 0 ends the table)
+        beq _done
+        ldy #0
+-       lda _aliases,x
+        beq _end
+        cpy xm_len
+        beq _skip
+        cmp xm_name,y
+        bne _skip
+        inx
+        iny
+        bra -
+_end:   cpy xm_len
+        bne _short
+        inx                             ; a match: copy the short name
+        ldy #0
+-       lda _aliases,x
+        beq +
+        sta xm_name,y
+        inx
+        iny
+        bra -
++       sty xm_len
+_done:  rts
+_skip:  lda _aliases,x                  ; to the end of this key ...
+        beq _short
+        inx
+        bra _skip
+_short: inx                             ; ... past it, and past its short name
+-       lda _aliases,x
+        inx
+        cmp #0
+        bne -
+        bra _entry
+_aliases:
+        .text "statistics", 0, "stats", 0
+        .text "collections", 0, "colls", 0
+        .byte 0
 
 ;---------------------------------------------------------------------------------------
 ; module attributes: r0 = module, r1 = name string

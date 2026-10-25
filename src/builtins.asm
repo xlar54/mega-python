@@ -1492,11 +1492,19 @@ bi_next:
         phx
         #ARG 0
         jsr type_of
-        cmp #T_ITER
+        cmp #T_INST
+        bne +
+        #ARG 0                          ; an instance: its __next__
+        sta r0
+        stx r0+1
+        lda #IT_INST
+        jsr iter_alloc
+        bra _next
++       cmp #T_ITER
         beq +
         #RAISE EXC_TYPE, "object is not an iterator"
 +       #ARG 0
-        jsr iter_next
+_next:  jsr iter_next
         bcs _end
         ply
         ply
