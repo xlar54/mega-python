@@ -61,7 +61,7 @@ OP_LOAD_METHOD  = 55                    ; w sym   obj -> meth self | callable NU
 OP_CALL_METHOD  = 56                    ; b argc
 OP_CALL_METHOD_KW = 57                  ; b argc, w kwnames
 OP_RETURN       = 58
-OP_MAKE_FUNCTION = 59                   ; w code, b nargs, b nlocals, w name, b ndefaults, w params
+OP_MAKE_FUNCTION = 59                   ; w code, b nargs, b nlocals, w name, b ndefaults, w params, b flags, b nkwonly
 OP_MAKE_CLASS   = 60                    ; w name ref      base -> cls
 OP_STORE_CLASSATTR = 61                 ; w sym           cls val -> cls
 OP_UNPACK       = 62                    ; b n
@@ -92,7 +92,10 @@ OP_ENTER_ENV    = 86                    ; b cells: the function's environment (p
 OP_SET_CLOSURE  = 87                    ; func -> func (it captures the frame's env)
 OP_LOAD_CLASSNAME = 88                  ; w sym: in a class body: the class's, else global
 OP_END_CLASS    = 89                    ; the end of a class body (MAKE_CLASS started it)
-OP_COUNT        = 90
+OP_PACK_ARGS    = 90                    ; b npos, w names: a * / ** call's list and dict
+OP_EX_ARG       = 91                    ; b kind: one more argument into them (args.asm)
+OP_CALL_EX      = 92                    ; b method: the call (names left under it)
+OP_COUNT        = 93
 
 ; operand bytes per opcode, bit 7 = has a jump target (word at +1)
 op_len:
@@ -101,7 +104,8 @@ op_len:
         .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0      ; 20-29
         .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0      ; 30-39
         .byte 0, 0, 0, $82, $82, $82, $82, $82, 0, $82 ; 40-49
-        .byte 2, 2, 2, 1, 3, 2, 1, 3, 0, 9      ; 50-59
+        .byte 2, 2, 2, 1, 3, 2, 1, 3, 0, 11     ; 50-59
         .byte 2, 2, 1, $82, 0, 0, 1, 0, 0, 3    ; 60-69
         .byte 2, 1, 1, 2, 0, 2, 1, 1, 1, 2      ; 70-79
         .byte 3, 2, 1, 0, 2, 2, 1, 0, 2, 0      ; 80-89
+        .byte 3, 1, 1                           ; 90-92

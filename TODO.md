@@ -15,7 +15,9 @@ Language
   Then real lazy `map`/`filter`/`zip`/generator expressions and `dict` views.
 * Closures: `del` of a captured variable; the free variable's name in the
   "cannot access free variable" NameError.
-* `*args`, `**kwargs`, keyword-only arguments; `property` deleters, `functools.wraps`.
+* Unpacking in displays (`[*a, *b]`, `{**d, 'k': 1}`), positional-only parameters
+  (`/`); `property` deleters, `functools.wraps`; the names in argument errors
+  ("f() got an unexpected keyword argument 'x'").
 * `with`: pass the exception to `__exit__` and let a true result swallow it; several
   managers in one `with`.
 * Files: `seek`/`tell`, binary mode (`bytes`), more of `os` (`getcwd`, `stat`,

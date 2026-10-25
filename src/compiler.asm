@@ -45,6 +45,11 @@ SC_NNONLOC      = 242
 SC_NARGS        = 243
 SC_NONLOCALS    = 244                   ; nonlocal syms (4)
 SC_NDECO        = 252                   ; functions: decorators to apply (st_decorated)
+SC_FFLAGS       = 253                   ; FF_VARARGS, FF_VARKW (MAKE_FUNCTION), FF_DEFS
+SC_NKWONLY      = 254                   ; keyword-only parameters
+SC_NPOS         = 255                   ; positional parameters + 1 (0: all of them)
+FF_DEFS         = $80                   ; (compiling) the defaults tuple is built
+                                        ; (FF_VARARGS, FF_VARKW: args.asm)
 MAX_GLOBALS     = 8
 MAX_LOCALS      = 48
 MAX_LOOPS       = 7
@@ -2073,27 +2078,56 @@ _param: ldy #SC_FLAGS
 +       lda tok
         cmp #TK_RPAREN
         beq _pend
++       ldy #SC_FFLAGS                  ; nothing after **kwargs
+        lda (sc),y
+        and #FF_VARKW
+        beq +
+        jsr syntax_error
+        .text "arguments cannot follow **kwargs", 0
 +       lda tok
         cmp #TK_STAR
-        bne +
-        jsr syntax_error
-        .text "*args/**kwargs are not supported yet", 0
-+       cmp #TK_NAME
+        bne _nstar
+        jsr fb_posend                   ; '*' / '*name': the rest are keyword-only
+        jsr lex
+        lda tok
+        cmp #TK_NAME
+        bne _next                       ; (a bare '*')
+        lda #FF_VARARGS
+        jsr fb_vparam
+        bra _next
+_nstar: cmp #TK_POW
+        bne _nds
+        jsr fb_posend                   ; '**name'
+        jsr lex
+        lda tok
+        cmp #TK_NAME
         beq +
         jmp c_syntax
-+       lda tok_sym
-        ldx tok_sym+1
-        jsr local_add
-        jsr lex
-        ldy #SC_FLAGS
++       lda #FF_VARKW
+        jsr fb_vparam
+        bra _next
+_nds:   cmp #TK_NAME
+        beq +
+        jmp c_syntax
++       jsr fb_pname
+        ldy #SC_NPOS                    ; after '*': keyword-only (default or NULL)
         lda (sc),y
-        bne _dflt
-        lda #TK_COLON                   ; an annotation: compile and drop it
+        beq _dflt
+        ldy #SC_NKWONLY
+        lda (sc),y
+        inc a
+        sta (sc),y
+        lda #TK_ASSIGN
         jsr accept
-        bcc _dflt
+        bcc +
         jsr sc_outer
-        jsr discard_expr
+        jsr expr
         jsr sc_inner
+        bra _next
++       lda #0                          ; required: NULL
+        tax
+        jsr emit_const
+        bra _next
 _dflt:  lda #TK_ASSIGN
         jsr accept
         bcc _nodef
@@ -2124,7 +2158,8 @@ _pend:  ldy #SC_FLAGS
         jsr sc_outer
         jsr discard_expr
         jsr sc_inner
-_ndef:  ldy #FB_NDEF
+_ndef:  jsr fb_defaults                 ; the defaults tuple (unless '*' built it)
+        ldy #SC_NKWONLY                 ; the keyword-only defaults tuple
         lda (sc),y
         beq +
         ldy #OP_BUILD_TUPLE
@@ -2136,11 +2171,17 @@ _ndef:  ldy #FB_NDEF
         iny
         txa
         sta (sc),y
-        ldy #SC_NLOCALS
+        ldy #SC_NLOCALS                 ; parameters (for the prologue)
         lda (sc),y
-        sta fb_tmp                      ; nargs
         ldy #SC_NARGS
         sta (sc),y
+        sta fb_tmp                      ; positional ones (MAKE_FUNCTION's nargs)
+        ldy #SC_NPOS
+        lda (sc),y
+        beq +
+        dec a
+        sta fb_tmp
++
         ; a def: pre-scan the body for the names it assigns (and those nested functions
         ; use); a lambda: only for those
         ldy #SC_FLAGS
@@ -2204,6 +2245,13 @@ _cells: jsr fb_cells
         tax
         pla
         jsr emit_word
+        ldy #SC_FFLAGS                  ; *args / **kwargs, keyword-only parameters
+        lda (sc),y
+        and #FF_VARARGS | FF_VARKW
+        jsr emit
+        ldy #SC_NKWONLY
+        lda (sc),y
+        jsr emit
         jsr fb_outer_env                ; made where there is an environment: keep it
         bcc +
         lda #OP_SET_CLOSURE
@@ -2267,6 +2315,65 @@ _ret:   lda #OP_RETURN
         pla
         jsr patch_here
         jmp scope_pop
+
+;---------------------------------------------------------------------------------------
+; parameters: positional (with defaults), *args, keyword-only (each with its default or
+; NULL), **kwargs; their locals are in that order (args.asm binds them)
+;---------------------------------------------------------------------------------------
+; fb_pname - tok = a parameter name: make it a local; skip an annotation (def)
+fb_pname:
+        lda tok_sym
+        ldx tok_sym+1
+        jsr local_add
+        jsr lex
+        ldy #SC_FLAGS
+        lda (sc),y
+        bne +
+        lda #TK_COLON
+        jsr accept
+        bcc +
+        jsr sc_outer
+        jsr discard_expr
+        jsr sc_inner
++       rts
+
+; fb_vparam - A = FF_VARARGS / FF_VARKW, tok = its name
+fb_vparam:
+        ldy #SC_FFLAGS
+        ora (sc),y
+        sta (sc),y
+        jmp fb_pname
+
+; fb_posend - (at '*' or '**') the positional parameters end here: their defaults tuple
+; is built now, before any keyword-only defaults. A second '*' is an error.
+fb_posend:
+        ldy #SC_NPOS
+        lda (sc),y
+        beq +
+        lda tok
+        cmp #TK_POW
+        beq fb_rts
+        jsr syntax_error
+        .text "only one * is allowed", 0
++       ldy #SC_NLOCALS
+        lda (sc),y
+        inc a
+        ldy #SC_NPOS
+        sta (sc),y
+; fb_defaults - BUILD_TUPLE of the positional defaults, once
+fb_defaults:
+        ldy #SC_FFLAGS
+        lda (sc),y
+        bmi fb_rts                      ; (FF_DEFS: built)
+        ora #FF_DEFS
+        sta (sc),y
+        ldy #FB_NDEF
+        lda (sc),y
+        beq fb_rts
+        ldy #OP_BUILD_TUPLE
+        ldx #0
+        jmp emit_op_word
+fb_rts: rts
 
 ;---------------------------------------------------------------------------------------
 ; closures (env.asm has the runtime side)
@@ -4526,8 +4633,12 @@ _attr:  jsr lex
         ldz #0
         lda #OP_LOAD_METHOD
         sta [cpat],z
-        jsr call_args                   ; -> A = argc, X/Y = kwnames (Y = 0: none)
-        cpy #0
+        jsr call_args                   ; -> A = argc, Y = 0 / 1 (ca_kw) / 2 (* or **)
+        cpy #2
+        bne +
+        lda #1                          ; CALL_EX for a method
+        bra _ex
++       cpy #0
         bne +
         ldy #OP_CALL_METHOD
         jsr emit_op_byte
@@ -4536,7 +4647,17 @@ _attr:  jsr lex
         lda #OP_CALL_METHOD_KW
         bra _kw
 _call:  jsr call_args
-        cpy #0
+        cpy #2
+        bne +
+        lda #0
+_ex:    ldy #OP_CALL_EX                 ; then drop the names it leaves under the result
+        jsr emit_op_byte
+        lda #OP_ROT2
+        jsr emit
+        lda #OP_POP
+        jsr emit
+        bra _called
++       cpy #0
         bne +
         ldy #OP_CALL
         jsr emit_op_byte
@@ -4634,53 +4755,91 @@ tuple_rest:
 _again: pla
         bra -
 
-; call_args - after '(' ... ')' -> A = argc, Y = 0 or 1 (keywords; ca_kw = names tuple)
+; call_args - after '(' ... ')' -> Y = 0: A = argc; Y = 1: A = argc (the last ones
+; keywords), ca_kw = their names tuple; Y = 2: a * or ** was used: the arguments are a
+; list and a dict on the stack, for CALL_EX (the ones before the first * / ** were
+; compiled plainly and packed by PACK_ARGS; each later one goes in with EX_ARG).
+; Per call nesting level: ca_* [ca_d - 1]; the keyword names on the ca_names stack.
+CA_DEPTH        = 16
+CA_NAMES        = 64
 ca_kw:          .word 0
-ca_names:       .fill 32
+ca_d:           .byte 0                 ; calls being compiled (nesting)
+ca_argc:        .fill CA_DEPTH          ; plain arguments so far (keyword ones too)
+ca_nkw:         .fill CA_DEPTH          ; plain keyword arguments so far
+ca_ex:          .fill CA_DEPTH          ; 1: list and dict (after a * / **)
+ca_kwseen:      .fill CA_DEPTH          ; a keyword argument or ** seen
+ca_base:        .fill CA_DEPTH          ; its names start here on ca_names
+ca_ntop:        .byte 0
+ca_names:       .fill 2 * CA_NAMES
 call_args:
         jsr lex                         ; past '('
+        ldx ca_d
+        cpx #CA_DEPTH
+        bcc +
+        jsr syntax_error
+        .text "calls nested too deeply", 0
++       inc ca_d
         lda #0
-        pha                             ; argc
-        pha                             ; nkw
+        sta ca_argc,x
+        sta ca_nkw,x
+        sta ca_ex,x
+        sta ca_kwseen,x
+        lda ca_ntop
+        sta ca_base,x
 _arg:   lda tok
         cmp #TK_RPAREN
         bne +
         jmp _end
 +       cmp #TK_STAR
         bne +
-        jsr syntax_error
-        .text "*args/**kwargs in calls are not supported yet", 0
+        jmp _star
++       cmp #TK_POW
+        bne +
+        jmp _dstar
 +       cmp #TK_NAME
         bne _pos
-        ; name= ?
-        jsr lx_push
+        jsr lx_push                     ; name= ?
         jsr lex
         lda tok
         cmp #TK_ASSIGN
         bne _notkw
         jsr lx_pop                      ; back to the name
-        pla                             ; nkw
-        tax
-        cpx #16
+        jsr ca_x
+        lda #1
+        sta ca_kwseen,x
+        lda ca_ex,x
+        bne _exkw
+        ldy ca_ntop                     ; a plain keyword: note its name
+        cpy #CA_NAMES
         bcc +
-        jmp c_syntax
-+       txa
-        asl
+        jsr syntax_error
+        .text "too many keyword arguments", 0
++       tya
+        asl a
         tay
         lda tok_ref
         sta ca_names,y
         lda tok_ref+1
         sta ca_names+1,y
-        inx
-        txa
-        pha
+        inc ca_ntop
+        inc ca_nkw,x
         jsr lex                         ; name
         jsr lex                         ; =
         jsr expr
-        bra _counted
+        jsr ca_count
+        jmp _next
+_exkw:  lda tok_ref                     ; after * / **: name and value into the dict
+        ldx tok_ref+1
+        jsr emit_const
+        jsr lex
+        jsr lex
+        jsr expr
+        lda #2
+        jsr ca_exarg
+        jmp _next
 _notkw: jsr lx_pop
-_pos:   pla                             ; positional after a keyword?
-        pha
+_pos:   jsr ca_x
+        lda ca_kwseen,x
         beq +
         jsr syntax_error
         .text "positional argument follows keyword argument", 0
@@ -4692,44 +4851,137 @@ _pos:   pla                             ; positional after a keyword?
         pla
         ldy tok
         cpy #KW_FOR                     ; f(x for x in y): a generator, made a list
-        bne _counted
+        bne +
         ldy #0
         jsr comprehension
-_counted:
-        pla
-        tax
-        pla
-        inc a
-        cmp #17
-        bcc +
-        jsr syntax_error
-        .text "too many arguments", 0
-+       pha
-        txa
-        pha
-        lda #TK_COMMA
++       jsr ca_x
+        lda ca_ex,x
+        beq +
+        lda #0                          ; append
+        jsr ca_exarg
+        bra _next
++       jsr ca_count
+        bra _next
+_star:  jsr ca_enter_ex                 ; *iterable
+        jsr lex
+        jsr expr
+        lda #1                          ; extend
+        jsr ca_exarg
+        bra _next
+_dstar: jsr ca_enter_ex                 ; **mapping
+        jsr ca_x
+        lda #1
+        sta ca_kwseen,x
+        jsr lex
+        jsr expr
+        lda #3                          ; merge
+        jsr ca_exarg
+_next:  lda #TK_COMMA
         jsr accept
         bcc _end
         jmp _arg
 _end:   lda #TK_RPAREN
         jsr expect
-        pla
-        sta t6                          ; nkw
-        pla
-        sta t7                          ; argc
-        lda t6
+        jsr ca_x
+        dec ca_d
+        lda ca_ex,x
+        beq +
+        lda ca_base,x                   ; * / **: CALL_EX
+        sta ca_ntop
+        ldy #2
+        rts
++       lda ca_argc,x
+        pha
+        lda ca_nkw,x
         bne +
-        lda t7
+        lda ca_base,x
+        sta ca_ntop
+        pla
         ldy #0
         rts
-+       ; the names as a perm tuple
++       jsr ca_names_tuple              ; keywords: their names
+        sta ca_kw
+        stx ca_kw+1
+        ldx ca_d                        ; (the level just left)
+        lda ca_base,x
+        sta ca_ntop
+        pla
+        ldy #1
+        rts
+
+; ca_x - X = the current call's level
+ca_x:   ldx ca_d
+        dex
+        rts
+
+; ca_count - one more plain argument (at most 16)
+ca_count:
+        jsr ca_x
+        inc ca_argc,x
+        lda ca_argc,x
+        cmp #17
+        bcc +
+        jsr syntax_error
+        .text "too many arguments", 0
++       rts
+
+; ca_exarg - A = kind: EX_ARG kind
+ca_exarg:
+        ldy #OP_EX_ARG
+        jmp emit_op_byte
+
+; ca_enter_ex - (the first * or **) PACK_ARGS: the plain arguments so far become the list
+; and the dict
+ca_enter_ex:
+        jsr ca_x
+        lda ca_ex,x
+        bne _done
+        lda #1
+        sta ca_ex,x
+        lda #0
+        sta t4
+        sta t4+1
+        lda ca_nkw,x
+        beq +
+        jsr ca_names_tuple
+        sta t4
+        stx t4+1
+        jsr ca_x
+        lda ca_base,x                   ; (the names are in the tuple now)
+        sta ca_ntop
++       jsr ca_x
+        sec
+        lda ca_argc,x                   ; positional ones
+        sbc ca_nkw,x
+        pha
+        lda #OP_PACK_ARGS
+        jsr emit
+        pla
+        jsr emit
+        lda t4
+        ldx t4+1
+        jmp emit_word
+_done:  rts
+
+; ca_names_tuple - X = a call level: its keyword names as a tuple -> A/X
+ca_names_tuple:
+        lda ca_nkw,x
         sta nitems
         lda #0
         sta nitems+1
+        lda ca_base,x
+        asl a
+        pha
         jsr tuple_new
-        ldx #0
+        plx
         ldz #6
--       lda ca_names,x
+-       cpx #2 * CA_NAMES
+        bcs +
+        txa
+        lsr a
+        cmp ca_ntop
+        bcs +
+        lda ca_names,x
         sta [p0],z
         inz
         lda ca_names+1,x
@@ -4737,16 +4989,9 @@ _end:   lda #TK_RPAREN
         inz
         inx
         inx
-        txa
-        lsr
-        cmp t6
-        bcc -
-        lda p0
-        sta ca_kw
-        lda p0+1
-        sta ca_kw+1
-        lda t7
-        ldy #1
+        bra -
++       lda p0
+        ldx p0+1
         rts
 
 ;---------------------------------------------------------------------------------------

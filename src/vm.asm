@@ -309,6 +309,7 @@ op_table:
         .word op_set_add, op_lift3                                           ; 82-83
         .word op_load_deref, op_store_deref, op_enter_env, op_set_closure    ; 84-87 (env.asm)
         .word op_load_classname, op_end_class                                ; 88-89
+        .word op_pack_args, op_ex_arg, op_call_ex                            ; 90-92 (args.asm)
 
 op_bad:
         #RAISE EXC_SYSTEM, "bad opcode"
@@ -871,7 +872,25 @@ native_vec:     .word 0
 ;---------------------------------------------------------------------------------------
 call_py:
         jsr check_stop
-        lda nkw
+        lda c_func                      ; *args, **kwargs, keyword-only parameters?
+        ldx c_func+1
+        sta p0
+        stx p0+1
+        ldz #18
+        lda [p0],z
+        inz
+        ora [p0],z
+        beq _plain
+        jsr bind_ex                     ; (args.asm) -> argc = all the parameters
+        lda c_func
+        ldx c_func+1
+        sta p0
+        stx p0+1
+        ldz #7
+        lda [p0],z
+        sta t1+1                        ; nlocals
+        jmp _locals
+_plain: lda nkw
         beq +
         jsr kw_to_positional
 +       lda c_func
@@ -1494,9 +1513,28 @@ _noinit:
 ;---------------------------------------------------------------------------------------
 ; functions and classes
 ;---------------------------------------------------------------------------------------
+; *args / **kwargs / keyword-only parameters, f(*a, **k) calls: in tail X (args.asm)
+bind_ex:        #TAILCALL TAIL_X, xx_bind_ex
+x_pack_args:    #TAILCALL TAIL_X, xx_pack_args
+x_ex_arg:       #TAILCALL TAIL_X, xx_ex_arg
+x_call_ex:      #TAILCALL TAIL_X, xx_call_ex
+op_pack_args:
+        jsr x_pack_args
+        jmp vm_loop
+op_ex_arg:
+        jsr x_ex_arg
+        jmp vm_loop
+op_call_ex:
+        jsr x_call_ex                   ; C set: a method call
+        bcc +
+        jmp method_setup
++       jmp call_setup
+
 op_make_function:
-        ; [defaults tuple if ndefaults] -> func (+14 closure: SET_CLOSURE, env.asm)
-        lda #16
+        ; [defaults tuple if ndefaults] [keyword-only defaults if nkwonly] -> func
+        ; (+14 closure: SET_CLOSURE, env.asm; +16 keyword-only defaults, +18 flags
+        ; FF_VARARGS / FF_VARKW, +19 keyword-only parameters: args.asm)
+        lda #20
         sta alloc_size
         lda #0
         sta alloc_size+1
@@ -1523,7 +1561,21 @@ op_make_function:
         inz
         txa
         sta [p0],z
-        lda t0
+        #FETCHB                         ; flags, keyword-only parameters
+        ldz #18
+        sta [p0],z
+        #FETCHB
+        ldz #19
+        sta [p0],z
+        cmp #0
+        beq +
+        #POP                            ; their defaults
+        ldz #16
+        sta [p0],z
+        inz
+        txa
+        sta [p0],z
++       lda t0
         beq _nodef
         #PEEK 0
         ldz #10

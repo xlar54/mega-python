@@ -266,6 +266,7 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_sys` | `sys`: the version values, `version_info` comparisons, `stdout.write`, `exit` |
 | `t_time` | `time`: `gmtime`, `strftime`, `asctime` of fixed times, `struct_time`, the clock's plausibility |
 | `t_sets` | set and frozenset literals, comprehensions, operators, subset comparisons, methods, `unhashable` errors |
+| `t_args` | `*args`, `**kwargs`, keyword-only parameters, `f(*a, **k)`, forwarding wrappers, argument errors |
 | `t_decorators` | function, factory, stacked and class decorators; `staticmethod`, `classmethod`, `property` with setters, inherited |
 | `t_closures` | nested functions and lambdas over enclosing variables, `nonlocal`, late binding, recursion through a closure, classes inside functions |
 | `t_hash` | hashed dicts and sets: growth, deletes, keys equal across types, tuple/frozenset/instance keys (`__hash__`, `__eq__`), unhashable keys, order |
@@ -398,8 +399,12 @@ Differences from CPython
   `staticmethod`, `classmethod` and `property` (also `property(fget, fset)` and
   `@x.setter`). A property's setter is honoured; deleters are not supported. A class
   body sees the names it defined before (`b = a * 2`, `@x.setter`).
-* Not supported yet: generators/`yield`, `*args`/`**kwargs`, multiple inheritance,
-  `from module import *`, packages (`import a.b`), the `bytes` type.
+* **Parameters and calls**: `*args`, `**kwargs`, keyword-only parameters (after `*` or
+  `*args`), and `f(*iterable, **dict)` in calls work as in CPython (at most 16
+  arguments reach a builtin, 48 locals a function).
+* Not supported yet: generators/`yield`, unpacking in displays (`[*a, *b]`,
+  `{**d}`), multiple inheritance, `from module import *`, packages (`import a.b`), the
+  `bytes` type.
 * **Modules**: a module's code and name are kept until `run()` or `new()`; a name a
   module does not define falls back to the main program's global of that name (CPython
   would raise `NameError`). Module names are up to 13 characters (`name.py`), or 9 for

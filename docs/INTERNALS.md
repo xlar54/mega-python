@@ -31,6 +31,7 @@
 | `sets.asm` | sets and frozensets (overlay R): operators, methods, `set()`, `BUILD_SET`, repr |
 | `env.asm` | closures (overlay R): the environment opcodes |
 | `desc.asm` | `staticmethod`, `classmethod`, `property` (overlay R), `LOAD_CLASSNAME` |
+| `args.asm` | tail X: binding `*args`/`**kwargs`/keyword-only parameters, `f(*a, **k)` calls |
 | `strmeth.asm` | tail S: the `str` methods, `list.insert` / `list.reverse` |
 | `fmtsort.asm` | tail P: format specs (`format()`, f-strings), `%`, `str.format`; `sorted()` / `list.sort()` |
 | `module.asm` | modules from the disk: hidden global names, `import` (compile and run), attribute access |
@@ -58,7 +59,7 @@ program may be showing the graphics screen.
 | `$2001-$7DFF` | resident code, part 1 |
 | `$7E00-$7FFF` | free for the user's machine code (`os.sys`) |
 | `$8000-$BFFF` | overlay window: R (builtins, methods, float operators, tables) or C (lexer, compiler, editor) |
-| `$C000-$CFFF` | with R: one of the tails (A, B, H, F, S, P, I); with C: the rest of C |
+| `$C000-$CFFF` | with R: one of the tails (A, B, H, F, S, P, I, X); with C: the rest of C |
 | `$E000-$EFFF` | value stack (compiler scopes and targets use `$E000-$E53F` while compiling) |
 | `$F000-$FEFF` | resident code, part 2 (`seq.asm`, `tailcall.asm`) |
 | `$12000` | global value of each symbol (bank 1) |
@@ -82,7 +83,7 @@ program may be showing the graphics screen.
 | `$8113000` | the hidden symbols of modules -> their plain symbols (`SYM_BASE`) |
 | `$8180000` / `$8190000` | overlay R / overlay C images |
 | `$81C0000` | the source of a module being imported |
-| `$81A0000-$81A5FFF` | tail B, H, F, S, P, I images, 4 KB each (tail A is the end of R's image) |
+| `$81A0000-$81A6FFF` | tail B, H, F, S, P, I, X images, 4 KB each (tail A is the end of R's image) |
 
 The KERNAL's areas are left alone, as the MEGA65 book's chip RAM map asks:
 `0.0002-0.15FF`, `1.0000-1.1FFF` (DOS), `1.F700-1.F7FF`, `1.F800-` (colour RAM window)
@@ -95,8 +96,8 @@ replaces them, so R's variables survive a compile in the middle of runtime code 
 module imported by a key function, say); C keeps nothing between compiles. A variable
 that resident code uses while C is in must not live in R.
 
-Tails: with R in, the window's last 4 KB (`TAIL`) holds one of seven tails (A, B, H, F,
-S, P, I), swapped by a 4 KB DMA from attic (`need_id` in `resident.asm`; `ovl_runtime`
+Tails: with R in, the window's last 4 KB (`TAIL`) holds one of eight tails (A, B, H, F,
+S, P, I, X), swapped by a 4 KB DMA from attic (`need_tail` in `resident.asm`; `ovl_runtime`
 brings back R with tail A). Code reaches a tail routine only through a stub,
 `label: #TAILCALL TAIL_x, target` (6 bytes: `jsr tcall` and the data; the `#TAILA`,
 `#TAILB`, `#TAILF`, `#TAILS` macros make them). `tcall` (`tailcall.asm`) loads the tail,
@@ -314,6 +315,26 @@ A class body runs in its function's (or the module's) frame, with the class on t
 VM's class-body stack (`cb_stack`: `MAKE_CLASS` pushes, `END_CLASS` pops). Its names
 load with `LOAD_CLASSNAME`: the class's own attribute if it has one, else the global, so
 `b = a * 2` and `@x.setter` see what the body defined before.
+
+## *args, **kwargs, keyword-only parameters, f(*a, **k)
+
+A function's parameters are its first locals: the positional ones, `*args`, the
+keyword-only ones, `**kwargs` (`T_FUNC` `+18` flags, `+19` keyword-only count, `+16`
+their defaults with NULL for required ones; `MAKE_FUNCTION` has two more operand
+bytes). `call_py` binds plain functions as before (`kw_to_positional`, defaults); one
+with any of these goes through `bind_ex` (tail X, `args.asm`), which reads the
+arguments in place, builds the `*args` tuple and `**kwargs` dict while they are still
+on the stack, fills defaults, raises the argument errors, and only then replaces the
+arguments with the parameters in order.
+
+A call with `*` or `**`: the arguments before the first one compile plainly, then
+`PACK_ARGS` turns them into a list and a dict; each later argument goes in with
+`EX_ARG` (append, extend, keyword, merge). `CALL_EX` pushes the list items and the dict
+values with a tuple of the (interned) keys as `kwnames`, then calls as `CALL_KW` would.
+It leaves that tuple under the callable, so it stays referenced during the call (the
+GC does not see `kwnames`); `ROT2`, `POP` after the call drop it. The compiler keeps
+each call's argument state per nesting level (`ca_*`), so keyword names of a call
+inside another call's arguments do not mix.
 
 ## Sets
 

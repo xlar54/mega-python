@@ -318,6 +318,7 @@ TAIL_F          = 3                     ; files, os, module loading
 TAIL_S          = 4                     ; str methods
 TAIL_P          = 5                     ; formatting, sorting
 TAIL_I          = 6                     ; interpreter setup (py_reset)
+TAIL_X          = 7                     ; *args / **kwargs binding, f(*a, **k) calls
 ; a stub for the tail routine target
 TAILCALL .macro tail, target
         jsr tcall
@@ -408,6 +409,7 @@ tail_src:
         .byte <OVL_S_ATTIC, >OVL_S_ATTIC, (OVL_S_ATTIC >> 16) & 15, OVL_S_ATTIC >> 20
         .byte <OVL_P_ATTIC, >OVL_P_ATTIC, (OVL_P_ATTIC >> 16) & 15, OVL_P_ATTIC >> 20
         .byte <OVL_I_ATTIC, >OVL_I_ATTIC, (OVL_I_ATTIC >> 16) & 15, OVL_I_ATTIC >> 20
+        .byte <OVL_X_ATTIC, >OVL_X_ATTIC, (OVL_X_ATTIC >> 16) & 15, OVL_X_ATTIC >> 20
 
 ; compile - compile_source with the compiler overlay in the window
 compile:
