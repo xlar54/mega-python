@@ -35,7 +35,10 @@
 Interrupts are off, the CPU stack is 16-bit (`$1800-$1DFF`), the base page is `$16xx`, and
 the ROMs are unmapped (MAP clear, `$01 = $35`, no `$D030` ROM bits). `kernal_call` puts the
 boot state back for one KERNAL call: MAPHI `$E000` from `$30000` (`ldz #$83`), the boot `$01`
-and `$D030`, B = 0, the page-1 stack, `cli`.
+and `$D030`, B = 0, the page-1 stack, `cli`. Afterwards it puts back the VIC-IV's screen
+and character set pointers (`$D060-$D063`, `$D068-$D06A`) as they were: the KERNAL
+changes them (a LOAD of a missing file resets the character set to `$021800`), and a
+program may be showing the graphics screen.
 
 | Address | Use |
 |---|---|

@@ -19,6 +19,13 @@ kc_sph:         .byte 0
 
 ; kernal_call - call the KERNAL routine at kc_addr with kc_a/kc_x/kc_y
 kernal_call:
+        ldx #3                          ; the VIC's screen and character set pointers:
+-       lda $D060,x                     ; the KERNAL can change them (a LOAD that fails
+        sta kc_vic,x                    ; resets the character set), so they come back
+        lda $D068,x                     ; as they were (also for the graphics screen)
+        sta kc_vic+4,x
+        dex
+        bpl -
         jsr map_kernal
         tsx
         stx kc_spl
@@ -50,9 +57,22 @@ kernal_call:
         tys
         ldx kc_spl
         txs
-        jmp map_running
+        jsr map_running
+        lda #$47                        ; (VIC-IV registers on)
+        sta VIC4_KEY
+        lda #$53
+        sta VIC4_KEY
+        ldx #3
+-       lda kc_vic,x                    ; SCRNPTR $D060-$D063
+        sta $D060,x
+        lda kc_vic+4,x                  ; CHARPTR $D068-$D06A (and $D06B, unchanged)
+        sta $D068,x
+        dex
+        bpl -
+        rts
 
 _call:  jmp (kc_addr)
+kc_vic:         .fill 8
 
 KCALL   .macro addr
         lda #<\addr
