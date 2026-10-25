@@ -65,7 +65,8 @@ copysign fmod` and `pi e tau inf nan`.
 ```
 
 Example programs on the disk: `hello`, `primes`, `mandel` (fixed-point Mandelbrot),
-`bank` (classes and exceptions) and `guess` (uses `input()`).
+`bank` (classes and exceptions), `guess` (uses `input()`) and `waves` (the `math`
+module: a sin/cos table and a damped sine wave drawn in text).
 
 Controls
 --------
