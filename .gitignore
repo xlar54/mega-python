@@ -8,3 +8,4 @@ tools/vice/*.png
 tools/vice/botshots/
 src/gen/
 !target/mega-python.d81
+__pycache__/
