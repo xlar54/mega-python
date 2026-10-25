@@ -1,0 +1,9 @@
+*.lbl
+*.lst
+*.d81
+target/
+.claude/settings.local.json
+!resources/*.d81
+tools/vice/*.png
+tools/vice/botshots/
+src/gen/
