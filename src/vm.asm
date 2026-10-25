@@ -306,6 +306,7 @@ op_table:
         .word op_delete_subscr, op_delete_attr, op_list_append, op_map_add   ; 74-77
         .word op_assert_fail, op_import, op_load_super, op_build_set         ; 78-81
         .word op_set_add, op_lift3                                           ; 82-83
+        .word op_load_deref, op_store_deref, op_enter_env, op_set_closure    ; 84-87 (env.asm)
 
 op_bad:
         #RAISE EXC_SYSTEM, "bad opcode"
@@ -1489,8 +1490,8 @@ _noinit:
 ; functions and classes
 ;---------------------------------------------------------------------------------------
 op_make_function:
-        ; [defaults tuple if ndefaults] -> func
-        lda #14
+        ; [defaults tuple if ndefaults] -> func (+14 closure: SET_CLOSURE, env.asm)
+        lda #16
         sta alloc_size
         lda #0
         sta alloc_size+1

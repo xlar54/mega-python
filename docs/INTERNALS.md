@@ -29,6 +29,7 @@
 | `taili.asm` | tail I: `py_reset` (heap, symbol table, exception classes; the fixed symbols' names) |
 | `file.asm` | tail F: Python files (`open()` and the file methods), the `os` module, loading a module's file |
 | `sets.asm` | sets and frozensets (overlay R): operators, methods, `set()`, `BUILD_SET`, repr |
+| `env.asm` | closures (overlay R): the environment opcodes |
 | `strmeth.asm` | tail S: the `str` methods, `list.insert` / `list.reverse` |
 | `fmtsort.asm` | tail P: format specs (`format()`, f-strings), `%`, `str.format`; `sorted()` / `list.sort()` |
 | `module.asm` | modules from the disk: hidden global names, `import` (compile and run), attribute access |
@@ -57,7 +58,7 @@ program may be showing the graphics screen.
 | `$7E00-$7FFF` | free for the user's machine code (`os.sys`) |
 | `$8000-$BFFF` | overlay window: R (builtins, methods, float operators, tables) or C (lexer, compiler, editor) |
 | `$C000-$CFFF` | with R: one of the tails (A, B, H, F, S, P, I); with C: the rest of C |
-| `$E000-$EFFF` | value stack (compiler scopes use `$E000-$E3FF` while compiling) |
+| `$E000-$EFFF` | value stack (compiler scopes and targets use `$E000-$E53F` while compiling) |
 | `$F000-$FEFF` | resident code, part 2 (`seq.asm`, `tailcall.asm`) |
 | `$12000` | global value of each symbol (bank 1) |
 | `$13000` | GC mark stack |
@@ -273,6 +274,26 @@ frozensets use their size, instances call `__hash__` or use their identity.
 `__hash__`, for every lookup, so small and big dicts agree. Both may run Python code
 (`__hash__`, `__eq__`), which is why `dict_find` keeps its probing state on the CPU stack
 around them, and why `op_in` keeps its operator there across `contains`.
+
+## Closures
+
+The compiler is single-pass, so a function's shared variables must be known before its
+body is compiled. Its pre-scan (`prescan`; `lambda_scan` for a lambda) notes every name
+used inside nested `def`/`class` bodies and lambdas (`ps_inner`); `fb_cells` makes the
+function's locals with those names cells (`SC_CELLMAP`; a nested function's own variable
+of the same name makes an unneeded cell: slower, not wrong). A function with cells, or
+nested in another function, gets a hidden last local, the environment (frame offset 0).
+
+At run time (`env.asm`) the environment is a tuple: item 0 its parent, then the cells.
+`ENTER_ENV n` (the body's first instruction) makes it from the function's closure
+(`T_FUNC` `+14`); with no cells the closure itself is the environment. Parameters that
+are cells are copied into them next. `MAKE_FUNCTION` in a frame with an environment is
+followed by `SET_CLOSURE`, which gives the new function that environment.
+`resolve_name` turns a name into a fast local, a global, or `LOAD_DEREF`/`STORE_DEREF`
+(depth, cell): the depth counts the function scopes with cells between the frame's
+function and the one that owns the cell (class scopes are skipped: a class body runs in
+its function's frame). `nonlocal` names are kept out of the locals and must resolve to
+an enclosing cell (SyntaxError otherwise).
 
 ## Sets
 

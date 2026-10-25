@@ -86,7 +86,11 @@ OP_LOAD_SUPER   = 80                    ; w class sym  (self in local slot b)  b
 OP_BUILD_SET    = 81                    ; w n
 OP_SET_ADD      = 82                    ; b depth
 OP_LIFT3        = 83                    ; a b c -> b c a (the third comes up)
-OP_COUNT        = 84
+OP_LOAD_DEREF   = 84                    ; b depth, b cell: a captured variable (env.asm)
+OP_STORE_DEREF  = 85                    ; b depth, b cell
+OP_ENTER_ENV    = 86                    ; b cells: the function's environment (prologue)
+OP_SET_CLOSURE  = 87                    ; func -> func (it captures the frame's env)
+OP_COUNT        = 88
 
 ; operand bytes per opcode, bit 7 = has a jump target (word at +1)
 op_len:
@@ -98,4 +102,4 @@ op_len:
         .byte 2, 2, 2, 1, 3, 2, 1, 3, 0, 9      ; 50-59
         .byte 2, 2, 1, $82, 0, 0, 1, 0, 0, 3    ; 60-69
         .byte 2, 1, 1, 2, 0, 2, 1, 1, 1, 2      ; 70-79
-        .byte 3, 2, 1, 0                        ; 80-83
+        .byte 3, 2, 1, 0, 2, 2, 1, 0            ; 80-87

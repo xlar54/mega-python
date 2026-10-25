@@ -6,9 +6,12 @@
 ;   +7 flags  +8 function_body state  +20 open with blocks  +21 with statements so far
 ;   +24 global syms (8)  +40 local syms (48)
 ;   +136 loops (7 x 8: +0 continue target, +2 break chain, +4 try depth, +5 for,
-;   +6 open with blocks)
+;   +6 open with blocks)  +192 closures (SC_CELLMAP ...)
 ; Function locals are found by a token pre-scan of the body (prescan) before it is
 ; compiled, so a name is local everywhere in the function once it is assigned anywhere.
+; The pre-scan also notes the names used in nested functions (def, lambda, class
+; bodies): those locals become cells, shared through the environment (env.asm), and a
+; nested function reaches them with LOAD_DEREF/STORE_DEREF (resolve_name).
 ;
 ; Code that has to move (the element of a comprehension, the true branch of a
 ; conditional expression, assignment target prefixes) is cut to the attic cut stack
@@ -35,9 +38,16 @@ SC_WCOUNT       = 21
 SC_GLOBALS      = 24
 SC_LOCALS       = 40
 SC_LOOPS        = 136
+SC_CELLMAP      = 192                   ; functions: per local, its cell number + 1 (0: none)
+SC_NCELLS       = 240                   ; cells (env.asm)
+SC_ENV          = 241                   ; 1: the last local is the environment
+SC_NNONLOC      = 242
+SC_NARGS        = 243
+SC_NONLOCALS    = 244                   ; nonlocal syms (4)
 MAX_GLOBALS     = 8
 MAX_LOCALS      = 48
 MAX_LOOPS       = 7
+MAX_NONLOCALS   = 4
 
 ; last emitted load (for turning it into a store)
 LK_NONE         = 0
@@ -214,23 +224,14 @@ accept:
 scope_depth:    .byte 0
 
 ; sc_at - A = scope index -> sc = its record
+        .cerror SCOPE_SIZE != 256 || (SCOPEMEM & $ff) != 0, "sc_at assumes 256-byte scope records"
 sc_at:
-        sta t0
+        clc
+        adc #>SCOPEMEM
+        sta sc+1
         lda #<SCOPEMEM
         sta sc
-        lda #>SCOPEMEM
-        sta sc+1
--       lda t0
-        beq +
-        dec t0
-        clc
-        lda sc
-        adc #SCOPE_SIZE
-        sta sc
-        bcc -
-        inc sc+1
-        bra -
-+       rts
+        rts
 
 ; sc_inner / sc_outer - sc -> the innermost scope / the one around it
 sc_inner:
@@ -305,11 +306,15 @@ _yes:   txa
 _no:    sec
         rts
 
-; local_add - A/X = sym: add it unless already local or declared global
+; local_add - A/X = sym: add it unless already local or declared global / nonlocal
 local_add:
         sta t2
         stx t2+1
         jsr global_find
+        bcc _done
+        lda t2
+        ldx t2+1
+        jsr nonlocal_find
         bcc _done
         lda t2
         ldx t2+1
@@ -393,6 +398,62 @@ global_add:
         sta (sc),y
 _done:  rts
 
+; nonlocal_find - A/X = sym -> C clear if declared nonlocal in this scope
+nonlocal_find:
+        sta t0
+        stx t0+1
+        ldy #SC_NNONLOC
+        lda (sc),y
+        sta t1
+        ldx #0
+-       cpx t1
+        bcs _no
+        txa
+        asl
+        clc
+        adc #SC_NONLOCALS
+        tay
+        lda (sc),y
+        cmp t0
+        bne +
+        iny
+        lda (sc),y
+        cmp t0+1
+        beq _yes
++       inx
+        bra -
+_yes:   clc
+        rts
+_no:    sec
+        rts
+
+nonlocal_add:
+        sta t2
+        stx t2+1
+        jsr nonlocal_find
+        bcc _done
+        ldy #SC_NNONLOC
+        lda (sc),y
+        cmp #MAX_NONLOCALS
+        bcc +
+        jsr syntax_error
+        .text "too many nonlocal declarations", 0
++       pha
+        clc
+        adc #1
+        sta (sc),y
+        pla
+        asl
+        clc
+        adc #SC_NONLOCALS
+        tay
+        lda t2
+        sta (sc),y
+        iny
+        lda t2+1
+        sta (sc),y
+_done:  rts
+
 ; Y = local index -> A = its LOAD_FAST/STORE_FAST operand: 2*(nlocals-1-i)
 local_offset:
         sty t0
@@ -412,26 +473,176 @@ emit_load_name:
         jsr c_here
         sta c_last_op
         stx c_last_op+1
-        jsr scope_kind
-        cmp #SK_FUNC
-        bne _global
         lda tok_sym
         ldx tok_sym+1
-        jsr global_find
-        bcc _global
-        lda tok_sym
-        ldx tok_sym+1
-        jsr local_find
-        bcs _global
-        jsr local_offset
+        jsr resolve_name
+        cmp #RN_FAST
+        bne +
+        lda t6
         ldy #OP_LOAD_FAST
         jmp emit_op_byte
++       cmp #RN_DEREF
+        bne _global
+        lda t6
+        ldx t6+1
+        ldy #OP_LOAD_DEREF
+        jmp emit_op_word
 _global:
         lda tok_sym
         ldx tok_sym+1
         jsr gsym                        ; (a module's names are hidden symbols)
         ldy #OP_LOAD_GLOBAL
         jmp emit_op_word
+
+; resolve_name - A/X = sym, in the current scope -> A = RN_GLOBAL; RN_FAST (t6 = the
+; LOAD_FAST operand); RN_DEREF (t6 = depth, t6+1 = cell). A function's own locals are
+; fast unless they are cells; other names are cells of enclosing functions (found
+; outward, past class scopes; depth = the environments in between) or globals.
+RN_GLOBAL       = 0
+RN_FAST         = 1
+RN_DEREF        = 2
+rn_sym:         .word 0
+rn_cur:         .byte 0                 ; the current scope's index
+rn_func:        .byte 0                 ; the function whose frame runs this code
+rn_need:        .byte 0                 ; nonlocal: it must be found
+resolve_name:
+        sta rn_sym
+        stx rn_sym+1
+        lda scope_depth
+        sec
+        sbc #1
+        sta rn_cur
+        lda #0
+        sta rn_need
+        jsr scope_kind
+        cmp #SK_MODULE
+        bne +
+        lda #RN_GLOBAL
+        rts
++       cmp #SK_FUNC
+        bne _search                     ; a class body: enclosing cells, else globals
+        lda rn_sym
+        ldx rn_sym+1
+        jsr global_find
+        bcs +
+        lda #RN_GLOBAL
+        rts
++       lda rn_sym
+        ldx rn_sym+1
+        jsr nonlocal_find
+        bcs +
+        inc rn_need
+        bra _search
++       lda rn_sym
+        ldx rn_sym+1
+        jsr local_find
+        bcc +
+        jmp _search
++       jsr rn_cell                     ; Y = local -> A = cell + 1 (0: none)
+        bne +
+        jsr local_offset
+        sta t6
+        lda #RN_FAST
+        rts
++       dec a
+        sta t6+1
+        lda #0
+        sta t6
+        lda #RN_DEREF
+        rts
+_search:                                ; the enclosing scopes, outward
+        jsr rn_frame
+        ldx rn_cur
+-       dex
+        bmi _none
+        txa
+        pha
+        jsr sc_at
+        jsr scope_kind
+        tay
+        pla
+        tax
+        cpy #SK_MODULE
+        beq _none
+        cpy #SK_FUNC
+        bne -
+        phx
+        lda rn_sym
+        ldx rn_sym+1
+        jsr local_find
+        plx
+        bcs -
+        jsr rn_cell                     ; a local there: shared only if it is a cell
+        beq _none
+        dec a
+        sta t6+1
+        jsr rn_depth                    ; X = its scope -> t6
+        lda rn_cur
+        jsr sc_at
+        lda #RN_DEREF
+        rts
+_none:  lda rn_cur
+        jsr sc_at
+        lda rn_need
+        bne +
+        lda #RN_GLOBAL
+        rts
++       jsr syntax_error
+        .text "no binding for nonlocal name found", 0
+
+; rn_cell - Y = local index (of sc, kept) -> A = its cell + 1, Z flag set if no cell
+rn_cell:
+        phy
+        tya
+        clc
+        adc #SC_CELLMAP
+        tay
+        lda (sc),y
+        ply
+        cmp #0
+        rts
+
+; rn_frame - rn_func = the function scope at or around rn_cur whose frame runs it
+rn_frame:
+        ldx rn_cur
+-       txa
+        pha
+        jsr sc_at
+        jsr scope_kind
+        tay
+        pla
+        tax
+        cpy #SK_FUNC
+        beq +
+        dex
+        bpl -
++       stx rn_func
+        rts
+
+; rn_depth - X = the scope holding the cell -> t6 = environments between it and the
+; frame's function (those of the function scopes with cells, rn_func down to X + 1)
+rn_depth:
+        stx t5
+        lda #0
+        sta t6
+        ldx rn_func
+-       cpx t5
+        beq +
+        txa
+        pha
+        jsr sc_at
+        jsr scope_kind
+        cmp #SK_FUNC
+        bne _next
+        ldy #SC_NCELLS
+        lda (sc),y
+        beq _next
+        inc t6
+_next:  pla
+        tax
+        dex
+        bra -
++       rts
 
 ; emit_store_sym - A/X = sym: store TOS into that name in the current scope
 emit_store_sym:
@@ -445,19 +656,16 @@ store_op_for_sym:
         jsr scope_kind
         cmp #SK_CLASS
         beq _class
-        cmp #SK_FUNC
-        bne _global
         lda t4
         ldx t4+1
-        jsr global_find
-        bcc _global
-        lda t4
-        ldx t4+1
-        jsr local_find
-        bcs _global
-        jsr local_offset
-        sta t6
+        jsr resolve_name
+        cmp #RN_FAST
+        bne +
         lda #OP_STORE_FAST
+        rts
++       cmp #RN_DEREF
+        bne _global
+        lda #OP_STORE_DEREF
         rts
 _global:
         lda t4
@@ -505,6 +713,8 @@ last_load:
         beq _ok
         cmp #OP_LOAD_GLOBAL
         beq _ok
+        cmp #OP_LOAD_DEREF
+        beq _ok
         cmp #OP_LOAD_ATTR
         beq _ok
         cmp #OP_LOAD_SUBSCR
@@ -531,6 +741,10 @@ store_for_load:
         cmp #OP_LOAD_FAST
         bne +
         lda #OP_STORE_FAST
+        rts
++       cmp #OP_LOAD_DEREF
+        bne +
+        lda #OP_STORE_DEREF
         rts
 +       cmp #OP_LOAD_ATTR
         bne +
@@ -929,8 +1143,7 @@ simple_stmt:
         jmp st_global
 +       cmp #KW_NONLOCAL
         bne +
-        jsr syntax_error
-        .text "'nonlocal' is not supported yet", 0
+        jmp st_nonlocal
 +       cmp #KW_DEL
         bne +
         jmp st_del
@@ -1870,11 +2083,16 @@ _ndef:  ldy #FB_NDEF
         ldy #SC_NLOCALS
         lda (sc),y
         sta fb_tmp                      ; nargs
-        ; a def: pre-scan the body for the names it assigns
+        ldy #SC_NARGS
+        sta (sc),y
+        ; a def: pre-scan the body for the names it assigns (and those nested functions
+        ; use); a lambda: only for those
         ldy #SC_FLAGS
         lda (sc),y
-        bne _make
-        lda tok
+        beq +
+        jsr lambda_scan
+        bra _cells
++       lda tok
         cmp #TK_COLON
         beq +
         jmp c_syntax
@@ -1890,7 +2108,8 @@ _ndef:  ldy #FB_NDEF
         jsr lx_pop
         pla
         sta fb_tmp
-_make:  ; MAKE_FUNCTION code nargs nlocals name ndefaults params
+_cells: jsr fb_cells
+        ; MAKE_FUNCTION code nargs nlocals name ndefaults params
         lda #1
         sta c_made_func
         lda #OP_MAKE_FUNCTION
@@ -1929,7 +2148,11 @@ _make:  ; MAKE_FUNCTION code nargs nlocals name ndefaults params
         tax
         pla
         jsr emit_word
-        ; a def stores the function under its name, in the enclosing scope
+        jsr fb_outer_env                ; made where there is an environment: keep it
+        bcc +
+        lda #OP_SET_CLOSURE
+        jsr emit
++       ; a def stores the function under its name, in the enclosing scope
         ldy #SC_FLAGS
         lda (sc),y
         bne +
@@ -1961,6 +2184,7 @@ _make:  ; MAKE_FUNCTION code nargs nlocals name ndefaults params
         pla
         jsr patch_here
         ; the body
+        jsr fb_prologue
         ldy #SC_FLAGS
         lda (sc),y
         bne _lambda
@@ -1984,6 +2208,201 @@ _ret:   lda #OP_RETURN
         pla
         jsr patch_here
         jmp scope_pop
+
+;---------------------------------------------------------------------------------------
+; closures (env.asm has the runtime side)
+;---------------------------------------------------------------------------------------
+; fb_cells - (after the pre-scan) the locals used in nested functions become cells;
+; a function with cells, or inside another function, gets the environment as its last
+; local (frame offset 0: nothing is added after it)
+fb_cells:
+        ldy #SC_NLOCALS
+        lda (sc),y
+        sta t3
+        lda #0
+        sta t4                          ; cells so far
+        ldx #0
+-       cpx t3
+        bcs _done
+        txa
+        asl
+        clc
+        adc #SC_LOCALS
+        tay
+        lda (sc),y
+        sta t0
+        iny
+        lda (sc),y
+        sta t0+1
+        phx
+        jsr ps_inner_has
+        plx
+        lda #0
+        bcs +
+        inc t4
+        lda t4
++       pha
+        txa
+        clc
+        adc #SC_CELLMAP
+        tay
+        pla
+        sta (sc),y
+        inx
+        bra -
+_done:  lda t4
+        ldy #SC_NCELLS
+        sta (sc),y
+        bne _env
+        jsr fb_enclosed
+        bcc _rts
+_env:   lda #<_text
+        ldx #>_text
+        jsr intern_cstr
+        jsr local_add
+        lda #1
+        ldy #SC_ENV
+        sta (sc),y
+_rts:   rts
+_text:  .text " env", 0
+
+; fb_enclosed - C set if a function scope encloses the current one
+fb_enclosed:
+        ldx scope_depth
+        dex
+-       dex
+        bmi _no
+        phx
+        txa
+        jsr sc_at
+        jsr scope_kind
+        plx
+        cmp #SK_FUNC
+        bne -
+        jsr sc_inner
+        sec
+        rts
+_no:    jsr sc_inner
+        clc
+        rts
+
+; fb_outer_env - C set if the code around the current function (past class bodies)
+; runs in a frame with an environment
+fb_outer_env:
+        ldx scope_depth
+        dex
+-       dex
+        bmi _no
+        phx
+        txa
+        jsr sc_at
+        jsr scope_kind
+        plx
+        cmp #SK_CLASS
+        beq -
+        cmp #SK_FUNC
+        bne _no
+        ldy #SC_ENV
+        lda (sc),y
+        beq _no
+        jsr sc_inner
+        sec
+        rts
+_no:    jsr sc_inner
+        clc
+        rts
+
+; fb_prologue - (at the body's start) ENTER_ENV, and the parameters that are cells
+; into their cells
+fb_prologue:
+        ldy #SC_ENV
+        lda (sc),y
+        beq _rts
+        ldy #SC_NCELLS
+        lda (sc),y
+        ldy #OP_ENTER_ENV
+        jsr emit_op_byte
+        ldx #0
+-       txa
+        ldy #SC_NARGS
+        cmp (sc),y
+        bcs _rts
+        phx
+        tay
+        jsr rn_cell                     ; Y = the parameter -> A = cell + 1
+        beq _next
+        dec a
+        pha
+        jsr local_offset
+        ldy #OP_LOAD_FAST
+        jsr emit_op_byte
+        pla
+        tax
+        lda #0                          ; depth 0
+        ldy #OP_STORE_DEREF
+        jsr emit_op_word
+_next:  plx
+        inx
+        bra -
+_rts:   rts
+
+; lambda_scan - (tok = the ':' of a lambda) note the names after a nested lambda in
+; its body, to the end of the expression (a ',' or closing bracket at depth 0, or the
+; end of the line); the lexer state is restored
+ls_brk:         .byte 0
+ls_seen:        .byte 0
+lambda_scan:
+        jsr ps_inner_reset
+        lda #0
+        sta ls_brk
+        sta ls_seen
+        jsr lx_push
+        lda #1
+        sta lx_scan
+_lex:   jsr lex
+        lda tok
+        cmp #TK_EOF
+        beq _end
+        cmp #TK_NEWLINE
+        beq _end
+        cmp #TK_SEMI
+        beq _end
+        cmp #TK_LPAREN
+        beq _open
+        cmp #TK_LBRACK
+        beq _open
+        cmp #TK_LBRACE
+        beq _open
+        cmp #TK_RPAREN
+        beq _close
+        cmp #TK_RBRACK
+        beq _close
+        cmp #TK_RBRACE
+        beq _close
+        cmp #TK_COMMA
+        bne +
+        lda ls_brk
+        beq _end
+        bra _lex
++       cmp #KW_LAMBDA
+        bne +
+        sta ls_seen
+        bra _lex
++       cmp #TK_NAME
+        bne _lex
+        lda ls_seen
+        beq _lex
+        jsr ps_inner_tok
+        bra _lex
+_open:  inc ls_brk
+        bra _lex
+_close: lda ls_brk
+        beq _end
+        dec ls_brk
+        bra _lex
+_end:   lda #0
+        sta lx_scan
+        jmp lx_pop
 
 ; params_tuple - a perm tuple of the current scope's local names (the parameters)
 params_tuple:
@@ -2049,7 +2468,10 @@ discard_expr:
 ;---------------------------------------------------------------------------------------
 ; prescan - from the token after a def's ':' through its body: every name that is
 ; assigned (=, augmented, for, as, import, def, class, :=) becomes a local of sc,
-; unless declared global. Nested def/class bodies are skipped.
+; unless declared global or nonlocal. Nested def/class bodies are skipped, but the
+; names in them, and in lambdas, are noted (ps_inner): fb_cells makes those locals
+; cells. (A nested function's own variable of the same name makes an unneeded cell:
+; slower, not wrong.)
 ;---------------------------------------------------------------------------------------
 ps_level:       .byte 0                 ; indentation depth inside the body
 ps_brk:         .byte 0                 ; bracket depth
@@ -2062,8 +2484,71 @@ ps_cand:        .fill 16
 ps_last:        .word 0                 ; last name seen
 ps_single:      .byte 0                 ; one-line body (ends at NEWLINE)
 ps_wcount:      .byte 0                 ; with statements seen
+ps_lam:         .byte 0                 ; in a lambda (to the end of the statement)
+PS_INNER_N      = 64
+ps_ninner:      .byte 0
+ps_allcells:    .byte 0                 ; ps_inner overflowed: every local is a cell
+ps_inner:       .fill 2 * PS_INNER_N    ; names used in nested functions
+
+; ps_inner_tok - note tok_sym as used in a nested function
+ps_inner_tok:
+        lda tok_sym
+        ldx tok_sym+1
+; ps_inner_add - note A/X
+ps_inner_add:
+        sta t0
+        stx t0+1
+        jsr ps_inner_has
+        bcc _done
+        ldx ps_ninner
+        cpx #PS_INNER_N
+        bcc +
+        lda #1
+        sta ps_allcells
+        rts
++       inc ps_ninner
+        txa
+        asl
+        tax
+        lda t0
+        sta ps_inner,x
+        lda t0+1
+        sta ps_inner+1,x
+_done:  rts
+
+; ps_inner_has - is t0 a noted name? -> C clear if so (or if every local is a cell)
+ps_inner_has:
+        lda ps_allcells
+        bne _yes
+        ldx #0
+-       cpx ps_ninner
+        bcs _no
+        txa
+        asl
+        tay
+        lda ps_inner,y
+        cmp t0
+        bne +
+        lda ps_inner+1,y
+        cmp t0+1
+        beq _yes
++       inx
+        bra -
+_yes:   clc
+        rts
+_no:    sec
+        rts
+
+; ps_inner_reset - before a pre-scan
+ps_inner_reset:
+        lda #0
+        sta ps_ninner
+        sta ps_allcells
+        sta ps_lam
+        rts
 
 prescan:
+        jsr ps_inner_reset
         lda #0
         sta ps_wcount
         sta ps_level
@@ -2109,7 +2594,10 @@ _loop:  lda tok
 _tok:   lda tok
         cmp #TK_NAME
         bne _notname
-        lda tok_sym
+        lda ps_lam
+        beq +
+        jsr ps_inner_tok                ; (a name in a lambda)
++       lda tok_sym
         sta ps_last
         lda tok_sym+1
         sta ps_last+1
@@ -2175,6 +2663,14 @@ _notname:
         cmp #KW_GLOBAL
         bne +
         jmp _global
++       cmp #KW_NONLOCAL
+        bne +
+        jmp _nonloc
++       cmp #KW_LAMBDA
+        bne +
+        lda #1
+        sta ps_lam
+        jmp _next
 +       cmp #KW_DEF
         bne +
         jmp _def
@@ -2251,6 +2747,7 @@ _stmt:  lda #0
         sta ps_ncand
         sta ps_annot
         sta ps_infor
+        sta ps_lam
         lda #1
         sta ps_start
         jmp _next
@@ -2281,6 +2778,18 @@ _global:
 +       cmp #TK_COMMA
         beq -
         jmp _loop
+_nonloc:
+-       jsr lex
+        lda tok
+        cmp #TK_NAME
+        bne +
+        lda tok_sym
+        ldx tok_sym+1
+        jsr nonlocal_add
+        bra -
++       cmp #TK_COMMA
+        beq -
+        jmp _loop
 _def:   jsr lex                         ; the name
         lda tok
         cmp #TK_NAME
@@ -2290,7 +2799,7 @@ _def:   jsr lex                         ; the name
         lda #0
         sta ps_brk
 -       jsr lex
-        lda tok
+        jsr ps_note
         cmp #TK_EOF
         beq _ret
         cmp #TK_LPAREN
@@ -2310,7 +2819,7 @@ _def:   jsr lex                         ; the name
         bne _skipline
         jsr lex                         ; INDENT
         ldx #0
--       lda tok
+-       jsr ps_note
         cmp #TK_EOF
         beq _ret
         cmp #TK_INDENT
@@ -2328,7 +2837,7 @@ _skipped:
         jsr lex
         jmp _stmt_loop
 _skipline:
--       lda tok
+-       jsr ps_note
         cmp #TK_NEWLINE
         beq +
         cmp #TK_EOF
@@ -2373,6 +2882,18 @@ ps_local:
         lda tok_sym
         ldx tok_sym+1
         jmp local_add
+
+; ps_note - (inside a nested def/class) note the token if it is a name -> A = tok;
+; keeps X
+ps_note:
+        lda tok
+        cmp #TK_NAME
+        bne +
+        phx
+        jsr ps_inner_tok
+        plx
+        lda tok
++       rts
 
 ; mark the candidates local
 ps_mark:
@@ -2439,6 +2960,32 @@ st_global:
         beq -
         rts
 
+; nonlocal names: (the pre-scan declared them) each must be a variable of an enclosing
+; function (resolve_name raises SyntaxError if not)
+st_nonlocal:
+        jsr scope_kind
+        cmp #SK_FUNC
+        beq +
+        jsr syntax_error
+        .text "nonlocal declaration not allowed here", 0
+-
++       jsr lex
+        lda tok
+        cmp #TK_NAME
+        beq +
+        jmp c_syntax
++       lda tok_sym
+        ldx tok_sym+1
+        jsr nonlocal_add
+        lda tok_sym
+        ldx tok_sym+1
+        jsr resolve_name
+        jsr lex
+        lda tok
+        cmp #TK_COMMA
+        beq -
+        rts
+
 st_del:
         jsr lex
 _one:   jsr bitor_expr
@@ -2446,6 +2993,10 @@ _one:   jsr bitor_expr
         bcc +
         jsr syntax_error
         .text "cannot delete this", 0
++       cmp #OP_LOAD_DEREF
+        bne +
+        jsr syntax_error
+        .text "cannot delete a variable a nested function uses", 0
 +       pha
         jsr drop_last
         pla
@@ -3130,8 +3681,11 @@ _load:  phx
         lda tgg_op
         cmp #OP_LOAD_FAST
         beq _fast
+        cmp #OP_LOAD_DEREF
+        beq +
         cmp #OP_LOAD_GLOBAL
         bne _bad
++
         ldz #2
         lda tgg_pos
         ldx tgg_pos+1

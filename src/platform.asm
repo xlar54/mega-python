@@ -83,7 +83,7 @@ KERNAL_SAVE             = $FFD8
 ;                         imports), S (str methods), P (formatting, sorting) or I
 ;                         (interpreter setup)
 ;           $E000-$EFFF   value stack (2048 refs, grows down); while compiling (the VM
-;                         is idle) the compiler scopes use $E000-$E3FF
+;                         is idle) the compiler scopes and targets use $E000-$E53F
 ;           $F000-$FEFF   resident code, part 2 (loaded at $D000, moved by DMA at boot)
 ;   bank 1  $12000-$12FFF global value of each symbol
 ;           $13000-$137FF GC mark stack
@@ -131,11 +131,12 @@ TAILS_N                 = 6             ; tails B, H, F, S, P, I: in a row in mp
 FILEBUF                 = $13C00        ; read buffers of open files 2-5 (4 x 256, bank 1)
 TAIL_SIZE               = $1000         ; the window's last 4 KB: one of the tails
 TAIL                    = WINDOW + WINDOW_SIZE - TAIL_SIZE
-SCOPEMEM                = $E000         ; 5 compiler scopes x 192 bytes
-SCOPE_SIZE              = 192
+SCOPEMEM                = $E000         ; 5 compiler scopes x 256 bytes
+SCOPE_SIZE              = 256
 SCOPE_MAX               = 5
-TARGETS                 = $E3C0         ; assignment targets, 8 x 8 bytes
+TARGETS                 = SCOPEMEM + SCOPE_MAX * SCOPE_SIZE ; assignment targets, 8 x 8 bytes
 TARGETS_N               = 8
+COMPILER_END            = TARGETS + 8 * TARGETS_N   ; (the compiler's part of the value stack)
 CUTBUF                  = $8170010      ; compiler code cut stack (attic; handle 0 = none)
 FSTACK                  = $1E000        ; call frames, bank 1
 FSTACK_END              = $1E400

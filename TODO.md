@@ -13,7 +13,8 @@ Language
   changing the set in place, CPython's hash order.
 * Generators and `yield` (a frame object that keeps its locals off the value stack).
   Then real lazy `map`/`filter`/`zip`/generator expressions and `dict` views.
-* Closures / `nonlocal` (cells for captured locals).
+* Closures: `del` of a captured variable; the free variable's name in the
+  "cannot access free variable" NameError.
 * `*args`, `**kwargs`, keyword-only arguments, decorators.
 * `with`: pass the exception to `__exit__` and let a true result swallow it; several
   managers in one `with`.
@@ -30,7 +31,7 @@ Language
   module type would print as `<module 'math'>`.)
 * Class bodies: look names up in the class namespace first (`alias = method`).
 * Libraries: `collections.namedtuple`/`OrderedDict`, `itertools`, `re`, `datetime`
-  (some need generators or closures first).
+  (some need generators first).
 * `break`/`continue` inside `try` with `finally` should run the finally block.
 * Dicts: keep each key's hash next to it, so growing and deleting do not hash the
   keys again; deletes are O(n) (the pairs move down and the index is rebuilt).

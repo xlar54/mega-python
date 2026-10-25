@@ -266,6 +266,7 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_sys` | `sys`: the version values, `version_info` comparisons, `stdout.write`, `exit` |
 | `t_time` | `time`: `gmtime`, `strftime`, `asctime` of fixed times, `struct_time`, the clock's plausibility |
 | `t_sets` | set and frozenset literals, comprehensions, operators, subset comparisons, methods, `unhashable` errors |
+| `t_closures` | nested functions and lambdas over enclosing variables, `nonlocal`, late binding, recursion through a closure, classes inside functions |
 | `t_hash` | hashed dicts and sets: growth, deletes, keys equal across types, tuple/frozenset/instance keys (`__hash__`, `__eq__`), unhashable keys, order |
 | `t_protocols` | user classes as iterators (`__iter__`/`__next__`, `StopIteration` ends the loop), `__contains__`, `__setitem__`, `__call__` |
 | `t_json` | `json`: `dumps` (indent, separators, sort_keys), `loads`, escapes, errors, `dump`/`load` with files |
@@ -389,8 +390,11 @@ Differences from CPython
   (`TypeError`); `1`, `1.0` and `True` are the same key. `hash()` gives CPython's
   values for ints and integral floats; for strings, tuples and frozensets it gives
   other numbers than CPython (whose string hashes change every run anyway).
-* Not supported yet: generators/`yield`, closures over enclosing function
-  variables (`nonlocal`), `*args`/`**kwargs`, decorators, multiple inheritance,
+* **Closures** (nested functions and lambdas using the variables of the functions
+  around them, `nonlocal`) work as in CPython. A variable a nested function uses cannot
+  be deleted (`del`); a function can have up to 48 locals and 4 `nonlocal` names.
+* Not supported yet: generators/`yield`, `*args`/`**kwargs`, decorators, multiple
+  inheritance,
   `from module import *`, packages (`import a.b`), the `bytes` type.
 * **Modules**: a module's code and name are kept until `run()` or `new()`; a name a
   module does not define falls back to the main program's global of that name (CPython

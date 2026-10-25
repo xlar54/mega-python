@@ -148,7 +148,7 @@ mod_import:
 _load:  jsr module_load                   ; name.py -> MODSRC, the module object bound
         ; compile it (the compiler's scopes use the bottom of the value stack)
         lda vsp+1
-        cmp #>(SCOPEMEM + $500)
+        cmp #>(COMPILER_END + $ff)
         bcs +
         #RAISE EXC_MEMORY, "no room to compile the module"
 +       lda ms_key                      ; (kept across the compile and the run)

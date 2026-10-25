@@ -15,7 +15,7 @@ T_LIST          = 3                     ; +4 len, +6 cap, +8 items (T_ARR ref or
 T_TUPLE         = 4                     ; +4 len, +6 refs
 T_DICT          = 5                     ; +4 count, +6 cap (pairs), +8 items (T_ARR), +10 index
 T_ARR           = 6                     ; +4 refs
-T_FUNC          = 7                     ; +4 code, +6 nargs, +7 nlocals, +8 name, +10 defaults, +12 params
+T_FUNC          = 7                     ; +4 code, +6 nargs, +7 nlocals, +8 name, +10 defaults, +12 params, +14 closure
 T_BUILTIN       = 8                     ; +4 id, +5 flags, +6 name
 T_BOUND         = 9                     ; +4 self, +6 func
 T_CLASS         = 10                    ; +4 name, +6 base, +8 dict
@@ -726,6 +726,6 @@ gc_off:
         .byte 0, 4, 4, 4, 0, 6, 0, 0
         .byte 0, 4, 4, 10, 4
 gc_cnt:
-        .byte 0, 0, 0, 0, 0, 0, 0, 3
+        .byte 0, 0, 0, 0, 0, 0, 0, 4    ; (FUNC: name, defaults, params, closure)
         .byte 0, 2, 3, 2, 0, 1, 0, 0
         .byte 0, 3, 2, 1, 1
