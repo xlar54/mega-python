@@ -4544,11 +4544,9 @@ _ifs:   lda tok
         cmp #KW_IF
         bne _body
         jsr lex
-        lda #1
+        lda #0                          ; (a condition may use "in": [x for x in a if x in b])
         sta c_noin
         jsr or_test
-        lda #0
-        sta c_noin
         pla
         tax
         pla

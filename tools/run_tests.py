@@ -27,9 +27,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def expected(path):
     # (in a scratch directory: tests that write files leave them there)
-    # (lib/ and tests/support/ hold the modules the tests import, as on the MEGA65's disk)
-    env = dict(os.environ, PYTHONPATH=os.pathsep.join(
-        [os.path.join(ROOT, "lib"), os.path.join(ROOT, "tests", "support")]))
+    # (tests/support/ holds the modules the tests import, as on the MEGA65's disk; not
+    # lib/, whose random.py and time.py would hide CPython's own)
+    env = dict(os.environ, PYTHONPATH=os.path.join(ROOT, "tests", "support"))
     with tempfile.TemporaryDirectory() as tmp:
         r = subprocess.run([sys.executable, os.path.abspath(path)], capture_output=True,
                            text=True, timeout=60, cwd=tmp, env=env)

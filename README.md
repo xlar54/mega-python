@@ -111,6 +111,17 @@ Two such modules come with it, written in Python with `peek`/`poke`:
   cube), `grey(n)`, `wait_key()`, and the C64 colour names (`gfx.RED`, ...). Fills and
   clearing are DMA jobs, so they are fast; `plot` draws about 5000 pixels a second.
   The `gfxdemo` example draws a little scene.
+* `lib/random.py`: Python's `random` module: `random()`, `seed()`, `randint`,
+  `randrange`, `choice`, `choices` (with weights), `shuffle`, `sample`, `uniform`,
+  `getrandbits`, `gauss`, `triangular`, `expovariate`, `getstate`/`setstate`. The
+  generator is the "minimal standard" Lehmer generator, not CPython's Mersenne Twister,
+  so a seed gives other numbers than on a PC; without a seed it starts from the
+  MEGA65's hardware random number generator (`$D7EF`). The `dice` example uses it.
+* `lib/time.py`: Python's `time` module on the real-time clock (`$FFD7110`):
+  `time()`, `localtime()`/`gmtime()` (a `struct_time`), `mktime`, `strftime`,
+  `asctime`, `ctime`, `sleep` (counted in video frames), `perf_counter`/`monotonic`
+  (CIA 1's time-of-day clock, to a tenth of a second). The RTC keeps local time with no
+  time zone, so `localtime()` and `gmtime()` are the same. The `clock` example uses it.
 * `lib/sprite.py`: the 8 hardware sprites (24x21, over text or graphics) as a `Sprite`
   class: `Sprite(n, shape, color)`, `shape(rows)` (strings of `.` and `X`; in
   multicolour mode `1 2 3` for the three colours), `move(x, y)` in screen pixels,
@@ -154,6 +165,9 @@ Example programs on the disk:
 * `tune` (MEGA65 only): plays "Ode to Joy" with `lib/sound.py`
 * `gfxdemo` (MEGA65 only): draws a scene with `lib/gfx.py`; press a key to end it
 * `sprites` (MEGA65 only): bouncing ball sprites and a multicolour ship with `lib/sprite.py`
+* `dice` (MEGA65 only): dice, cards, a lottery draw and weighted coins with `random`
+* `clock` (MEGA65 only): the date in several formats, a stopwatch and a ticking clock
+  with `time`
 
 Controls
 --------
@@ -200,6 +214,8 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_memory` | allocation-heavy code (many garbage collections) |
 | `t_floats` | float literals and repr, arithmetic and mixing with ints, `//` `%` `**`, `float()`, `round()`, `%`/`format` specs, the `math` module |
 | `t_import` | a module from the disk (`tests/support/modtest.py`): its functions, classes and globals, `import as`, `from import`, one import only, `ImportError` |
+| `t_random` | `random`: seeds repeat, ranges, shuffle, sample, weighted choices, errors (properties that hold for CPython's generator too) |
+| `t_time` | `time`: `gmtime`, `strftime`, `asctime` of fixed times, `struct_time`, the clock's plausibility |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
 Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, screenshot),

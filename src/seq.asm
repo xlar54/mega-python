@@ -83,6 +83,11 @@ getitem:
         jsr type_of
         cmp #T_SLICE
         bne +
+        lda r2                          ; (an instance's __getitem__ gets the slice)
+        ldx r2+1
+        jsr type_of
+        cmp #T_INST
+        beq _inst
         jmp getslice
 +       lda r2
         ldx r2+1
@@ -99,7 +104,7 @@ getitem:
         beq _range
         cmp #T_INST
         bne _bad
-        lda #S_GETITEM
+_inst:  lda #S_GETITEM
         jsr inst_binop
         bcs _bad
         rts
