@@ -90,7 +90,9 @@ OP_LOAD_DEREF   = 84                    ; b depth, b cell: a captured variable (
 OP_STORE_DEREF  = 85                    ; b depth, b cell
 OP_ENTER_ENV    = 86                    ; b cells: the function's environment (prologue)
 OP_SET_CLOSURE  = 87                    ; func -> func (it captures the frame's env)
-OP_COUNT        = 88
+OP_LOAD_CLASSNAME = 88                  ; w sym: in a class body: the class's, else global
+OP_END_CLASS    = 89                    ; the end of a class body (MAKE_CLASS started it)
+OP_COUNT        = 90
 
 ; operand bytes per opcode, bit 7 = has a jump target (word at +1)
 op_len:
@@ -102,4 +104,4 @@ op_len:
         .byte 2, 2, 2, 1, 3, 2, 1, 3, 0, 9      ; 50-59
         .byte 2, 2, 1, $82, 0, 0, 1, 0, 0, 3    ; 60-69
         .byte 2, 1, 1, 2, 0, 2, 1, 1, 1, 2      ; 70-79
-        .byte 3, 2, 1, 0, 2, 2, 1, 0            ; 80-87
+        .byte 3, 2, 1, 0, 2, 2, 1, 0, 2, 0      ; 80-89

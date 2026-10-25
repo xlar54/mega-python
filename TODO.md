@@ -15,7 +15,7 @@ Language
   Then real lazy `map`/`filter`/`zip`/generator expressions and `dict` views.
 * Closures: `del` of a captured variable; the free variable's name in the
   "cannot access free variable" NameError.
-* `*args`, `**kwargs`, keyword-only arguments, decorators.
+* `*args`, `**kwargs`, keyword-only arguments; `property` deleters, `functools.wraps`.
 * `with`: pass the exception to `__exit__` and let a true result swallow it; several
   managers in one `with`.
 * Files: `seek`/`tell`, binary mode (`bytes`), more of `os` (`getcwd`, `stat`,
@@ -29,7 +29,6 @@ Language
   unsigned 32-bit arithmetic: bigger ints).
 * `os.sys()` for code outside bank 0 (it would need a MAP of the target). (`math` is a class object; a real
   module type would print as `<module 'math'>`.)
-* Class bodies: look names up in the class namespace first (`alias = method`).
 * Libraries: `collections.namedtuple`/`OrderedDict`, `itertools`, `re`, `datetime`
   (some need generators first).
 * `break`/`continue` inside `try` with `finally` should run the finally block.

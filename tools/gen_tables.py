@@ -32,6 +32,8 @@ BUILTINS = [
     ("sum", "sum", "f"), ("chr", "chr", "f"), ("ord", "ord", "f"),
     ("list", "list", "t"), ("tuple", "tuple", "t"), ("dict", "dict", "t"),
     ("set", "set", "t"), ("frozenset", "frozenset", "t"),
+    ("staticmethod", "staticmethod", "f"), ("classmethod", "classmethod", "f"),
+    ("property", "property", "t"),
     ("bool", "bool", "t"), ("type", "type", "t"), ("isinstance", "isinstance", "f"),
     ("sorted", "sorted", "f"), ("enumerate", "enumerate", "f"), ("zip", "zip", "f"),
     ("hex", "hex", "f"), ("bin", "bin", "f"), ("oct", "oct", "f"),
@@ -112,8 +114,11 @@ SET_WRITE = [("add", "set_add_m"), ("remove", "set_remove"), ("discard", "set_di
              ("symmetric_difference_update", "set_symdiff_update")]
 BUILTINS += [(n, l, "m", "set") for n, l in SET_READ + SET_WRITE]
 BUILTINS += [(n, l, "m", "frozenset") for n, l in SET_READ]
+# property methods (desc.asm)
+BUILTINS += [("setter", "desc_setter", "m", "property"),
+             ("getter", "desc_getter", "m", "property")]
 
-OWNERS = ["list", "tuple", "str", "dict", "file", "set", "frozenset"]
+OWNERS = ["list", "tuple", "str", "dict", "file", "set", "frozenset", "property"]
 # other names the interpreter needs as symbols (modules and their constants)
 NAMES = "math pi e tau inf nan os path".split()
 

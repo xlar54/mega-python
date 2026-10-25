@@ -30,12 +30,14 @@ T_FILE          = 19                    ; +4 lfn, +5 mode, +6 flags, +8 pos, +9 
 T_MODULE        = 20                    ; +4 name, +6 module symbol (module.asm)
 T_SET           = 21                    ; type_of only: a T_DICT with F_SET (keys -> None)
 T_FSET          = 22                    ; type_of only: ... with F_SET | F_FROZEN (frozenset)
-T_NTYPES        = 23
+T_DESC          = 23                    ; +4 kind, +6 function, +8 setter (desc.asm)
+T_NTYPES        = 24
 
 F_MARK          = $80
 F_PERM          = $40                   ; never freed (compile-time constants, builtins)
 F_INTERN        = $20
 F_SET           = $10                   ; (dicts) a set: the GC and len() see a dict
+F_PROPS         = $10                   ; (classes) it or a base holds a property
 F_FROZEN        = $08                   ; (sets) a frozenset
 
 R_NULL          = 0
@@ -721,11 +723,14 @@ gc_kind:
         .byte 0, 0, 0, 1, 2, 3, 0, 4    ; FREE INT STR LIST TUPLE DICT ARR FUNC
         .byte 0, 4, 4, 4, 0, 4, 0, 0    ; BUILTIN BOUND CLASS INST RANGE ITER FLOAT NONE
         .byte 0, 4, 4, 4, 4             ; BOOL SLICE SUPER FILE MODULE
+        .byte 0, 0, 4                   ; (SET, FSET: dicts) DESC
 gc_off:
         .byte 0, 0, 0, 0, 0, 0, 0, 8
         .byte 0, 4, 4, 4, 0, 6, 0, 0
         .byte 0, 4, 4, 10, 4
+        .byte 0, 0, 6
 gc_cnt:
         .byte 0, 0, 0, 0, 0, 0, 0, 4    ; (FUNC: name, defaults, params, closure)
         .byte 0, 2, 3, 2, 0, 1, 0, 0
         .byte 0, 3, 2, 1, 1
+        .byte 0, 0, 2

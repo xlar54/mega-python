@@ -393,6 +393,8 @@ type_names:
         .word tn_null, tn_int, tn_str, tn_list, tn_tuple, tn_dict, tn_arr, tn_func
         .word tn_builtin, tn_method, tn_type, tn_object, tn_range, tn_iter, tn_float
         .word tn_none, tn_bool, tn_slice, tn_super, tn_file, tn_module, tn_set, tn_fset
+        .word tn_desc
+tn_desc:        .text "property", 0     ; (or staticmethod / classmethod)
 tn_file:        .text "TextIOWrapper", 0
 tn_module:      .text "module", 0
 tn_set:         .text "set", 0

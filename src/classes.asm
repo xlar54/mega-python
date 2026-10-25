@@ -188,22 +188,7 @@ _cls:   lda r1                          ; __class__
         rts
 +       jsr class_lookup
         bcs _err
-        ; functions (and builtins) found in the class take self
-        sta t0
-        stx t0+1
-        jsr type_of
-        cmp #T_FUNC
-        beq _self
-        cmp #T_BUILTIN
-        beq _self
-        lda t0
-        ldx t0+1
-        clc
-        rts
-_self:  lda t0
-        ldx t0+1
-        sec
-        rts
+        jmp desc_resolve                ; functions take self; staticmethod, property...
 _class: lda r1
         ldx r1+1
         jsr is_name_attr
@@ -221,8 +206,7 @@ _class: lda r1
         sta r2+1
         jsr class_lookup
         bcs _err
-        clc
-        rts
+        jmp desc_class                  ; (classmethods bind to the class)
 _super: ldz #4                          ; self
         lda [p0],z
         sta groot+10
@@ -243,17 +227,7 @@ _super: ldz #4                          ; self
         sta r2+1
         jsr class_lookup
         bcs _err
-        sta t0
-        stx t0+1
-        jsr type_of
-        cmp #T_FUNC
-        beq _self
-        cmp #T_BUILTIN
-        beq _self
-        lda t0
-        ldx t0+1
-        clc
-        rts
+        jmp desc_resolve
 
 ; is_name_attr / is_class_attr - A/X = name ref -> C set if it is __name__ / __class__
 is_name_attr:
@@ -341,15 +315,29 @@ setattr:
 +
         cmp #T_CLASS
         bne _bad
+        lda r0                          ; (the class, for desc_mark)
+        pha
+        lda r0+1
+        pha
         ldz #8
         lda [p0],z
         sta r0
         inz
         lda [p0],z
         sta r0+1
-        jmp dict_set
+        jsr dict_set
+        plx
+        pla
+        jmp desc_mark
 _bad:   jmp raise_attr
-_inst:  ldz #6
+_inst:  jsr desc_store                  ; a property's setter?
+        bcc +
+        rts
++       lda r0
+        ldx r0+1
+        sta p0
+        stx p0+1
+        ldz #6
         lda [p0],z
         sta t0
         inz

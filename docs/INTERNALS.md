@@ -30,6 +30,7 @@
 | `file.asm` | tail F: Python files (`open()` and the file methods), the `os` module, loading a module's file |
 | `sets.asm` | sets and frozensets (overlay R): operators, methods, `set()`, `BUILD_SET`, repr |
 | `env.asm` | closures (overlay R): the environment opcodes |
+| `desc.asm` | `staticmethod`, `classmethod`, `property` (overlay R), `LOAD_CLASSNAME` |
 | `strmeth.asm` | tail S: the `str` methods, `list.insert` / `list.reverse` |
 | `fmtsort.asm` | tail P: format specs (`format()`, f-strings), `%`, `str.format`; `sorted()` / `list.sort()` |
 | `module.asm` | modules from the disk: hidden global names, `import` (compile and run), attribute access |
@@ -294,6 +295,25 @@ followed by `SET_CLOSURE`, which gives the new function that environment.
 function and the one that owns the cell (class scopes are skipped: a class body runs in
 its function's frame). `nonlocal` names are kept out of the locals and must resolve to
 an enclosing cell (SyntaxError otherwise).
+
+## Decorators, staticmethod / classmethod / property, class bodies
+
+`@d` lines compile their expressions first (they stay on the stack), then the def or
+class; `CALL 1` per decorator, innermost first, comes before the store of the name
+(`st_decorated`, `SC_NDECO`). The REPL's `needs_more` continues after an `@` line.
+
+`staticmethod`, `classmethod` and `property` make `T_DESC` objects (`desc.asm`: +4
+kind, +6 function or getter, +8 setter). `get_method` passes what it finds in a class
+to `desc_resolve` (instance attribute: functions bind self, a staticmethod gives its
+function, a classmethod binds the class, a property calls its getter) or `desc_class`
+(attribute of the class itself). A store into an instance attribute asks `desc_store`
+first, which looks for a property only in classes flagged `F_PROPS` (set when a
+property is stored in a class, inherited by `MAKE_CLASS`), so plain stores stay cheap.
+
+A class body runs in its function's (or the module's) frame, with the class on the
+VM's class-body stack (`cb_stack`: `MAKE_CLASS` pushes, `END_CLASS` pops). Its names
+load with `LOAD_CLASSNAME`: the class's own attribute if it has one, else the global, so
+`b = a * 2` and `@x.setter` see what the body defined before.
 
 ## Sets
 

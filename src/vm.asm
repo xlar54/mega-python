@@ -125,6 +125,7 @@ vm_reset:
         sta cur_exc
         sta cur_exc+1
         sta nargc                       ; (no native call yet: NATIVE_SAVE keeps none)
+        sta cb_sp                       ; (no class body)
         lda #CODE_BANK
         sta ip+2
         lda #0
@@ -307,6 +308,7 @@ op_table:
         .word op_assert_fail, op_import, op_load_super, op_build_set         ; 78-81
         .word op_set_add, op_lift3                                           ; 82-83
         .word op_load_deref, op_store_deref, op_enter_env, op_set_closure    ; 84-87 (env.asm)
+        .word op_load_classname, op_end_class                                ; 88-89
 
 op_bad:
         #RAISE EXC_SYSTEM, "bad opcode"
@@ -369,6 +371,9 @@ global_addr:
 
 op_load_global:
         jsr global_addr
+; load_global_fp1 - push the global at fp1 (symbol vtmp; a module's hidden name falls
+; back to the plain one). (LOAD_CLASSNAME ends here too.)
+load_global_fp1:
 _load:  ldz #1
         lda [fp1],z
         tax
@@ -1574,6 +1579,17 @@ op_make_class:
         inz
         txa
         sta [p0],z
+        beq +                           ; a base with properties: so has this class
+        sta p1+1
+        dez
+        lda [p0],z
+        sta p1
+        ldz #1
+        lda [p1],z
+        and #F_PROPS
+        ora [p0],z
+        sta [p0],z
++
         lda r0
         ldx r0+1
         #POKE 0
@@ -1590,10 +1606,34 @@ op_make_class:
         inz
         lda t0+1
         sta [p0],z
+        ldx cb_sp                       ; its body runs now (LOAD_CLASSNAME)
+        cpx #CB_MAX * 2
+        bcc +
+        #RAISE EXC_RUNTIME, "classes nested too deeply"
++       lda r0
+        sta cb_stack,x
+        lda r0+1
+        sta cb_stack+1,x
+        inx
+        inx
+        stx cb_sp
         lda #0
         sta r0
         sta r0+1
         jmp vm_loop
+
+; the classes whose bodies are running, innermost last (also on the value stack: no GC
+; root needed). An exception out of a class body leaves its entry: the REPL resets it.
+CB_MAX          = 8
+cb_sp:          .byte 0
+cb_stack:       .fill 2 * CB_MAX
+
+op_end_class:
+        lda cb_sp
+        beq +
+        dec cb_sp
+        dec cb_sp
++       jmp vm_loop
 
 op_store_classattr:
         #FETCHW                         ; name ref
@@ -1612,6 +1652,8 @@ op_store_classattr:
         lda [p0],z
         sta r0+1
         jsr dict_set
+        #PEEK 0                         ; a property makes the class F_PROPS
+        jsr desc_mark
         jsr clear_rregs
         jmp vm_loop
 

@@ -152,6 +152,10 @@ builtin_method:
         ldy #>meth_frozenset
         cmp #T_FSET
         beq _search
+        ldx #<meth_property
+        ldy #>meth_property
+        cmp #T_DESC
+        beq _search
         sec
         rts
 _search:
@@ -252,6 +256,7 @@ type_builtin:
         .byte B_NONETYPE, B_INT, B_STR, B_LIST, B_TUPLE, B_DICT, B_NONETYPE, B_FUNCTION
         .byte B_FUNCTION, B_FUNCTION, B_TYPE, $ff, B_RANGE, B_OBJECT, B_FLOAT, B_NONETYPE
         .byte B_BOOL, B_OBJECT, B_OBJECT, B_TEXTIOWRAPPER, B_MODULE, B_SET, B_FROZENSET
+        .byte B_PROPERTY
 
 ; put_str - print string A/X
 put_str:

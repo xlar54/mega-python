@@ -44,6 +44,7 @@ SC_ENV          = 241                   ; 1: the last local is the environment
 SC_NNONLOC      = 242
 SC_NARGS        = 243
 SC_NONLOCALS    = 244                   ; nonlocal syms (4)
+SC_NDECO        = 252                   ; functions: decorators to apply (st_decorated)
 MAX_GLOBALS     = 8
 MAX_LOCALS      = 48
 MAX_LOOPS       = 7
@@ -491,7 +492,15 @@ _global:
         lda tok_sym
         ldx tok_sym+1
         jsr gsym                        ; (a module's names are hidden symbols)
+        pha
+        jsr scope_kind
+        tay
+        pla
+        cpy #SK_CLASS                   ; a class body: its own names first
+        beq +
         ldy #OP_LOAD_GLOBAL
+        jmp emit_op_word
++       ldy #OP_LOAD_CLASSNAME
         jmp emit_op_word
 
 ; resolve_name - A/X = sym, in the current scope -> A = RN_GLOBAL; RN_FAST (t6 = the
@@ -714,6 +723,8 @@ last_load:
         cmp #OP_LOAD_GLOBAL
         beq _ok
         cmp #OP_LOAD_DEREF
+        beq _ok
+        cmp #OP_LOAD_CLASSNAME
         beq _ok
         cmp #OP_LOAD_ATTR
         beq _ok
@@ -1088,8 +1099,7 @@ statement:
         jmp st_with
 +       cmp #TK_AT
         bne +
-        jsr syntax_error
-        .text "decorators are not supported yet", 0
+        jmp st_decorated
 +       cmp #TK_INDENT
         bne simple_line
         jsr indent_error
@@ -1927,6 +1937,47 @@ lx_rewind:
         jmp lx_pop
 
 ;---------------------------------------------------------------------------------------
+; @decorator lines, then a def or class: the decorators are evaluated first and stay on
+; the stack; the function (class) is made, then CALL 1 for each, innermost first, and
+; the result is stored under the name (fb_ndeco -> SC_NDECO / st_class)
+fb_ndeco:       .byte 0
+st_decorated:
+        lda #0
+        pha                             ; decorators so far
+-       jsr lex                         ; past '@'
+        jsr expr
+        lda #TK_NEWLINE
+        jsr expect
+        pla
+        inc a
+        pha
+        lda tok
+        cmp #TK_AT
+        beq -
+        pla
+        sta fb_ndeco
+        lda tok
+        cmp #KW_DEF
+        beq st_def
+        cmp #KW_CLASS
+        bne +
+        jmp st_class
++       jsr syntax_error
+        .text "a decorator must be followed by def or class", 0
+
+; emit_deco_calls - A = decorators: CALL 1 for each
+emit_deco_calls:
+        tax
+-       beq +
+        phx
+        lda #1
+        ldy #OP_CALL
+        jsr emit_op_byte
+        plx
+        dex
+        bra -
++       rts
+
 st_def:
         jsr lex
         lda tok
@@ -1989,6 +2040,11 @@ function_body:
         iny
         lda t6+1
         sta (sc),y
+        lda fb_ndeco                    ; (taken now: a lambda in a default is not ours)
+        ldy #SC_NDECO
+        sta (sc),y
+        lda #0
+        sta fb_ndeco
         ldy #FB_NAME+1
         pla
         sta (sc),y
@@ -2152,10 +2208,13 @@ _cells: jsr fb_cells
         bcc +
         lda #OP_SET_CLOSURE
         jsr emit
-+       ; a def stores the function under its name, in the enclosing scope
++       ; a def stores the function (decorated) under its name, in the enclosing scope
         ldy #SC_FLAGS
         lda (sc),y
         bne +
+        ldy #SC_NDECO
+        lda (sc),y
+        jsr emit_deco_calls
         ldy #FB_SYM
         lda (sc),y
         sta fb_sym
@@ -2997,6 +3056,10 @@ _one:   jsr bitor_expr
         bne +
         jsr syntax_error
         .text "cannot delete a variable a nested function uses", 0
++       cmp #OP_LOAD_CLASSNAME
+        bne +
+        jsr syntax_error
+        .text "cannot delete a class attribute in its class body", 0
 +       pha
         jsr drop_last
         pla
@@ -3682,6 +3745,8 @@ _load:  phx
         cmp #OP_LOAD_FAST
         beq _fast
         cmp #OP_LOAD_DEREF
+        beq +
+        cmp #OP_LOAD_CLASSNAME
         beq +
         cmp #OP_LOAD_GLOBAL
         bne _bad
@@ -5456,6 +5521,10 @@ fs_esc_out:     .byte 10, 9, 13, '\', "'", '"', 0
 
 ;---------------------------------------------------------------------------------------
 st_class:
+        lda fb_ndeco                    ; decorators (st_decorated), applied at the end
+        pha
+        lda #0
+        sta fb_ndeco
         jsr lex
         lda tok
         cmp #TK_NAME
@@ -5509,9 +5578,15 @@ _make:  pla
         lda t0+1
         sta (sc),y
         jsr block
-
+        lda #OP_END_CLASS
+        jsr emit
         jsr scope_pop
+        pla                             ; the class symbol
+        sta t4+1
         pla
-        tax
-        pla
+        sta t4
+        pla                             ; the decorators
+        jsr emit_deco_calls
+        lda t4
+        ldx t4+1
         jmp emit_store_sym

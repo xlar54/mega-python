@@ -266,6 +266,7 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_sys` | `sys`: the version values, `version_info` comparisons, `stdout.write`, `exit` |
 | `t_time` | `time`: `gmtime`, `strftime`, `asctime` of fixed times, `struct_time`, the clock's plausibility |
 | `t_sets` | set and frozenset literals, comprehensions, operators, subset comparisons, methods, `unhashable` errors |
+| `t_decorators` | function, factory, stacked and class decorators; `staticmethod`, `classmethod`, `property` with setters, inherited |
 | `t_closures` | nested functions and lambdas over enclosing variables, `nonlocal`, late binding, recursion through a closure, classes inside functions |
 | `t_hash` | hashed dicts and sets: growth, deletes, keys equal across types, tuple/frozenset/instance keys (`__hash__`, `__eq__`), unhashable keys, order |
 | `t_protocols` | user classes as iterators (`__iter__`/`__next__`, `StopIteration` ends the loop), `__contains__`, `__setitem__`, `__call__` |
@@ -393,16 +394,17 @@ Differences from CPython
 * **Closures** (nested functions and lambdas using the variables of the functions
   around them, `nonlocal`) work as in CPython. A variable a nested function uses cannot
   be deleted (`del`); a function can have up to 48 locals and 4 `nonlocal` names.
-* Not supported yet: generators/`yield`, `*args`/`**kwargs`, decorators, multiple
-  inheritance,
+* **Decorators** on functions, methods and classes work as in CPython, with
+  `staticmethod`, `classmethod` and `property` (also `property(fget, fset)` and
+  `@x.setter`). A property's setter is honoured; deleters are not supported. A class
+  body sees the names it defined before (`b = a * 2`, `@x.setter`).
+* Not supported yet: generators/`yield`, `*args`/`**kwargs`, multiple inheritance,
   `from module import *`, packages (`import a.b`), the `bytes` type.
 * **Modules**: a module's code and name are kept until `run()` or `new()`; a name a
   module does not define falls back to the main program's global of that name (CPython
   would raise `NameError`). Module names are up to 13 characters (`name.py`), or 9 for
   `lib-name.py` (longer library names have a short disk name: `statistics` and
   `collections`).
-* A class body cannot use a name it defined earlier (`clear = erase` looks for a
-  global `erase`); write such an alias as a method.
 * `dict.keys()`, `values()` and `items()` return lists (snapshots, not live views).
   `map()`, `filter()` and generator expressions produce lists.
 * `try`/`finally`: a `break`/`continue` out of the `try` body skips the `finally` block.

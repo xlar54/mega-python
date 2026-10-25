@@ -636,6 +636,7 @@ vm_reset_stacks:
         sta exc_ip_set
         sta al_perm
         sta tail_depth                  ; (no tail routine is running at the prompt)
+        sta cb_sp                       ; (nor a class body)
         rts
 
 ; repl_append - LINEBUF (rl_len chars) + newline -> rp
@@ -655,9 +656,20 @@ repl_append:
         rts
 
 ; needs_more - C set if LINEBUF starts a block (ends with ':' ignoring spaces and a
-; comment, or has unclosed brackets, or ends with a backslash)
+; comment, or has unclosed brackets, or ends with a backslash, or is a @decorator)
 needs_more:
-        ldx #0
+        ldx #0                          ; a decorator line: its def or class follows
+-       cpx rl_len
+        bcs +
+        lda LINEBUF,x
+        inx
+        cmp #' '
+        beq -
+        cmp #'@'
+        bne +
+        sec
+        rts
++       ldx #0
         ldy #0                          ; bracket depth
         lda #0
         sta t0                          ; last non-space char
