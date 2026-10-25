@@ -70,7 +70,7 @@ kernal_init:
 
 ; the file name for KERNAL calls: ASCII -> PETSCII (swap the letter cases)
 ; FNAMEBUF holds fname_len chars; kc_name gets the converted copy, with a prefix
-kc_name:        .fill 24, 0
+kc_name:        .fill 40, 0
 kc_name_len:    .byte 0
 make_kname:                             ; A = 1: prefix "@0:" (save with replace)
         ldy #0

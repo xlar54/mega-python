@@ -70,3 +70,21 @@ try:
     open('tfdata', 'q')
 except ValueError:
     print('ValueError')
+
+# the os module
+import os
+print(os.path.exists('tfdata'), os.path.exists('tfnope'), 'tfnums' in os.listdir())
+os.rename('tfnums', 'tfnums2')
+print(os.path.exists('tfnums'), os.path.exists('tfnums2'))
+for name in ['tfdata', 'tfnums2', 'tfbig']:
+    os.remove(name)
+print(os.path.exists('tfdata'), 'tfbig' in os.listdir())
+try:
+    os.remove('tfdata')
+except FileNotFoundError:
+    print('FileNotFoundError')
+try:
+    os.rename('tfdata', 'tfx')
+except OSError:
+    print('OSError')
+os.unlink                       # (the same function as os.remove)

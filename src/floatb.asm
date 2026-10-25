@@ -95,6 +95,7 @@ _set:   jsr sym_name                    ; dict[name of symbol A/X] = r2
         stx r1+1
         jmp dict_set
 _cnames:        .byte S_PI, S_E, S_TAU, S_INF, S_NAN     ; (fdoubles order)
+        .include "gen/mathfuncs.asm"
         .cerror S_NAN > 255 || S_MATH > 255, "math symbols must be below 256"
 
 ; argument helpers: m_arg0 / m_arg1 -> fa (TypeError if not a number)

@@ -252,6 +252,11 @@ bi_file_exit:   #TAILF xf_exit
 file_iter_next: #TAILF xf_iter_next
 repr_file:      #TAILF xf_repr
 files_reset:    #TAILF xf_reset
+os_import:      #TAILF xo_import
+bi_os_remove:   #TAILF xo_remove
+bi_os_rename:   #TAILF xo_rename
+bi_os_listdir:  #TAILF xo_listdir
+bi_os_exists:   #TAILF xo_exists
 f_pow:          #TAILB xb_pow
 bi_m_sqrt:    #TAILB xb_m_sqrt
 bi_m_floor:   #TAILB xb_m_floor

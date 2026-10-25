@@ -16,8 +16,9 @@ Language
 * `*args`, `**kwargs`, keyword-only arguments, decorators.
 * `with`: pass the exception to `__exit__` and let a true result swallow it; several
   managers in one `with`.
-* Files: `seek`/`tell`, binary mode (`bytes`), an `os` module (`remove`, `rename`,
-  `listdir`), other drives, closing a forgotten write file when it is collected.
+* Files: `seek`/`tell`, binary mode (`bytes`), more of `os` (`getcwd`, `stat`,
+  `path.getsize`), other drives, closing a forgotten file when it is collected (it
+  keeps its drive channel, and the drive will not remove it).
 * `import` of built-in modules: `mega65` (graphics on the reserved bank-5 framebuffer,
   sprites, sound), `time`, `random`, `sys`, `gc`. (`math` is a class object; a real
   module type would print as `<module 'math'>`.)

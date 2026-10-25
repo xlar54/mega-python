@@ -1,6 +1,6 @@
 ;=======================================================================================
 ; Tail F (swapped in at TAIL by need_f): Python files - open(), read(), readline(),
-; readlines(), write(), close(), with, for line in f.
+; readlines(), write(), close(), with, for line in f - and the os module.
 ;
 ; A file is a sequential (SEQ) file on drive 8, opened through the KERNAL as logical
 ; file 2-5 (secondary address = the same number). Bytes go through FNAMEBUF 255 at a
@@ -19,7 +19,8 @@ FF_FREED        = 8                     ; its KERNAL file is closed (at close() 
 
 fl_lfn:         .byte 0
 fl_mode:        .byte 0
-fl_len:         .word 0
+fl_len:         .fill 3
+fl_mod:         .word 0
 
 ; open(name, mode='r')
 xf_open:
@@ -131,7 +132,7 @@ _badname:
         jmp _name
 _nofile:
         jsr sb_mark_t5
-        #SBPRINT "No such file or directory: "
+        #SBPRINT "[Errno 2] No such file or directory: "
         lda r2
         ldx r2+1
         jsr obj_repr
@@ -656,3 +657,396 @@ xf_reset:
         lda #0
         sta file_used
         rts
+
+;---------------------------------------------------------------------------------------
+; the os module: remove / unlink, rename, listdir, and os.path.exists. Like math, a
+; module is a (perm) class object; os is made at its first import, with os.path in it.
+;---------------------------------------------------------------------------------------
+; xo_import - A/X = module symbol -> A/X = the module (os), or ImportError
+xo_import:
+        cmp #<S_OS
+        bne _no
+        cpx #>S_OS
+        bne _no
+        lda os_mod
+        ora os_mod+1
+        bne _have
+        lda #F_PERM
+        sta al_perm
+        lda #1                          ; os.path, then os with path in it
+        ldx #<S_PATH
+        ldy #>S_PATH
+        jsr mod_make
+        sta fl_len
+        stx fl_len+1
+        lda #0
+        ldx #<S_OS
+        ldy #>S_OS
+        jsr mod_make
+        sta os_mod
+        stx os_mod+1
+        lda fl_len
+        sta r2
+        lda fl_len+1
+        sta r2+1
+        lda #<S_PATH
+        ldx #>S_PATH
+        jsr mod_set
+        lda #0
+        sta al_perm
+        sta r0
+        sta r0+1
+        sta r2
+        sta r2+1
+        sta r3
+        sta r3+1
+_have:  lda os_mod
+        ldx os_mod+1
+        rts
+_no:    sta fl_len
+        stx fl_len+1
+        jsr sb_mark_t5
+        #SBPRINT "No module named '"
+        lda fl_len
+        ldx fl_len+1
+        jsr sym_name
+        jsr sb_put_str
+        lda #"'"
+        jsr sb_putc
+        lda #EXC_IMPORT
+        jmp raise_sb
+
+; mod_make - a module named symbol X/Y with the functions of os_funcs whose last byte
+; is A -> A/X (r0 = its dict)
+mod_make:
+        sta fl_mode
+        stx fl_lfn
+        phy
+        lda #10
+        sta alloc_size
+        lda #0
+        sta alloc_size+1
+        lda #T_CLASS
+        jsr alloc
+        sta fl_mod                      ; (perm: no GC root needed; dict_set uses r3)
+        stx fl_mod+1
+        lda fl_lfn
+        plx
+        jsr sym_name
+        ldz #4
+        sta [p0],z
+        inz
+        txa
+        sta [p0],z
+        jsr dict_new
+        sta r0
+        stx r0+1
+        lda fl_mod
+        sta p0
+        lda fl_mod+1
+        sta p0+1
+        ldz #8
+        lda r0
+        sta [p0],z
+        inz
+        lda r0+1
+        sta [p0],z
+        ldx #0
+_fn:    lda os_funcs+1,x
+        cmp #$ff
+        beq _done
+        lda os_funcs+3,x
+        cmp fl_mode
+        bne _next
+        phx
+        lda os_funcs+2,x
+        jsr builtin_obj
+        sta r2
+        stx r2+1
+        plx
+        phx
+        lda os_funcs,x
+        pha
+        lda os_funcs+1,x
+        tax
+        pla
+        jsr mod_set
+        plx
+_next:  inx
+        inx
+        inx
+        inx
+        bra _fn
+_done:  lda fl_mod
+        ldx fl_mod+1
+        rts
+; mod_set - dict r0 [name of symbol A/X] = r2
+mod_set:
+        jsr sym_name
+        sta r1
+        stx r1+1
+        jmp dict_set
+
+; f_argname - argument X/2 must be a file name: its chars go to FNAMEBUF at Y
+; (-> Y past them). No pattern or command characters: * ? , : = "
+f_argname:
+        phy
+        lda argv,x
+        pha
+        lda argv+1,x
+        tax
+        pla
+        sta r2
+        stx r2+1
+        jsr type_of
+        cmp #T_STR
+        beq +
+        jmp raise_need_str
++       lda r2
+        ldx r2+1
+        jsr str_info
+        ply
+        lda str_len+1
+        bne _bad
+        lda str_len
+        beq _bad
+        cmp #17
+        bcs _bad
+        ldz #0
+_ch:    lda [fp0],z
+        ldx #5
+-       cmp _bad_chars,x
+        beq _bad
+        dex
+        bpl -
+        sta FNAMEBUF,y
+        iny
+        inz
+        cpz str_len
+        bne _ch
+        rts
+_bad:   #RAISE EXC_VALUE, "file names are 1 to 16 characters, without * ? , : = or quotes"
+_bad_chars:     .text "*?,:=", '"'
+
+; f_command - send FNAMEBUF (Y chars) to the drive's command channel -> drive_status
+f_command:
+        sty fname_len
+        lda #0
+        jsr make_kname
+        lda #15
+        jsr f_kopen
+        lda #15
+        jsr f_kclose
+        jmp drive_status
+
+; os.remove(name), os.unlink(name)
+xo_remove:
+        #NARGS 1, 1
+        lda #'s'
+        sta FNAMEBUF
+        lda #'0'
+        sta FNAMEBUF+1
+        lda #':'
+        sta FNAMEBUF+2
+        ldy #3
+        ldx #0
+        jsr f_argname
+        jsr f_command
+        bcs o_error
+        ; "01, FILES SCRATCHED,nn,00": nn = 00 when there was no such file
+        ldx #0
+        ldy #2                          ; after the second comma
+-       lda FNAMEBUF,x
+        beq o_none
+        inx
+        cmp #','
+        bne -
+        dey
+        bne -
+        lda FNAMEBUF,x
+        ora FNAMEBUF+1,x
+        cmp #'0'
+        beq o_none
+        bra o_ok
+; os.rename(src, dst)
+xo_rename:
+        #NARGS 2, 2
+        lda #'r'
+        sta FNAMEBUF
+        lda #'0'
+        sta FNAMEBUF+1
+        lda #':'
+        sta FNAMEBUF+2
+        ldy #3
+        ldx #2
+        jsr f_argname                   ; "r0:dst=src"
+        lda #'='
+        sta FNAMEBUF,y
+        iny
+        ldx #0
+        jsr f_argname
+        jsr f_command
+        bcc o_ok
+        cmp #62
+        beq o_none
+o_error:
+        jsr sb_mark_t5                  ; the drive's message
+        lda #<FNAMEBUF
+        ldx #>FNAMEBUF
+        jsr sb_puts
+        lda #EXC_OS
+        jmp raise_sb
+o_none: jsr sb_mark_t5
+        #SBPRINT "[Errno 2] No such file or directory: "
+        #ARG 0
+        jsr obj_repr
+        lda #EXC_FILENOTFOUND
+        jmp raise_sb
+o_ok:   lda #R_NONE
+        ldx #0
+        rts
+
+; os.listdir([path]) - the names of the files on the disk
+xo_listdir:
+        #NARGS 0, 1
+o_list: lda #'$'
+        sta kc_name
+        lda #1
+        sta kc_name_len
+        jsr kc_load
+        bcc +
+        jmp o_error
++       clc                             ; fl_len = the end of the listing
+        lda #<STAGE
+        adc t0
+        sta fl_len
+        lda #>STAGE
+        adc t0+1
+        sta fl_len+1
+        lda #0
+        sta nitems
+        sta nitems+1
+        jsr list_new
+        sta r0
+        stx r0+1
+        lda #<STAGE
+        sta fsp
+        lda #>STAGE
+        sta fsp+1
+        lda #`STAGE
+        sta fsp+2
+        lda #0
+        sta fsp+3
+        sta fl_mode                     ; 0 for the header line (the disk name)
+        ldz #0                          ; a load address in front? ($01 $01)
+        lda [fsp],z
+        cmp #$01
+        bne _line
+        inz
+        lda [fsp],z
+        cmp #$01
+        bne _line
+        ldz #4
+        lda [fsp],z
+        inz
+        ora [fsp],z
+        bne _line
+        inw fsp
+        inw fsp
+_line:  ; link (2), blocks (2), text up to a zero; a zero link ends it
+        jsr _left
+        cmp #5
+        bcc _end
+        ldz #0
+        lda [fsp],z
+        inz
+        ora [fsp],z
+        beq _end
+        lda #4
+        jsr _skip
+        lda #0                          ; the text: the name is between the quotes
+        sta fl_len+2
+        lda sbp
+        pha
+        lda sbp+1
+        pha
+_text:  jsr _left
+        beq _eol
+        ldz #0
+        lda [fsp],z
+        beq _eol
+        inw fsp
+        cmp #'"'
+        bne +
+        inc fl_len+2
+        bra _text
++       ldx fl_len+2
+        cpx #1
+        bne _text
+        jsr petscii_to_ascii
+        jsr sb_putc
+        bra _text
+_eol:   inw fsp
+        plx
+        pla
+        ldy fl_mode                     ; (the header's name is the disk's)
+        inc fl_mode
+        cpy #0
+        beq _drop
+        ldy fl_len+2
+        cpy #2
+        bne _drop
+        jsr sb_take
+        sta r1
+        stx r1+1
+        jsr list_append
+        bra _line
+_drop:  sta sbp                         ; not a file: drop the text
+        stx sbp+1
+        bra _line
+_end:   lda #0
+        sta r1
+        sta r1+1
+        lda r0
+        ldx r0+1
+        rts
+_skip:  clc
+        adc fsp
+        sta fsp
+        bcc +
+        inc fsp+1
++       rts
+; A = bytes left (255 for more), Z set for none
+_left:  sec
+        lda fl_len
+        sbc fsp
+        tax
+        lda fl_len+1
+        sbc fsp+1
+        bcc _none
+        bne _many
+        txa
+        rts
+_many:  lda #255
+        rts
+_none:  lda #0
+        rts
+
+; os.path.exists(name)
+xo_exists:
+        #NARGS 1, 1
+        ldy #0
+        ldx #0
+        jsr f_argname
+        jsr o_list
+        lda r0
+        sta r3
+        lda r0+1
+        sta r3+1
+        #ARG 0
+        sta r2
+        stx r2+1
+        jsr contains
+        jmp bool_from_a
+
+        .include "gen/osfuncs.asm"

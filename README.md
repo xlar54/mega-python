@@ -8,7 +8,8 @@ and runs that on a bytecode VM.
 
 It implements a large subset of Python 3: ints, floats, strings, lists, tuples, dicts,
 functions, lambdas, classes with inheritance and `super()`, exceptions, comprehensions,
-f-strings, `with`, most everyday builtins, files (`open()`) and the `math` module. The
+f-strings, `with`, most everyday builtins, files (`open()`) and the `math` and `os`
+modules. The
 test programs in `tests/` print exactly what CPython prints for them. See "Differences from CPython" below for what is missing.
 
 Build
@@ -70,7 +71,8 @@ Programs can read and write files on drive 8 with `open(name, mode)`, as in CPyt
 holding the text as it is (ASCII, `
 ` line ends); a CR or CR LF reads as `
 `. Up
-to 4 files can be open at once.
+to 4 files can be open at once. `import os` gives `os.remove` (and `os.unlink`),
+`os.rename(src, dst)`, `os.listdir()` and `os.path.exists(name)`.
 
 ```
 >>> with open('notes', 'w') as f:
@@ -84,7 +86,8 @@ to 4 files can be open at once.
 
 Example programs on the disk: `hello`, `primes`, `mandel` (fixed-point Mandelbrot),
 `bank` (classes and exceptions), `guess` (uses `input()`) and `waves` (the `math`
-module: a sin/cos table and a damped sine wave drawn in text).
+module: a sin/cos table and a damped sine wave drawn in text) and `files` (a high-score
+table kept in a file: `open()`, `with`, appending, and `os.rename`/`remove`/`listdir`).
 
 Controls
 --------
@@ -130,7 +133,7 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_builtins` | the builtin functions |
 | `t_memory` | allocation-heavy code (many garbage collections) |
 | `t_floats` | float literals and repr, arithmetic and mixing with ints, `//` `%` `**`, `float()`, `round()`, `%`/`format` specs, the `math` module |
-| `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError` |
+| `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
 Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, screenshot),
 `tools\trace.py` (single-step from a debug hold point), `tools\disasm.py` (bytecode),
@@ -204,7 +207,7 @@ Architecture
   `$2001-$7FFF` and `$F000-$FEFF`; a 20 KB overlay window at `$8000` holds either the
   builtins or the compiler and editor, copied in from attic RAM by DMA. With the builtins
   in, the window's last 4 KB is one of four "tails" (float text conversion, the `math`
-  module, files, or rarely used code and data such as `help()` and `load()`), swapped in
+  module, files and `os`, or rarely used code and data such as `help()` and `load()`), swapped in
   by a 4 KB DMA when needed.
   The KERNAL is restored around each disk call, and its memory areas are left alone as
   the MEGA65 book's memory map asks. Bank 5 is kept free for graphics.
@@ -224,7 +227,12 @@ Differences from CPython
   `float()` keep 30 significant digits. `hash()` of a non-integral float differs from
   CPython's. `math` is a class object: `print(math)` shows `<class 'math'>`.
 * **Files**: text only (`'b'` in the mode is ignored and gives `str`), no `seek`/`tell`,
-  no `os` module (no delete or rename), file names of 1-16 characters on drive 8. A file
+  file names of 1-16 characters on drive 8 (`os` refuses `* ? , : =` and quotes, which
+  the drive would read as patterns or commands). `os` has only `remove`, `unlink`,
+  `rename`, `listdir` and `path.exists`; `listdir()` ignores its argument (one disk, no
+  directories), and `os` and `os.path` print as classes. A file that is still open
+  (one only partly read, without `with` or `close()`) cannot be removed: the drive
+  reports no such file. A file
   read to its end gives its KERNAL channel back by itself; a file being written must be
   closed (or used with `with`) to be complete on disk. `open()`'s mode `'w'` replaces
   an existing file. `read()` returns at most 8 KB (the string builder's size).
@@ -236,6 +244,8 @@ Differences from CPython
 * `dict.keys()`, `values()` and `items()` return lists (snapshots, not live views).
   `map()`, `filter()` and generator expressions produce lists.
 * `try`/`finally`: a `break`/`continue` out of the `try` body skips the `finally` block.
+* A program's globals stay after `run()`, so a program that defines `load`, `save`,
+  `run`, ... replaces those REPL commands until `new()`.
 * Error messages and tracebacks are shorter: `Traceback: line N` and the exception.
 * Memory: Python objects share a 64 KB heap (see "Memory" above).
 

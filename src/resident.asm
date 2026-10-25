@@ -401,6 +401,9 @@ mt_addr_hi:     .byte >VSTACK, >$cff0, >$fef0
 ;---------------------------------------------------------------------------------------
 py_reset:
         jsr files_reset                 ; (the KERNAL's files of the old heap's file objects)
+        lda #0
+        sta os_mod
+        sta os_mod+1
         jsr heap_init
         jsr sb_reset
         jsr vm_reset
@@ -880,6 +883,7 @@ fname_len:      .byte 0
 builtin_refs_lo: .fill NBUILTINS
 builtin_refs_hi: .fill NBUILTINS
 math_mod:       .word 0                 ; the math module (a perm class object)
+os_mod:         .word 0                 ; the os module (made at the first import)
 
         .include "dma.asm"
         .include "disk.asm"
