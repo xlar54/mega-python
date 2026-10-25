@@ -81,7 +81,8 @@ Modules
 the disk, runs it once and gives a module with its own global names, as in CPython. A
 second import gets the same module. `import math` and `import os` are built in. The
 build copies `lib/*.py` to the disk too: that is the place for modules (`lib/modtest.py`
-is the one the tests use).
+is the one the tests use; `lib/sound.py` is a `Sound` class for the SID chips: notes,
+waveforms, envelopes, and tunes written as `'C4:8 E4:8 G4:16 R:4'`).
 
 For hardware access, `peek` and `poke` reach the I/O registers, and
 `os.sys(address, a=0, x=0, y=0, z=0)` calls machine code in bank 0, like BASIC's `SYS`,
@@ -114,7 +115,8 @@ A sound or graphics module is a `.py` file in `lib/` that uses these: for exampl
 Example programs on the disk: `hello`, `primes`, `mandel` (fixed-point Mandelbrot),
 `bank` (classes and exceptions), `guess` (uses `input()`) and `waves` (the `math`
 module: a sin/cos table and a damped sine wave drawn in text) and `files` (a high-score
-table kept in a file: `open()`, `with`, appending, and `os.rename`/`remove`/`listdir`).
+table kept in a file: `open()`, `with`, appending, and `os.rename`/`remove`/`listdir`) and `tune`
+(plays "Ode to Joy" with the `Sound` class of `lib/sound.py`, which pokes the SID chip).
 
 Controls
 --------
