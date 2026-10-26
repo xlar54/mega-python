@@ -4166,10 +4166,18 @@ _expr:  pla
         beq +
         jsr scope_kind
         bne +
+        lda c_repl
+        cmp #2
+        beq _eval
         lda #OP_PRINT_EXPR
         jmp emit
 +       lda #OP_POP
         jmp emit
+_eval:  lda #<ev_text                   ; eval(): into the hidden global " eval"
+        ldx #>ev_text
+        jsr intern_cstr
+        jmp emit_store_sym
+ev_text:        .null " eval"
 _assign:
         lda se_n                        ; one plain target: store in place
         cmp #1

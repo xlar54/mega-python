@@ -286,6 +286,16 @@ not starting with `_` (a scan of the symbol table). Each value is bound in the t
 through `gsym` with `c_mod` set to the target for the moment, so a module importing `*`
 gets hidden names like the ones its own code compiled to.
 
+`compile_run` (`module.asm`) compiles the source at `MODSRC` after the running code
+with `c_mod` / `c_repl` set, under an error context that brings the runtime overlay back,
+and runs it as a nested VM run; it returns C set (`cur_exc`) for compile and run errors
+alike. `import` and `eval()` / `exec()` use it. `eval` and `exec` copy their string to
+`MODSRC` (leading blanks dropped, a newline added); `eval` compiles with `c_repl` = 2,
+where a top-level expression statement stores its value in the hidden global `" eval"`.
+Like the REPL, they reclaim their code (`cp`, `linetab_end`) unless it made a function or
+class or imported a module (`c_made_func`). They must be resident: compiling swaps
+overlay R out.
+
 `py_reset` (boot, `run()`, `new()`) is in tail I with the exception setup; only its
 call of `builtins_init` stays outside (that brings in tail B for `math`).
 

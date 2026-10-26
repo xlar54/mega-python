@@ -45,6 +45,7 @@ BUILTINS = [
     ("setattr", "setattr", "f"), ("hasattr", "hasattr", "f"), ("map", "map", "f"),
     ("delattr", "delattr", "f"), ("dir", "dir", "f"), ("vars", "vars", "f"),
     ("globals", "globals", "f"), ("ascii", "repr", "f"), ("slice", "slice", "t"),
+    ("eval", "eval", "f"), ("exec", "exec", "f"),
     ("filter", "filter", "f"), ("round", "round", "f"), ("object", "object", "t"),
     ("super", "super", "f"), ("exit", "exit", "f"), ("quit", "exit", "f"),
     ("float", "float", "t"), ("open", "open", "f"), ("TextIOWrapper", "filetype", "T"),

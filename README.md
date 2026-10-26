@@ -42,7 +42,7 @@ CPython" below):
   `KeyError`, `StopIteration`, `GeneratorExit`, ...), your own exception classes,
   tracebacks with the chain of calls.
 * **Builtins**: `abs all any ascii bin bool callable chr classmethod delattr dict dir
-  divmod enumerate exit filter float format frozenset getattr globals hasattr hash hex id
+  divmod enumerate eval exec exit filter float format frozenset getattr globals hasattr hash hex id
   input int isinstance issubclass iter len list map max min next object oct open ord pow
   print property quit range repr reversed round set setattr slice sorted staticmethod str
   sum super tuple type vars zip` (`isinstance`/`issubclass` know `object` and that `bool`
@@ -68,7 +68,7 @@ Not supported yet:
   `__slots__`, `__getattr__`/`__setattr__` hooks, `property` deleters.
 * `match`, `async`/`await`, positional-only parameters (`/`), `yield` in a lambda,
   `del` of a variable a nested function uses.
-* `eval`, `exec`, `locals`, `compile`.
+* `locals`, `compile`; `eval`/`exec` with `globals`/`locals` dicts.
 * Attributes on functions (`f.cache = {}`), live `dict` views (`keys()` and friends
   return lists).
 * `str.encode`, `str.translate`, `str.format_map`; `float` methods.
@@ -362,6 +362,7 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_bigint` | ints beyond 32 bits: the operators (floored `//` and `%`, `**`, shifts, `&`, `\|`, `^`, `~` on negatives), comparisons, `int()` of strings and floats, literals, `float()`, hashing, `str`/`repr`, `%d`/`%x`/`format` with `,`, `hex`/`bin`/`oct`, `divmod`, `pow` with a modulus |
 | `t_mi` | multiple inheritance: diamonds and the C3 order, `super()` chains through both sides, `__mro__`/`__bases__`, mixins on exceptions, an inconsistent order (`TypeError`), `super().__init__()` reaching `object` |
 | `t_compscope` | comprehensions keep their loop variables to themselves: at the top level, in functions and class bodies, nested, with lambdas over them (late binding and `i=i` defaults), the first iterable taken from outside |
+| `t_eval` | `eval` and `exec`: expressions, statements, definitions that stay, loops of `eval` (its code is reclaimed), errors inside, nesting, an import inside |
 | `t_introsp` | `dir`, `vars`, `globals`, `delattr`, `slice` objects and their attributes, `ascii` |
 | `t_strmeth` | the newer `str` methods (`rfind`, `partition`, `rsplit`, `expandtabs`, ...) and methods of builtin types as values |
 | `t_errors` | error messages that name the type, `issubclass` (also of builtin types and `object`), `min`/`max` `default=`, `!r` with a format spec, `#` in format specs, annotated assignments |
@@ -523,6 +524,10 @@ Differences from CPython
   and their type is `iterator` (CPython: `<map object at ...>`, `map`).
 * A program's globals stay after `run()`, so a program that defines `load`, `save`,
   `run`, ... replaces those REPL commands until `new()`.
+* `eval()` and `exec()` run their string in the main program's global names: a
+  function's local variables and a module's own names are not visible to it. `eval()`
+  also takes statements (the value is that of the last expression statement, else
+  `None`).
 * `globals()` and `vars()` with no argument give a new dict of the main program's global
   names: changing it does not change the variables. `dir(obj)` lists what the object
   holds and its class's (and the bases') names and a builtin type's methods, not the

@@ -18,7 +18,7 @@ Language
 * `.value` of a `StopIteration` raised by Python code; traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in
   tracebacks.
 * `cls.mro()`, subclassing builtin types, `__getattr__`/`__setattr__` hooks,
-  `match`, `eval`/`exec`, `locals()`, `bytes`; `globals()` of a module's code (it gives
+  `match`, `eval`/`exec` with a function's locals or given dicts, `locals()`, `bytes`; `globals()` of a module's code (it gives
   the main program's), a live `globals()` dict.
 * Closures: `del` of a captured variable; the free variable's name in the
   "cannot access free variable" NameError.
