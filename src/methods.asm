@@ -85,6 +85,17 @@ bi_str_rjust:             #TAILS xs_str_rjust
 bi_str_zfill:             #TAILS xs_str_zfill
 bi_str_title:             #TAILS xs_str_title
 bi_str_capitalize:        #TAILS xs_str_capitalize
+bi_str_swapcase:          #TAILS xs_str_swapcase
+bi_str_casefold:          #TAILS xs_str_casefold
+bi_str_isascii:           #TAILS xs_str_isascii
+bi_str_rfind:             #TAILS xs_str_rfind
+bi_str_rindex:            #TAILS xs_str_rindex
+bi_str_partition:         #TAILS xs_str_partition
+bi_str_rpartition:        #TAILS xs_str_rpartition
+bi_str_removeprefix:      #TAILS xs_str_removeprefix
+bi_str_removesuffix:      #TAILS xs_str_removesuffix
+bi_str_expandtabs:        #TAILS xs_str_expandtabs
+bi_str_rsplit:            #TAILS xs_str_rsplit
 
 ;---------------------------------------------------------------------------------------
 ; str_find - r3 = haystack, r2 = needle -> C clear and acc = index if found

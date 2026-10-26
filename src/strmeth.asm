@@ -10,6 +10,10 @@
 xs_str_upper:
         lda #0
         bra str_case
+xs_str_swapcase:
+        lda #2
+        bra str_case
+xs_str_casefold:                        ; (ASCII: as lower)
 xs_str_lower:
         lda #1
 str_case:
@@ -25,7 +29,7 @@ str_case:
         beq +
         ldz #0
         lda [fp0],z
-        jsr case_char
+        jsr case_ch
         jsr sb_putc
         inw fp0
         dew str_len
@@ -33,6 +37,569 @@ str_case:
 +       plx
         pla
         jmp sb_take
+; case_ch - A: t6 = 0 upper, 1 lower, 2 the other case
+case_ch:
+        ldy t6
+        cpy #2
+        beq +
+        jmp case_char
++       cmp #'a'
+        bcc +
+        cmp #'z'+1
+        bcs +
+        and #$df
+        rts
++       cmp #'A'
+        bcc +
+        cmp #'Z'+1
+        bcs +
+        ora #$20
++       rts
+
+; isascii: every char below 128 (also '')
+xs_str_isascii:
+        #NARGS 1, 1
+        jsr self_str
+-       lda str_len
+        ora str_len+1
+        beq +
+        ldz #0
+        lda [fp0],z
+        bmi _no
+        inw fp0
+        dew str_len
+        bra -
++       lda #1
+        .byte $2c                       ; (bit abs: skips the lda #0)
+_no:    lda #0
+        jmp bool_from_a
+
+; ss_sub - self[ss_from : ss_from + ss_len] -> A/X (a new string)
+ss_from:        .word 0
+ss_len:         .word 0
+ss_sub:
+        jsr self_str
+        clc
+        lda fp0
+        adc ss_from
+        sta fp2
+        lda fp0+1
+        adc ss_from+1
+        sta fp2+1
+        lda fp0+2
+        sta fp2+2
+        lda #0
+        sta fp2+3
+        lda ss_len
+        sta str_len
+        lda ss_len+1
+        sta str_len+1
+        jmp str_from_far
+; ss_tail - self[ss_from:] -> A/X
+ss_tail:
+        jsr self_str
+        sec
+        lda str_len
+        sbc ss_from
+        sta ss_len
+        lda str_len+1
+        sbc ss_from+1
+        sta ss_len+1
+        bra ss_sub
+; ss_tuple3 - the 3 values on the stack (first one deepest) -> A/X, a tuple of them
+ss_tuple3:
+        lda #3
+        sta nitems
+        lda #0
+        sta nitems+1
+        jsr tuple_new
+        ldz #6
+        ldy #4
+-       phy
+        lda (vsp),y
+        sta [p0],z
+        inz
+        iny
+        lda (vsp),y
+        sta [p0],z
+        inz
+        ply
+        dey
+        dey
+        bpl -
+        #DROP 3
+        lda p0
+        ldx p0+1
+        rts
+
+; rfind / rindex: the last match (from start)
+xs_str_rfind:
+        lda #0
+        bra +
+xs_str_rindex:
+        lda #1
++       pha
+        #NARGS 2, 3
+        jsr find_args
+        jsr rfind_core
+        pla
+        bcc _int
+        cmp #0
+        beq +
+        #RAISE EXC_VALUE, "substring not found"
++       lda #$ff
+        sta acc
+        sta acc+1
+        sta acc+2
+        sta acc+3
+_int:   jmp int_new
+; rfind_core - (find_args) -> C clear and acc = the last match at or after t5
+rf_last:        .word 0
+rfind_core:
+        lda #$ff
+        sta rf_last
+        sta rf_last+1
+-       jsr str_find_from
+        bcs +
+        lda acc
+        sta rf_last
+        sta t5
+        lda acc+1
+        sta rf_last+1
+        sta t5+1
+        inw t5
+        bra -
++       lda #0
+        sta acc+2
+        sta acc+3
+        lda rf_last
+        sta acc
+        and rf_last+1
+        cmp #$ff
+        beq _none
+        lda rf_last+1
+        sta acc+1
+        clc
+        rts
+_none:  sec
+        rts
+
+; partition / rpartition (sep) -> (before, sep, after)
+xs_str_partition:
+        lda #0
+        bra +
+xs_str_rpartition:
+        lda #1
++       pha
+        #NARGS 2, 2
+        jsr find_args
+        lda str_len                     ; (the separator's, from need_str)
+        ora str_len+1
+        bne +
+        #RAISE EXC_VALUE, "empty separator"
++       pla
+        pha
+        bne _r
+        jsr str_find_from
+        bra _got
+_r:     jsr rfind_core
+_got:   bcs _none
+        lda acc                         ; self[:i]
+        sta ss_len
+        pha
+        lda acc+1
+        sta ss_len+1
+        pha
+        lda #0
+        sta ss_from
+        sta ss_from+1
+        jsr ss_sub
+        #PUSH
+        #ARG 1
+        #PUSH
+        #ARG 1                          ; self[i + len(sep):]
+        jsr str_info
+        pla
+        tax
+        pla
+        clc
+        adc str_len
+        sta ss_from
+        txa
+        adc str_len+1
+        sta ss_from+1
+        jsr ss_tail
+        #PUSH
+        pla
+        jmp ss_tuple3
+_none:  lda #0                          ; not found: (self, '', '') / ('', '', self)
+        sta ss_len
+        sta ss_len+1
+        sta ss_from
+        sta ss_from+1
+        pla
+        beq +
+        jsr ss_sub
+        #PUSH
+        #PUSH
+        #ARG 0
+        #PUSH
+        jmp ss_tuple3
++       #ARG 0
+        #PUSH
+        jsr ss_sub
+        #PUSH
+        #PUSH
+        jmp ss_tuple3
+
+; removeprefix / removesuffix
+xs_str_removeprefix:
+        lda #0
+        bra +
+xs_str_removesuffix:
+        lda #1
++       pha
+        #NARGS 2, 2
+        #ARG 1
+        jsr need_str
+        lda str_len
+        sta ss_len
+        lda str_len+1
+        sta ss_len+1
+        pla
+        pha
+        bne +
+        jsr xs_str_startswith
+        bra ++
++       jsr xs_str_endswith
++       cmp #R_TRUE
+        beq +
+        pla                             ; no: self
+        #ARG 0
+        rts
++       jsr self_str
+        lda ss_len                      ; a prefix: the rest starts after it
+        sta ss_from
+        lda ss_len+1
+        sta ss_from+1
+        sec                             ; len(self) - len(affix) chars
+        lda str_len
+        sbc ss_len
+        sta ss_len
+        lda str_len+1
+        sbc ss_len+1
+        sta ss_len+1
+        pla
+        beq +
+        lda #0                          ; a suffix: they start at 0
+        sta ss_from
+        sta ss_from+1
++       jmp ss_sub
+
+; expandtabs(tabsize=8)
+et_size:        .byte 0
+et_col:         .byte 0
+xs_str_expandtabs:
+        #NARGS 1, 2
+        lda #8                          ; tabsize: 8, or the argument (negative: 0)
+        sta et_size
+        lda npos
+        cmp #2
+        bne _go
+        #ARG 1
+        jsr need_int
+        lda acc
+        bit acc+3
+        bpl +
+        lda #0
++       sta et_size
+_go:
+        jsr self_str
+        lda sbp
+        pha
+        lda sbp+1
+        pha
+        lda #0
+        sta et_col
+-       lda str_len
+        ora str_len+1
+        beq _done
+        ldz #0
+        lda [fp0],z
+        cmp #9
+        bne _char
+        lda et_size                     ; a tab: spaces to the next stop
+        beq _next
+_sp:    lda #' '
+        jsr sb_putc
+        inc et_col
+        lda et_col
+        cmp et_size
+        bcc _sp
+        lda #0
+        sta et_col
+        bra _next
+_char:  jsr sb_putc
+        ldz #0
+        lda [fp0],z
+        cmp #10
+        beq +
+        cmp #13
+        beq +
+        inc et_col
+        lda et_col
+        cmp et_size
+        bcc _next
++       lda #0
+        sta et_col
+_next:  inw fp0
+        dew str_len
+        bra -
+_done:  plx
+        pla
+        jmp sb_take
+
+; rsplit(sep=None, maxsplit=-1): as split, but the splits are counted from the right.
+; Without maxsplit it is split. The pieces go on the value stack right to left.
+rs_e:           .word 0                 ; the end of the piece being found
+rs_s:           .word 0
+rs_n:           .word 0                 ; splits left
+rs_cnt:         .byte 0                 ; pieces on the stack
+xs_str_rsplit:
+        #NARGS 1, 3
+        lda npos
+        cmp #3
+        beq +
+-       jmp xs_str_split
++       #ARG 2
+        jsr need_int
+        bit acc+3
+        bmi -
+        lda acc
+        sta rs_n
+        lda acc+1
+        sta rs_n+1
+        lda #0
+        sta rs_cnt
+        jsr self_str
+        lda str_len
+        sta rs_e
+        lda str_len+1
+        sta rs_e+1
+        #ARG 1
+        cpx #0
+        bne _sep
+        cmp #R_NONE
+        bne _sep
+        ; whitespace: words from the right; the rest keeps its inner spaces
+_ws:    jsr _skip                       ; trailing whitespace
+_wnext: lda rs_e
+        ora rs_e+1
+        beq _list
+        lda rs_n
+        ora rs_n+1
+        beq _rest
+        lda rs_e                        ; the word's start
+        sta rs_s
+        lda rs_e+1
+        sta rs_s+1
+_wback: lda rs_s
+        ora rs_s+1
+        beq _word
+        jsr _char_before_s
+        cmp #33
+        bcc _word
+        jsr _dec_s
+        bra _wback
+_word:  jsr _piece                      ; self[s:e]
+        jsr _skip
+        bra _wnext
+_sep:   jsr need_str                    ; an explicit separator
+        lda str_len
+        ora str_len+1
+        bne +
+        #RAISE EXC_VALUE, "empty separator"
++       lda str_len
+        sta rs_sl
+        lda str_len+1
+        sta rs_sl+1
+_snext: lda rs_n
+        ora rs_n+1
+        beq _rest
+        sec                             ; s = e - len(sep), back to 0
+        lda rs_e
+        sbc rs_sl
+        sta rs_s
+        lda rs_e+1
+        sbc rs_sl+1
+        sta rs_s+1
+        bcc _rest
+_try:   jsr _match                      ; sep at s?
+        bcc _hit
+        lda rs_s
+        ora rs_s+1
+        beq _rest
+        jsr _dec_s
+        bra _try
+_hit:   clc                             ; self[s + len(sep):e]
+        lda rs_s
+        pha
+        adc rs_sl
+        sta rs_s
+        lda rs_s+1
+        pha
+        adc rs_sl+1
+        sta rs_s+1
+        jsr _piece
+        pla
+        sta rs_e+1
+        pla
+        sta rs_e
+        bra _snext
+_rest:  lda #0                          ; self[:e]
+        sta rs_s
+        sta rs_s+1
+        jsr _piece
+_list:  lda rs_cnt                      ; the list, left to right: the leftmost piece
+        sta nitems                      ; is on top
+        lda #0
+        sta nitems+1
+        sta rs_i
+        jsr list_new
+        sta r0
+        stx r0+1
+_add:   lda rs_i
+        cmp rs_cnt
+        bcs _drop
+        asl a
+        tay
+        lda (vsp),y
+        sta r1
+        iny
+        lda (vsp),y
+        sta r1+1
+        jsr list_append
+        inc rs_i
+        bra _add
+_drop:  ldx rs_cnt                      ; the pieces go
+-       beq +
+        #DROP 1
+        dex
+        bra -
++       lda #0
+        sta r1
+        sta r1+1
+        lda r0
+        ldx r0+1
+        ldy #0
+        sty r0
+        sty r0+1
+        rts
+_dec_s: lda rs_s
+        bne +
+        dec rs_s+1
++       dec rs_s
+        rts
+; push self[rs_s:rs_e], one more piece; the end goes to the start
+_piece: lda rs_s
+        sta ss_from
+        lda rs_s+1
+        sta ss_from+1
+        sec
+        lda rs_e
+        sbc rs_s
+        sta ss_len
+        lda rs_e+1
+        sbc rs_s+1
+        sta ss_len+1
+        jsr ss_sub
+        #PUSH
+        inc rs_cnt
+        lda rs_s
+        sta rs_e
+        lda rs_s+1
+        sta rs_e+1
+        lda rs_n                        ; one split fewer
+        bne +
+        dec rs_n+1
++       dec rs_n
+        rts
+; e back over whitespace
+_skip:  lda rs_e
+        ora rs_e+1
+        beq _skipped
+        lda rs_e
+        sta rs_s
+        lda rs_e+1
+        sta rs_s+1
+        jsr _char_before_s
+        cmp #33
+        bcs _skipped
+        jsr _dec_s
+        lda rs_s
+        sta rs_e
+        lda rs_s+1
+        sta rs_e+1
+        bra _skip
+_skipped:
+        rts
+; A = self[rs_s - 1]
+_char_before_s:
+        jsr self_str
+        sec
+        lda fp0
+        sbc #1
+        sta fp1
+        lda fp0+1
+        sbc #0
+        sta fp1+1
+        lda fp0+2
+        sta fp1+2
+        lda #0
+        sta fp1+3
+        clc
+        lda fp1
+        adc rs_s
+        sta fp1
+        lda fp1+1
+        adc rs_s+1
+        sta fp1+1
+        ldz #0
+        lda [fp1],z
+        rts
+; C clear if the separator (ARG 1) is at self[rs_s]
+_match: jsr self_str
+        clc
+        lda fp0
+        adc rs_s
+        sta fp1
+        lda fp0+1
+        adc rs_s+1
+        sta fp1+1
+        lda fp0+2
+        sta fp1+2
+        lda #0
+        sta fp1+3
+        #ARG 1
+        jsr str_info
+        ldx #0
+        ldy #0
+-       cpy str_len                     ; (a separator under 256 chars)
+        beq +
+        tya
+        taz
+        lda [fp0],z
+        cmp [fp1],z
+        bne _no
+        iny
+        bra -
++       clc
+        rts
+_no:    sec
+        rts
+rs_sl:          .word 0
+rs_i:           .byte 0
+
 ; is* predicates: every char passes (and at least one char)
 xs_str_isdigit:
         lda #0
