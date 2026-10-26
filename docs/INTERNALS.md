@@ -29,7 +29,7 @@
 | `tailh.asm` | tail H: `help()`, `mem()`, program load/save/directory |
 | `taili.asm` | tail I: `py_reset` (heap, symbol table, exception classes; the fixed symbols' names) |
 | `file.asm` | tail F: Python files (`open()` and the file methods), the `os` module, loading a module's file |
-| `sets.asm` | sets and frozensets (overlay R): operators, methods, `set()`, `BUILD_SET`, repr |
+| `sets.asm`, `setsr.asm` | tail T: sets and frozensets (operators, methods, `set()`, repr); overlay R: `BUILD_SET` and the stubs |
 | `env.asm` | closures (overlay R): the environment opcodes |
 | `desc.asm` | `staticmethod`, `classmethod`, `property` (overlay R), `LOAD_CLASSNAME` |
 | `args.asm` | tail X: binding `*args`/`**kwargs`/keyword-only parameters, `f(*a, **k)` calls; making a generator, its saved exception handlers, `send()`, `throw()`, `close()`, `StopIteration(value)` |
@@ -84,7 +84,7 @@ program may be showing the graphics screen.
 | `$8113000` | the hidden symbols of modules -> their plain symbols (`SYM_BASE`) |
 | `$8180000` / `$8190000` | overlay R / overlay C images (tail A, the end of R, holds `fbig.asm`; C has its own copy, `c_fbig`, for the lexer's float literals) |
 | `$81C0000` | the source of a module being imported |
-| `$81A0000-$81A6FFF` | tail B, H, F, S, P, I, X images, 4 KB each (tail A is the end of R's image) |
+| `$81A0000-$81A7FFF` | tail B, H, F, S, P, I, X, T images, 4 KB each (tail A is the end of R's image) |
 
 The KERNAL's areas are left alone, as the MEGA65 book's chip RAM map asks:
 `0.0002-0.15FF`, `1.0000-1.1FFF` (DOS), `1.F700-1.F7FF`, `1.F800-` (colour RAM window)
@@ -400,6 +400,13 @@ too): `GeneratorExit` or `StopIteration` is a clean close. A generator that fini
 for native code returns its return value with the carry set; `next()`, `send()` and
 `throw()` raise `StopIteration` with it as `.value` (`xg_stop`).
 
+A generator resumed with an exception while it waits in a `yield from` (the instruction
+after its `YIELD_VALUE` is the `JUMP` back to `SEND`) passes it on: `gen_throw_at` pushes
+it and sets `send_throw`, and `SEND` resumes the inner generator with it as its
+`gen_exc` (an iterator that is not a generator gets it raised in the outer one).
+PEP 479: `vm_except` first calls `gen_p479`, which raises `RuntimeError` instead when a
+`StopIteration` is about to unwind past a generator's frame.
+
 `iter_next` callers must not keep A/X when it says "exhausted" (C set): `it_enum` put
 them in `r3`, a GC root, and the next collection marked whatever that pointed at.
 
@@ -435,11 +442,23 @@ member's `__eq__` may run Python code at any point. The in-place methods
 ## with
 
 `with m as x: body` stores the manager in a hidden variable (`" w<n>"`: a name no source
-can spell; in functions the prescan makes it a local), calls `__enter__`, and compiles
-the body like `try`/`finally` with `__exit__(None, None, None)` as the finally code. The
-compiler keeps a stack of the open with blocks (`w_stk`) and their count per scope and per
-loop record, so `return` calls the `__exit__` of every open with block of the function,
-and `break`/`continue` those opened inside the loop, before they jump.
+can spell; in functions the prescan makes it a local, one per manager), calls
+`__enter__`, and compiles the body under `SETUP_EXCEPT`: the normal exit calls
+`__exit__(None, None, None)`; the handler calls `__exit__(type(e), e, None)` and swallows
+the exception (`POP_EXCEPT`) if that returns something true, else re-raises it.
+`with a, b:` is compiled as `with a: with b:` (`with_item` recurses).
+
+Leaving blocks early: the compiler keeps an exit stack (`xb_*`) of the open `try` and
+`with` blocks, each with the handlers it holds at that point (a try body 1, or 2 with a
+`finally`: the outer handler too; the `except`/`else` clauses of a `try` with `finally`
+1) and its exit code. `break`/`continue` (down to the loop's level, kept in its loop
+record) and `return` (the function's blocks) emit, innermost first, each block's
+`POP_BLOCK`s and then its exit code: the `__exit__` call, or the `finally` body compiled
+again in place. `try_scan` finds the `finally` clause when the `try` starts (skipping
+the body and the other clauses) and keeps the lexer state at its `:` (`fin_lx`).
+
+Sets are in tail T (`sets.asm`); overlay R keeps `BUILD_SET`'s handler and the stubs
+(`setsr.asm`).
 
 ## Debugging
 

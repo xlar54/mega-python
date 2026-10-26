@@ -14,9 +14,8 @@ Language
 * Live `dict` views (`keys()`, `values()`, `items()` are list snapshots); iterator
   types and reprs per kind (`map`, `filter`, `zip`, `list_iterator`: now `iterator`);
   methods of builtin types as values (`str.upper`, `list.append`).
-* Generators: `yield from` passing `throw()` / `close()` on to the inner generator,
-  PEP 479 (`StopIteration` inside a generator -> `RuntimeError`), `.value` of a
-  `StopIteration` raised by Python code. `issubclass()` is missing.
+* `.value` of a `StopIteration` raised by Python code; `issubclass()`; traceback
+  objects (`with`'s `__exit__` gets `None`).
 * Error messages that name the type: "object of type 'int' has no len()", "'int'
   object is not subscriptable" (now "object has no len()", "object is not
   subscriptable").
@@ -25,8 +24,6 @@ Language
 * Unpacking in displays (`[*a, *b]`, `{**d, 'k': 1}`), positional-only parameters
   (`/`); `property` deleters, `functools.wraps`; the names in argument errors
   ("f() got an unexpected keyword argument 'x'").
-* `with`: pass the exception to `__exit__` and let a true result swallow it; several
-  managers in one `with`.
 * Files: `seek`/`tell`, binary mode (`bytes`), more of `os` (`getcwd`, `stat`,
   `path.getsize`), other drives, closing a forgotten file when it is collected (it
   keeps its drive channel, and the drive will not remove it).
@@ -40,7 +37,6 @@ Language
   module type would print as `<module 'math'>`.)
 * Libraries: `collections.namedtuple`/`OrderedDict`, `itertools`, `re`, `datetime`
   (some need generators first).
-* `break`/`continue` inside `try` with `finally` should run the finally block.
 * Dicts: keep each key's hash next to it, so growing and deleting do not hash the
   keys again; deletes are O(n) (the pairs move down and the index is rebuilt).
 * `str` methods still missing: `partition`, `rsplit`, `swapcase`, `expandtabs`, ...
@@ -62,8 +58,9 @@ Environment
 Memory
 ------
 
-* Code space (see the sizes `build.bat` prints): part 1, overlay R and part 2 each
-  have only about 100-150 bytes left; new code must go in a tail or overlay C; each tail has room left, and more tails can be
+* Code space (see the sizes `build.bat` prints): part 1 and part 2 have only about
+  50 bytes left, overlay R about 1 KB (sets moved to tail T); new code should go in a
+  tail or overlay C; each tail has room left, and more tails can be
   added (`docs/INTERNALS.md`, "Tails"). More code should go into tails (only code that never
   runs Python code; see `docs/INTERNALS.md`) or overlay C (compile time).
 

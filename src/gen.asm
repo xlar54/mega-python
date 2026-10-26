@@ -255,15 +255,7 @@ _deep:  jmp raise_recursion
         ldx gen_sent+1
         #PUSH
         jmp vm_loop
-_throw: lda gen_exc
-        sta cur_exc
-        lda gen_exc+1
-        sta cur_exc+1
-        lda #0
-        sta gen_exc
-        sta gen_exc+1
-        sta exc_ip_set
-        jmp throw
+_throw: jmp gen_throw_at                ; (methods.asm: a yield from passes it on)
 
 ;---------------------------------------------------------------------------------------
 ; YIELD_VALUE - value -> (the generator's caller gets it; the sent value comes back)

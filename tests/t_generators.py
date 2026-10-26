@@ -439,3 +439,80 @@ try:
 except ZeroDivisionError:
     print('ZeroDivisionError')
 print(list(map(lambda *a: a, 'ab', 'cd', 'ef')))
+
+
+# PEP 479; throw() and close() pass through yield from
+def leaky():
+    yield 1
+    raise StopIteration
+
+
+for bad in (lambda: [x for x in leaky()], lambda: list(leaky())):
+    try:
+        bad()
+    except RuntimeError as e:
+        print('RuntimeError', e)
+
+
+def stop_inside():
+    try:
+        next(iter([]))
+    except StopIteration:
+        yield 'caught inside'
+    yield 'on'
+
+
+print(list(stop_inside()))
+
+
+def helper():
+    raise StopIteration
+
+
+def calls_helper():
+    yield 1
+    try:
+        helper()
+    except StopIteration:
+        yield 'helper stop caught'
+
+
+print(list(calls_helper()))
+
+
+def inner3():
+    try:
+        yield 'a'
+        yield 'b'
+    except ValueError as e:
+        yield 'inner caught %s' % e
+    finally:
+        print('inner finally')
+
+
+def middle3():
+    r = yield from inner3()
+    yield 'middle after'
+
+
+def outer3():
+    yield from middle3()
+
+
+o = outer3()
+print(next(o), o.throw(ValueError('v')), next(o), next(o, 'end'))
+o = outer3()
+next(o)
+o.close()
+print('closed')
+
+
+def over_list():
+    try:
+        yield from [1, 2]
+    except KeyError:
+        yield 'outer caught'
+
+
+g = over_list()
+print(next(g), g.throw(KeyError('k')))

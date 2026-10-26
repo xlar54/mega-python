@@ -284,6 +284,7 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_gcmix` | the same features while the heap is nearly full (many collections) |
 | `t_generators` | `yield`, `yield from` (also recursive), `send`, `close`, `try`/`finally` across a `yield`, exceptions leaving a generator, a running generator re-entered, generators in closures and methods, driven by `for`, `next`, `zip`, `sorted`, `sum`, `in`, `join`, and leaving a loop then going on; generator expressions (lazy, the first iterable taken at once, in functions, lambdas and class bodies, chained, infinite); `close()` running `finally`/`with` exits, `throw()`; `yield from` with `send()` and return values, `StopIteration.value`; lazy `map()`/`filter()` |
 | `t_edges` | edge cases: deep recursion through a closure, many parameters and locals, changing a dict or set while iterating it (`RuntimeError`: "changed size", and CPython's "keys changed" when keys are deleted and added), imports inside functions, `RecursionError` and recovering from it, lazy `sum` of a big range |
+| `t_blocks` | `finally` on `break`/`continue`/`return` (nested, mixed with `with`, `return` and `break` inside `finally`), `with` passing the exception to `__exit__` and swallowing it, several managers in one `with` |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
 Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, screenshot),
@@ -390,8 +391,11 @@ Differences from CPython
   read to its end gives its KERNAL channel back by itself; a file being written must be
   closed (or used with `with`) to be complete on disk. `open()`'s mode `'w'` replaces
   an existing file. `read()` returns at most 8 KB (the string builder's size).
-* **`with`** calls `__exit__(None, None, None)` even when the block raises (the
-  exception always goes on: `__exit__` cannot swallow it).
+* **`with`** works as in CPython (several managers too, `with a as x, b as y:`): when
+  the block raises, `__exit__` gets the exception's class and the exception, and a true
+  result swallows it. The traceback argument is `None` (there are no traceback
+  objects). `break`, `continue` and `return` run the `finally` blocks and `__exit__`
+  calls they leave.
 * **Sets** (`{1, 2}`, `set()`, `frozenset()`, set comprehensions, `| & - ^`, `<=` and
   the other subset comparisons, and the set methods) keep their members in the order
   they were added, where CPython uses hash order: `print({3, 1, 2})` shows `{3, 1, 2}`
@@ -420,10 +424,10 @@ Differences from CPython
   range(60000))` needs no list). `close()` raises `GeneratorExit` at the `yield`, so
   `finally` blocks and `with` exits run; `throw()` raises an exception there; `yield
   from` passes `send()` values on and gives the inner generator's return value, which
-  `StopIteration.value` carries too. Differences: `yield from` does not pass `throw()`
-  and `close()` on to the inner generator, a `StopIteration` raised inside a generator
-  is not turned into `RuntimeError`, `raise StopIteration(v)` in your own code gives
-  no `.value` (only `.args`), and `yield` cannot be used in a lambda.
+  `StopIteration.value` carries too; `throw()` and `close()` go on to the generator a
+  `yield from` waits on, and a `StopIteration` leaving a generator becomes
+  `RuntimeError` (PEP 479). Differences: `raise StopIteration(v)` in your own code
+  gives no `.value` (only `.args`), and `yield` cannot be used in a lambda.
 * Not supported yet: unpacking in displays (`[*a, *b]`,
   `{**d}`), multiple inheritance, `from module import *`, packages (`import a.b`), the
   `bytes` type, attributes on functions (`f.cache = {}`; use a closure or a class).
@@ -437,7 +441,6 @@ Differences from CPython
   their objects, like the other builtin iterators, print as `<iterator>` and their
   type is `iterator` (CPython: `<map object at ...>`, `map`). Methods taken from a
   builtin type (`str.upper`, `list.append`) are not supported; use a lambda.
-* `try`/`finally`: a `break`/`continue` out of the `try` body skips the `finally` block.
 * A program's globals stay after `run()`, so a program that defines `load`, `save`,
   `run`, ... replaces those REPL commands until `new()`.
 * Error messages and tracebacks are shorter: `Traceback: line N` and the exception.

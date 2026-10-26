@@ -702,6 +702,8 @@ bi_dict_copy:
 ;---------------------------------------------------------------------------------------
 op_send:
         #POP
+        ldy send_throw                  ; throw() / close() for the iterator
+        bne _thrown
         sta gen_sent
         stx gen_sent+1
         #PEEK 0
@@ -731,6 +733,140 @@ _end:   lda #FR_SENDX                   ; its result: None
         ldx #0
         jmp gen_exit
 _bad:   #RAISE EXC_ATTR, "object has no attribute 'send'"
+_thrown:
+        ldy #0
+        sty send_throw
+        sta gen_exc
+        stx gen_exc+1
+        #PEEK 0
+        jsr type_of
+        cmp #T_GEN
+        bne _here
+        lda #R_NONE                     ; a generator: raised at its yield
+        sta gen_sent
+        lda #0
+        sta gen_sent+1
+        lda #FR_FORIT | FR_SENDX
+        jmp gen_resume
+_here:  lda gen_exc                     ; another iterator: raised here
+        ldx gen_exc+1
+; gen_raise - raise A/X (an exception instance) at the current ip
+gen_raise:
+        sta cur_exc
+        stx cur_exc+1
+        lda #0
+        sta gen_exc
+        sta gen_exc+1
+        sta exc_ip_set
+        jmp throw
+send_throw:     .byte 0
+
+;---------------------------------------------------------------------------------------
+; gen_throw_at - (gen_resume) its frame is back and gen_exc is to be raised at its yield.
+; At a yield from (the next instruction is a JUMP to a SEND) the iterator gets it:
+; SEND throws it in (send_throw), as CPython's throw() and close() do.
+;---------------------------------------------------------------------------------------
+gen_throw_at:
+        ldz #0
+        lda [ip],z
+        cmp #OP_JUMP
+        bne _raise
+        inz
+        lda [ip],z
+        sta fp1
+        inz
+        lda [ip],z
+        sta fp1+1
+        lda ip+2
+        sta fp1+2
+        lda #0
+        sta fp1+3
+        ldz #0
+        lda [fp1],z
+        cmp #OP_SEND
+        bne _raise
+        lda gen_exc                     ; what SEND gets, and how
+        ldx gen_exc+1
+        #PUSH
+        inc send_throw
+        lda #0
+        sta gen_exc
+        sta gen_exc+1
+        jmp vm_loop
+_raise: lda gen_exc
+        ldx gen_exc+1
+        bra gen_raise
+
+;---------------------------------------------------------------------------------------
+; gen_p479 - (vm_except, before frames are dropped) a StopIteration leaving a
+; generator's frame becomes RuntimeError (PEP 479)
+;---------------------------------------------------------------------------------------
+gen_p479:
+        lda cur_exc
+        sta r2
+        lda cur_exc+1
+        sta r2+1
+        lda #EXC_STOPITER
+        jsr exc_is
+        bcc _no
+        ldx runlev                      ; the frame it unwinds to: the newest handler's
+        dex                             ; in this level, or the level's
+        lda hsp
+        cmp lev_hsp_lo,x
+        bne _hnd
+        lda hsp+1
+        cmp lev_hsp_hi,x
+        bne _hnd
+        lda lev_frp_lo,x
+        sta t0
+        lda lev_frp_hi,x
+        sta t0+1
+        bra _walk
+_hnd:   sec
+        lda hsp
+        sbc #8
+        sta fp1
+        lda hsp+1
+        sbc #0
+        sta fp1+1
+        lda #<(HSTACK >> 16)
+        sta fp1+2
+        lda #0
+        sta fp1+3
+        ldz #4
+        lda [fp1],z
+        sta t0
+        inz
+        lda [fp1],z
+        sta t0+1
+_walk:  lda frp                         ; the frames it leaves: frp down to t0
+        sta fp1
+        lda frp+1
+        sta fp1+1
+        lda #<(FSTACK >> 16)
+        sta fp1+2
+        lda #0
+        sta fp1+3
+-       lda fp1+1
+        cmp t0+1
+        bcc _no
+        bne +
+        lda fp1
+        cmp t0
+        bcc _no
+        beq _no
++       sec
+        lda fp1
+        sbc #8
+        sta fp1
+        bcs +
+        dec fp1+1
++       ldz #6
+        lda [fp1],z
+        and #FR_GEN
+        beq -
+        #RAISE EXC_RUNTIME, "generator raised StopIteration"
+_no:    rts
 
 ; gen_stop - raise StopIteration for a generator that returned A/X (stop_value)
 gen_stop:       #TAILCALL TAIL_X, xg_stop

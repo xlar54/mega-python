@@ -220,6 +220,7 @@ throw:
 
 vm_except:
         #DBG_HOLD
+        jsr gen_p479                    ; (methods.asm)
         ldx runlev
         dex
         lda hsp+1
