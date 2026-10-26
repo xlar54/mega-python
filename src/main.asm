@@ -106,6 +106,12 @@ tail_m_start:
 tail_m_end:
         .cerror * > WINDOW + WINDOW_SIZE, "tail M is too big"
         .endv
+        .virtual TAIL
+tail_n_start:
+        .include "bigint.asm"
+tail_n_end:
+        .cerror * > WINDOW + WINDOW_SIZE, "tail N is too big"
+        .endv
         * = PART2_LOAD
         .logical PART2
 part2_start:
@@ -229,12 +235,18 @@ tail_m_start:
         .include "classm.asm"
 tail_m_end:
         .endlogical
-        .cerror TAILS_N != 9, "TAILS_N must count the tails written after overlay C"
+        * = $1000 + WINDOW_SIZE + 9 * TAIL_SIZE
+        .logical TAIL
+tail_n_start:
+        .include "bigint.asm"
+tail_n_end:
+        .endlogical
+        .cerror TAILS_N != 10, "TAILS_N must count the tails written after overlay C"
         .endif
 
 part2_len = part2_end - part2_start
         .cerror PART2_LOAD + part2_len > $e000, "part 2's load image is too big"
 
         .if PASS == 1
-        .warn format("part 1 $%04x, overlay R $%04x + tail A $%04x / B $%04x / H $%04x / F $%04x / S $%04x / P $%04x / I $%04x / X $%04x / T $%04x / M $%04x, part 2 $%04x, overlay C $%04x bytes", part1_end - $2001, r_main_end - ovl_r_start, ovl_r_end - TAIL, tail_b_end - tail_b_start, tail_h_end - tail_h_start, tail_f_end - tail_f_start, tail_s_end - tail_s_start, tail_p_end - tail_p_start, tail_i_end - tail_i_start, tail_x_end - tail_x_start, tail_t_end - tail_t_start, tail_m_end - tail_m_start, part2_len, ovl_c_end - ovl_c_start)
+        .warn format("part 1 $%04x, overlay R $%04x + tail A $%04x / B $%04x / H $%04x / F $%04x / S $%04x / P $%04x / I $%04x / X $%04x / T $%04x / M $%04x / N $%04x, part 2 $%04x, overlay C $%04x bytes", part1_end - $2001, r_main_end - ovl_r_start, ovl_r_end - TAIL, tail_b_end - tail_b_start, tail_h_end - tail_h_start, tail_f_end - tail_f_start, tail_s_end - tail_s_start, tail_p_end - tail_p_start, tail_i_end - tail_i_start, tail_x_end - tail_x_start, tail_t_end - tail_t_start, tail_m_end - tail_m_start, tail_n_end - tail_n_start, part2_len, ovl_c_end - ovl_c_start)
         .endif

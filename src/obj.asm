@@ -88,7 +88,12 @@ _heap:  sta p0
         lda [p0],z
         cmp #T_INT
         bne _no
-        ldz #4
+        inz
+        lda [p0],z
+        and #F_BIG
+        beq +
+        #RAISE EXC_OVERFLOW, "int too large to convert"
++       ldz #4
         lda [p0],z
         sta acc
         inz
@@ -104,6 +109,39 @@ _heap:  sta p0
         rts
 _no:    sec
         rts
+
+; is_big - A/X = ref -> C set if it is a big int (p0 -> it); A/X kept
+is_big: bit #1
+        bne _no
+        cpx #0
+        beq _no
+        sta p0
+        stx p0+1
+        pha
+        ldz #0
+        lda [p0],z
+        cmp #T_INT
+        bne _pno
+        inz
+        lda [p0],z
+        and #F_BIG
+        beq _pno
+        pla
+        sec
+        rts
+_pno:   pla
+_no:    clc
+        rts
+; big_either - C set if r2 or r3 is a big int
+big_either:
+        lda r2
+        ldx r2+1
+        jsr is_big
+        bcs +
+        lda r3
+        ldx r3+1
+        jmp is_big
++       rts
 
 ; int_new - acc -> A/X ref (small when it fits in 15 bits, else a boxed T_INT)
 int_new:
@@ -1059,7 +1097,14 @@ obj_eq:
         beq _flt
         jsr is_inttype
         bcc _ne
-        lda r2
+        jsr big_either                  ; a big int: equal only by tail N's compare
+        bcc +
+        jsr big_cmp
+        tax
+        bne _ne
+        sec
+        rts
++       lda r2
         ldx r2+1
         jsr int_val
         ldq acc
@@ -1690,7 +1735,10 @@ repr_bool:
 +       SBPRINT "True"
         rts
 repr_int:
-        jsr int_val
+        jsr is_big
+        bcc +
+        jmp big_repr
++       jsr int_val
         jmp sb_int
 repr_str:
         jsr str_info

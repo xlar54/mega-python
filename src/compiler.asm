@@ -5415,6 +5415,11 @@ _neg:   jsr lex
         lda tok
         cmp #TK_FLOAT
         bne +
+        lda tok_ref                     ; (a big int literal is negated at run time)
+        ldx tok_ref+1
+        jsr type_of
+        cmp #T_FLOAT
+        bne _nofold
         lda tok_ref
         ldx tok_ref+1
         jsr float_load

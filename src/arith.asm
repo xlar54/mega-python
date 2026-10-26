@@ -268,6 +268,14 @@ bop_name_ofs:
 ; integer operators: acc = r2, acc2 = r3
 ;---------------------------------------------------------------------------------------
 int_binop:
+        lda r2                          ; a big int on either side: tail N
+        ldx r2+1
+        jsr is_big
+        bcs int_overflow
+        lda r3
+        ldx r3+1
+        jsr is_big
+        bcs int_overflow
         lda r3
         ldx r3+1
         jsr int_val
@@ -393,8 +401,8 @@ _sq:    lsr acc2+3
         bcs int_overflow
         bra _loop
 
-int_overflow:
-        #RAISE EXC_OVERFLOW, "integer overflow (ints are 32-bit)"
+int_overflow:                           ; (beyond 32 bits: the big int code, again)
+        jmp big_binop
 
 iop_lshift:
         jsr shift_count
@@ -1175,7 +1183,10 @@ obj_cmp:
         lda t2+1
         jsr is_inttype
         bcc _flt
-        lda r3
+        jsr big_either                  ; a big int: tail N
+        bcc +
+        jmp big_cmp
++       lda r3
         ldx r3+1
         jsr int_val
         ldq acc
@@ -1563,6 +1574,8 @@ op_unary:
         #PEEK 0
         sta r2
         stx r2+1
+        jsr is_big
+        bcs _ovf
         jsr int_val
         bcc _int
         lda r2
@@ -1623,4 +1636,8 @@ _done:  jsr int_new
         #POKE 0
         jsr clear_rregs
         jmp vm_loop
-_ovf:   jmp int_overflow
+_ovf:   lda t6                          ; a big int, or -(-2^31): tail N
+        jsr big_unary
+        #POKE 0
+        jsr clear_rregs
+        jmp vm_loop

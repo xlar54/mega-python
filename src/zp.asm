@@ -112,6 +112,7 @@ src_len:        .word ?
 ed_cur:         .word ?
 bnA:            .dword ?                ; floats: bignum operands (bank 1)
 bnB:            .dword ?
+bnC:            .dword ?                ; big ints: a third operand (bigint.asm)
 fsp:            .dword ?                ; floats: text being parsed
 ff_i:           .word ?                 ; floats: layout digit index / count
 ff_cnt:         .word ?

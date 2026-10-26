@@ -155,6 +155,8 @@ _num:   lda #0
         bra -
 
 fs_alt:         .byte 0                 ; '#' in the spec
+fs_big:         .byte 0                 ; formatting a big int (fs_neg: its sign)
+fs_neg:         .byte 0
 
 is_align:
         cmp #'<'
@@ -185,11 +187,20 @@ format_value:
         ldx r2+1
         jsr is_float
         bcs _float
+        lda #0
+        sta fs_big
         lda r2
         ldx r2+1
-        jsr int_val
+        jsr is_big                      ; a big int: its sign here, digits from tail N
+        bcc +
+        inc fs_big
+        ldz #5
+        lda [p0],z
+        sta fs_neg
+        bra ++
++       jsr int_val
         bcs _notint
-        lda fs_type
++       lda fs_type
         cmp #'s'
         beq _notint
         jsr float_type_code
@@ -198,6 +209,13 @@ format_value:
         bne +
         lda #'>'
         sta fs_align
++       lda fs_big
+        beq +
+        bit fs_neg
+        bpl _pos
+        lda #'-'
+        jsr sb_putc
+        bra _digits
 +       bit acc+3
         bpl _pos
         lda #'-'
@@ -225,7 +243,10 @@ _digits:
         jsr sb_putc
         pla
         jsr sb_putc
-_nopre: lda fs_type
+_nopre: lda fs_big
+        beq +
+        jmp _bigd
++       lda fs_type
         cmp #'x'
         beq _hex
         cmp #'X'
@@ -248,8 +269,14 @@ _hexu:  lda sbp
         pha
         lda #16
         sta t6
-        jsr sb_radix
-        pla
+        lda fs_big
+        beq +
+        lda r2
+        ldx r2+1
+        jsr big_digits
+        bra ++
++       jsr sb_radix
++       pla
         sta fp1+1
         pla
         sta fp1
@@ -287,6 +314,36 @@ _float: lda fs_align
         lda #'>'
         sta fs_align
 +       jsr format_float
+        bra _body
+_bigd:  lda fs_type                     ; a big int's digits
+        cmp #'X'
+        beq _hexu
+        ldx #16
+        cmp #'x'
+        beq _bd
+        ldx #8
+        cmp #'o'
+        beq _bd
+        ldx #2
+        cmp #'b'
+        beq _bd
+        ldx #10
+        stx t6
+        lda fs_comma
+        beq _bd
+        lda sbp                         ; with thousands separators
+        sta t1
+        lda sbp+1
+        sta t1+1
+        lda r2
+        ldx r2+1
+        jsr big_digits
+        jsr sb_commas_t1
+        bra _body
+_bd:    stx t6
+        lda r2
+        ldx r2+1
+        jsr big_digits
         bra _body
 _notint:
         lda fs_align
@@ -448,6 +505,8 @@ sb_int_commas:
         sta t1+1
         pla
         sta t1
+; sb_commas_t1 - the digits from t1 to the end of the string builder: with commas
+sb_commas_t1:
         ; digits t1..sbp: take them as a string, then re-emit with commas
         lda t1
         ldx t1+1

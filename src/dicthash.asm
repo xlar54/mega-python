@@ -502,7 +502,10 @@ _heap:  sta t6
         bne +
         jmp _inst
 +       rts                             ; anything else: by identity
-_int:   jsr int_val
+_int:   jsr is_big
+        bcc +
+        jmp big_hash
++       jsr int_val
         lda acc
         and acc+1
         and acc+2

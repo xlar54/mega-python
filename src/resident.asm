@@ -321,6 +321,7 @@ TAIL_I          = 6                     ; interpreter setup (py_reset)
 TAIL_X          = 7                     ; *args / **kwargs binding, f(*a, **k) calls
 TAIL_T          = 8                     ; sets
 TAIL_M          = 9                     ; classes: bases, MRO
+TAIL_N          = 10                    ; big ints
 ; a stub for the tail routine target
 TAILCALL .macro tail, target
         jsr tcall
@@ -414,6 +415,7 @@ tail_src:
         .byte <OVL_X_ATTIC, >OVL_X_ATTIC, (OVL_X_ATTIC >> 16) & 15, OVL_X_ATTIC >> 20
         .byte <OVL_T_ATTIC, >OVL_T_ATTIC, (OVL_T_ATTIC >> 16) & 15, OVL_T_ATTIC >> 20
         .byte <OVL_M_ATTIC, >OVL_M_ATTIC, (OVL_M_ATTIC >> 16) & 15, OVL_M_ATTIC >> 20
+        .byte <OVL_N_ATTIC, >OVL_N_ATTIC, (OVL_N_ATTIC >> 16) & 15, OVL_N_ATTIC >> 20
 
 ; compile - compile_source with the compiler overlay in the window
 compile:

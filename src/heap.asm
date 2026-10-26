@@ -40,6 +40,7 @@ F_INTERN        = $20
 F_SET           = $10                   ; (dicts) a set: the GC and len() see a dict
 F_PROPS         = $10                   ; (classes) it or a base holds a property
 F_FROZEN        = $08                   ; (sets) a frozenset
+F_BIG           = $10                   ; (ints) a big int (bigint.asm)
 
 R_NULL          = 0
 R_NONE          = 2

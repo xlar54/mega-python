@@ -609,9 +609,12 @@ bi_int:
         jmp f_int_result
 +       lda r2
         ldx r2+1
+        jsr is_big
+        bcs +
         jsr int_val
         bcs _bad
         jmp int_new
++       rts                             ; (a big int as it is)
 _bad:   #RAISE EXC_TYPE, "int() argument must be a string or a number"
 _str:   lda #10
         sta t6
@@ -622,11 +625,18 @@ _str:   lda #10
         jsr need_int
         lda acc
         sta t6
-+       lda r2
++       lda t6                          ; (the base asked for, for a second try)
+        pha
+        lda r2
         ldx r2+1
         jsr parse_int
+        pla
         bcs +
         jmp int_new
++       sta t6                          ; beyond 32 bits? (tail N)
+        jsr big_parse
+        bcs +
+        rts
 +       jsr sb_mark_t5
         #SBPRINT "invalid literal for int(): "
         lda r2
@@ -832,14 +842,25 @@ bi_abs:
         #ARG 0
         jmp float_abs
 +       #ARG 0
+        sta r2
+        stx r2+1
+        jsr is_big
+        bcs _big
         jsr need_int
         bit acc+3
         bpl +
         jsr acc_neg
         bit acc+3
         bpl +
-        jmp int_overflow
+_neg:   lda #OP_NEG                     ; abs(-2^31), a negative big int: tail N
+        jmp big_unary
 +       jmp int_new
+_big:   ldz #5                          ; (is_big pointed p0 at it)
+        lda [p0],z
+        bmi _neg
+        lda r2
+        ldx r2+1
+        rts
 
 ; min/max(iterable) or min/max(a, b, ...)
 bi_min:
@@ -1388,8 +1409,16 @@ bi_bin:
 radix:  sta t6
         #NARGS 1, 1
         #ARG 0
-        jsr need_int
-        lda sbp
+        sta r2
+        stx r2+1
+        jsr is_big
+        bcc +
+        ldz #5                          ; a big int: its sign (digits from tail N)
+        lda [p0],z
+        sta acc+3
+        bra ++
++       jsr need_int
++       lda sbp
         pha
         lda sbp+1
         pha
@@ -1409,8 +1438,14 @@ radix:  sta t6
         beq +
         lda #'b'
 +       jsr sb_putc
-        jsr sb_radix
-        plx
+        lda r2
+        ldx r2+1
+        jsr is_big
+        bcc +
+        jsr big_digits
+        bra ++
++       jsr sb_radix
++       plx
         pla
         jmp sb_take
 
@@ -1465,6 +1500,33 @@ bi_divmod:
         jsr is_float
         bcc ++
 +       jmp float_divmod
++       #ARG 0
+        sta r2
+        stx r2+1
+        #ARG 1
+        sta r3
+        stx r3+1
+        jsr big_either                  ; a big int: // and % in tail N
+        bcc +
+        lda #BOP_FLOORDIV
+        sta bop
+        jsr big_binop
+        #PUSH
+        #ARG 0
+        sta r2
+        stx r2+1
+        #ARG 1
+        sta r3
+        stx r3+1
+        lda #BOP_MOD
+        sta bop
+        jsr big_binop
+        sta r3
+        stx r3+1
+        #POP
+        sta r2
+        stx r2+1
+        jmp tuple2
 +       #ARG 1
         jsr need_int
         ldq acc
@@ -1617,6 +1679,8 @@ bi_hash:
         #ARG 0
         sta r2
         stx r2+1
+        jsr is_big                      ; (a big int: obj_hash's 16 bits)
+        bcs _obj
         jsr int_val
         bcs +
         lda acc                         ; -1 hashes as -2
@@ -1963,7 +2027,10 @@ bi_round:
         bcc +
         jmp float_round
 +       #ARG 0
-        jsr need_int
+        jsr is_big                      ; (a big int as it is)
+        bcc +
+        rts
++       jsr need_int
         jmp int_new
 
 bi_object:

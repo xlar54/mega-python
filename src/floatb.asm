@@ -369,11 +369,37 @@ xb_bi_pow:
         lda #BOP_POW
         sta bop
         jmp binop
-_mod:   ; (base ** exp) % mod by square-and-multiply, reducing each step
+_mod:   ; (base ** exp) % mod by square-and-multiply, reducing each step: in 32 bits
+        ; when the modulus is below 46341 (its products fit), else with int objects
+        ldx #4
+-       phx
+        jsr _argx
+        jsr is_big
+        plx
+        bcc +
+        jmp pm_objects
++       dex
+        dex
+        bpl -
         #ARG 2
         jsr need_int
         ldq acc
         stq pm_mod
+        bit acc+3
+        bpl +
+        jsr acc_neg
++       lda acc+3
+        ora acc+2
+        bne +
+        lda acc+1
+        cmp #>46341
+        bcc ++
+        bne +
+        lda acc
+        cmp #<46341
+        bcc ++
++       jmp pm_objects
++
         #ARG 1
         jsr need_int
         ldq acc
@@ -429,12 +455,117 @@ _done:  ldq pm_res
         stq acc
         jmp int_new
 _mulmod:
-        jsr acc_mul
-        bcc +
-        jmp int_overflow
-+       ldq pm_mod
+        jsr acc_mul                     ; (no overflow: both are below 46341)
+        ldq pm_mod
         stq acc2
         jsr acc_divmod
         ldq acc3
         stq acc
         rts
+_argx:  lda argv,x                      ; X = 2 * n -> A/X = argument n
+        pha
+        lda argv+1,x
+        tax
+        pla
+        rts
+
+; pm_objects - pow(base, exp, mod) with int objects of any size: binop's * // % >> on
+; the value stack [mod][exp][base][result]
+pm_objects:
+        #ARG 1
+        jsr is_big
+        bcc +
+        ldz #5
+        lda [p0],z
+        bra ++
++       jsr need_int
+        lda acc+3
++       bpl +
+        #RAISE EXC_VALUE, "pow() negative exponent with a modulus"
++       #ARG 2
+        #PUSH
+        #ARG 1
+        #PUSH
+        lda #1                          ; ([mod] is slot 1)
+        sta pm_depth
+        #ARG 0                          ; base % mod
+        sta r2
+        stx r2+1
+        jsr pm_mod_r
+        #PUSH
+        lda #3                          ; result = 1
+        ldx #0
+        #PUSH
+        lda #3                          ; ([mod] is slot 3 from now on)
+        sta pm_depth
+_loop:  #PEEK 2                         ; exp = 0: done
+        cpx #0
+        bne +
+        cmp #1
+        beq _done
++       sta r2                          ; exp & 1: result = result * base % mod
+        stx r2+1
+        lda #3
+        sta r3
+        lda #0
+        sta r3+1
+        lda #BOP_AND
+        jsr pm_op
+        cpx #0
+        bne +
+        cmp #1
+        beq _sq
++       #PEEK 0
+        sta r2
+        stx r2+1
+        #PEEK 1
+        jsr pm_mulmod
+        #POKE 0
+_sq:    #PEEK 2                         ; exp >>= 1
+        sta r2
+        stx r2+1
+        lda #3
+        sta r3
+        lda #0
+        sta r3+1
+        lda #BOP_RSHIFT
+        jsr pm_op
+        #POKE 2
+        #PEEK 1                         ; base = base * base % mod
+        sta r2
+        stx r2+1
+        #PEEK 1
+        jsr pm_mulmod
+        #POKE 1
+        bra _loop
+_done:  #PEEK 0                         ; (mod 1: 0)
+        sta r2
+        stx r2+1
+        jsr pm_mod_r
+        #DROP 4
+        rts
+; pm_mulmod - r2 * A/X % mod
+pm_mulmod:
+        sta r3
+        stx r3+1
+        lda #BOP_MUL
+        jsr pm_op
+        sta r2
+        stx r2+1
+pm_mod_r:                               ; r2 % mod
+        jsr pm_find
+        lda #BOP_MOD
+pm_op:  sta bop
+        jmp binop
+; pm_find - r3 = [mod] (stack slot pm_depth)
+pm_find:
+        lda pm_depth
+        asl a
+        tay
+        lda (vsp),y
+        sta r3
+        iny
+        lda (vsp),y
+        sta r3+1
+        rts
+pm_depth:       .byte 0

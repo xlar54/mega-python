@@ -583,8 +583,120 @@ _big:   ; too big for an int: a float if a '.' or exponent follows the digits
         cmp #'e'
         beq lx_float
 _toobig:
+        jmp lx_bigint
+
+; lx_bigint - an int literal beyond 32 bits (base t1): a big int object (bigint.asm's
+; form, made here: overlay C cannot reach tail N), as a TK_FLOAT token (a constant)
+LB_MAX          = 210                   ; (bigint.asm's BG_MAX)
+lb_len:         .byte 0
+lb_carry:       .byte 0
+lb_d:           .byte 0
+lx_bigint:
+        ldx #3
+-       lda tok_start,x
+        sta lx_ptr,x
+        dex
+        bpl -
+        lda t1
+        cmp #10
+        beq +
+        inw lx_ptr                      ; (past 0x, 0o, 0b)
+        inw lx_ptr
++       lda #<BIGNUM
+        sta bnA
+        lda #>BIGNUM
+        sta bnA+1
+        lda #`BIGNUM
+        sta bnA+2
+        lda #0
+        sta bnA+3
+        sta lb_len
+        tay
+        ldz #0
+-       sta [bnA],z
+        inz
+        bne -
+        ldx #3
+-       sta MULTINA,x
+        sta MULTINB,x
+        dex
+        bpl -
+_dig:   #LXC
+        cmp #'_'
+        beq _next
+        jsr digit_value
+        bcs _end
+        cmp t1
+        bcs _end
+        sta lb_carry                    ; value = value * base + digit
+        lda t1
+        sta MULTINB
+        ldz #0
+-       cpz lb_len
+        beq +
+        lda [bnA],z
+        sta MULTINA
+        clc
+        lda MULTOUT
+        adc lb_carry
+        sta [bnA],z
+        lda MULTOUT+1
+        adc #0
+        sta lb_carry
+        inz
+        bra -
++       lda lb_carry
+        beq _next
+        sta [bnA],z
+        inc lb_len
+        lda lb_len
+        cmp #LB_MAX+1
+        bcc _next
         jsr syntax_error
-        .text "integer literal too large (ints are 32-bit)", 0
+        .text "integer literal too large (at most 505 digits)", 0
+_next:  inw lx_ptr
+        bra _dig
+_end:   lda #TK_FLOAT
+        sta tok
+        lda lx_scan
+        bne _rts
+        clc
+        lda lb_len
+        adc #6
+        sta alloc_size
+        lda #0
+        sta alloc_size+1
+        lda #T_INT
+        jsr alloc
+        ldz #1
+        lda [p0],z
+        ora #F_BIG
+        sta [p0],z
+        ldz #4
+        lda lb_len
+        sta [p0],z
+        inz
+        lda #0
+        sta [p0],z
+        ldx #0
+-       txa
+        taz
+        lda [bnA],z
+        pha
+        txa
+        clc
+        adc #6
+        taz
+        pla
+        sta [p0],z
+        inx
+        cpx lb_len
+        bne -
+        lda p0
+        sta tok_ref
+        lda p0+1
+        sta tok_ref+1
+_rts:   rts
 
 ; a float literal: parsed again from its start
 lx_float:
