@@ -156,6 +156,10 @@ builtin_method:
         ldy #>meth_property
         cmp #T_DESC
         beq _search
+        ldx #<meth_generator
+        ldy #>meth_generator
+        cmp #T_GEN
+        beq _search
         sec
         rts
 _search:
@@ -255,8 +259,8 @@ builtin_type_of_r2:
 type_builtin:
         .byte B_NONETYPE, B_INT, B_STR, B_LIST, B_TUPLE, B_DICT, B_NONETYPE, B_FUNCTION
         .byte B_FUNCTION, B_FUNCTION, B_TYPE, $ff, B_RANGE, B_OBJECT, B_FLOAT, B_NONETYPE
-        .byte B_BOOL, B_OBJECT, B_OBJECT, B_TEXTIOWRAPPER, B_MODULE, B_SET, B_FROZENSET
-        .byte B_PROPERTY
+        .byte B_BOOL, B_OBJECT, B_OBJECT, B_TEXTIOWRAPPER, B_MODULE, B_PROPERTY
+        .byte B_GENERATOR, B_SET, B_FROZENSET
 
 ; put_str - print string A/X
 put_str:
@@ -1511,6 +1515,8 @@ bi_next:
         bra _next
 +       cmp #T_ITER
         beq +
+        cmp #T_GEN
+        beq +
         #RAISE EXC_TYPE, "object is not an iterator"
 +       #ARG 0
 _next:  jsr iter_next
@@ -1910,6 +1916,7 @@ bi_round:
         jmp int_new
 
 bi_object:
+bi_gentype:
 bi_moduletype:
 bi_filetype:
 bi_nonetype:

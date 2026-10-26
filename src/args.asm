@@ -16,6 +16,7 @@
 ;=======================================================================================
 FF_VARARGS      = 1
 FF_VARKW        = 2
+FF_GEN          = 4                     ; it has a yield: calling it makes a generator
 
 ba_slots:       .fill 2 * 48            ; the parameters being bound
 ba_npos:        .byte 0                 ; positional parameters
@@ -770,4 +771,229 @@ _f:     lda r0                          ; the callable (and self)
         jsr clear_rregs
         lda ba_flags                    ; C set: a method call
         lsr a
+        rts
+
+;---------------------------------------------------------------------------------------
+; generators (gen.asm): saving and restoring the exception handlers of a generator
+; that yields inside a try
+;---------------------------------------------------------------------------------------
+; xg_handlers_in - (gen_resume) p0 = generator: push its saved handlers (for the frame
+; just pushed)
+xg_handlers_in:
+        ldz #13
+        lda [p0],z
+        beq _done
+        sta gen_c
+        asl                             ; room: 8 bytes each
+        asl
+        asl
+        clc
+        adc hsp
+        lda hsp+1
+        adc #0
+        cmp #>(HSTACK_END - 8)
+        bcc +
+        jmp raise_recursion
++       ldz #8
+        lda [p0],z
+        sta p1
+        inz
+        lda [p0],z
+        sta p1+1
+        ldy #4                          ; Y = offset in the array
+_next:  tya
+        taz
+        lda [p1],z                      ; ip
+        ldz #0
+        sta [hsp],z
+        tya
+        inc a
+        taz
+        lda [p1],z
+        ldz #1
+        sta [hsp],z
+        iny
+        iny
+        jsr _off                        ; vsp = result slot - offset
+        ldz #2
+        sta [hsp],z
+        inz
+        txa
+        sta [hsp],z
+        inz
+        lda frp                         ; frp: this frame's
+        sta [hsp],z
+        inz
+        lda frp+1
+        sta [hsp],z
+        iny
+        iny
+        jsr _off                        ; vfp
+        ldz #6
+        sta [hsp],z
+        inz
+        txa
+        sta [hsp],z
+        iny
+        iny
+        clc
+        lda hsp
+        adc #8
+        sta hsp
+        bcc +
+        inc hsp+1
++       dec gen_c
+        bne _next
+_done:  rts
+; A/X = result slot - the word at p1 + Y
+_off:   tya
+        taz
+        sec
+        lda c_slot
+        sbc [p1],z
+        pha
+        inz
+        lda c_slot+1
+        sbc [p1],z
+        tax
+        pla
+        rts
+
+; xg_handlers_out - (gen_handlers_out) A = gen_c handlers of the frame: into an array
+; of the generator gen_ref, and off the handler stack
+xg_handlers_out:
+       sta nitems                      ; 3 words each
+        asl
+        clc
+        adc nitems
+        sta nitems
+        lda #0
+        sta nitems+1
+        jsr arr_new
+        sta t1
+        stx t1+1
+        jsr gen_p0
+        ldz #8
+        lda t1
+        sta [p0],z
+        inz
+        lda t1+1
+        sta [p0],z
+        lda t1
+        sta p1
+        lda t1+1
+        sta p1+1
+        lda gen_c                       ; the oldest first: from hsp - 8 * count
+        asl
+        asl
+        asl
+        sta t0
+        sec
+        lda hsp
+        sbc t0
+        sta hsp
+        sta fp1
+        lda hsp+1
+        sbc #0
+        sta hsp+1
+        sta fp1+1
+        ldy #4
+_copy:  ldz #0                          ; ip
+        lda [fp1],z
+        jsr _put
+        ldz #1
+        lda [fp1],z
+        jsr _put
+        sec                             ; result slot - vsp
+        ldz #2
+        lda c_slot
+        sbc [fp1],z
+        pha
+        inz
+        lda c_slot+1
+        sbc [fp1],z
+        tax
+        pla
+        jsr _put
+        txa
+        jsr _put
+        sec                             ; result slot - vfp
+        ldz #6
+        lda c_slot
+        sbc [fp1],z
+        pha
+        inz
+        lda c_slot+1
+        sbc [fp1],z
+        tax
+        pla
+        jsr _put
+        txa
+        jsr _put
+        clc
+        lda fp1
+        adc #8
+        sta fp1
+        bcc +
+        inc fp1+1
++       dec gen_c
+        bne _copy
+        rts
+_put:   phz
+        pha
+        tya
+        taz
+        pla
+        sta [p1],z
+        plz
+        iny
+        rts
+
+; g.send(value): resume it with value as its yield's result -> the next value it yields
+; (StopIteration when it ends); a new generator takes only None
+xg_send:
+        #NARGS 2, 2
+        #ARG 0
+        sta gen_ref
+        stx gen_ref+1
+        jsr gen_p0
+        ldz #12
+        lda [p0],z
+        cmp #GS_NEW
+        bne +
+        lda argv+3
+        bne _new
+        lda argv+2
+        cmp #R_NONE
+        beq +
+_new:   #RAISE EXC_TYPE, "can't send non-None value to a just-started generator"
++       lda argv+2
+        sta gen_sent
+        lda argv+3
+        sta gen_sent+1
+        #ARG 0
+        jsr gen_send_native
+        bcs +
+        rts
++       #RAISE EXC_STOPITER, ""
+
+; g.close(): it is finished (as CPython, unless it is running; its finally blocks do
+; not run)
+xg_close:
+        #NARGS 1, 1
+        #ARG 0
+        sta gen_ref
+        stx gen_ref+1
+        jsr gen_p0
+        ldz #12
+        lda [p0],z
+        cmp #GS_RUN
+        bne +
+        jsr gen_alive
+        bcc +
+        #RAISE EXC_VALUE, "generator already executing"
++       jsr gen_p0
+        jsr gen_end
+        lda #R_NONE
+        ldx #0
         rts

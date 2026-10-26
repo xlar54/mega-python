@@ -117,8 +117,12 @@ BUILTINS += [(n, l, "m", "frozenset") for n, l in SET_READ]
 # property methods (desc.asm)
 BUILTINS += [("setter", "desc_setter", "m", "property"),
              ("getter", "desc_getter", "m", "property")]
+# generators (gen.asm)
+BUILTINS += [("generator", "gentype", "T"),
+             ("send", "gen_send", "m", "generator"), ("close", "gen_close", "m", "generator")]
 
-OWNERS = ["list", "tuple", "str", "dict", "file", "set", "frozenset", "property"]
+OWNERS = ["list", "tuple", "str", "dict", "file", "set", "frozenset", "property",
+          "generator"]
 # other names the interpreter needs as symbols (modules and their constants)
 NAMES = "math pi e tau inf nan os path".split()
 

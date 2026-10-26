@@ -16,6 +16,8 @@
 FR_CTOR         = 1                     ; return the instance (arg 0), not the result
 FR_NESTED       = 2                     ; return to native code (vm_call_nested)
 FR_EXTRA        = 4                     ; the result slot is one below the callable
+FR_GEN          = 8                     ; a generator's frame (gen.asm), resumed by
+FR_FORIT        = 16                    ; FOR_ITER (else FR_NESTED: native code)
 
 PUSH    .macro                          ; push A/X
         dew vsp
@@ -310,6 +312,7 @@ op_table:
         .word op_load_deref, op_store_deref, op_enter_env, op_set_closure    ; 84-87 (env.asm)
         .word op_load_classname, op_end_class                                ; 88-89
         .word op_pack_args, op_ex_arg, op_call_ex                            ; 90-92 (args.asm)
+        .word op_yield                                                       ; 93 (gen.asm)
 
 op_bad:
         #RAISE EXC_SYSTEM, "bad opcode"
@@ -878,6 +881,7 @@ call_py:
         stx p0+1
         ldz #18
         lda [p0],z
+        and #FF_VARARGS | FF_VARKW
         inz
         ora [p0],z
         beq _plain
@@ -958,6 +962,15 @@ _locals:
         #PUSH
         inc argc
         bra -
++       lda c_func                      ; a generator function: the generator instead
+        sta p0
+        lda c_func+1
+        sta p0+1
+        ldz #18
+        lda [p0],z
+        and #FF_GEN
+        beq +
+        jmp gen_create
 +       ; stack and frame limits
         lda vsp+1
         cmp #>(VSTACK + $100)
@@ -1079,7 +1092,11 @@ op_return:
         lda fp2+1
         sta hsp+1
         bra -
-_ret:   lda r0
+_ret:   lda c_flags
+        and #FR_GEN
+        beq +
+        jmp gen_return                  ; (a generator ends)
++       lda r0
         ldx r0+1
         jmp store_result
 

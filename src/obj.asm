@@ -1671,7 +1671,7 @@ repr_tab:
         .word repr_builtin, repr_bound, repr_class, inst_repr
         .word repr_range, repr_iter, repr_float, repr_none
         .word repr_bool, repr_slice, repr_null, repr_file, repr_module
-        .word repr_set, repr_set, repr_desc
+        .word repr_desc, repr_gen, repr_set, repr_set
 
 repr_null:
         SBPRINT "<NULL>"
@@ -1963,6 +1963,7 @@ repr_func:
         sta p0
         stx p0+1
         SBPRINT "<function "
+repr_fname:                             ; the name of the function p0, then '>'
         ldz #9
         lda [p0],z
         tax
@@ -1971,6 +1972,20 @@ repr_func:
         jsr sb_put_str
         lda #'>'
         jmp sb_putc
+
+repr_gen:                               ; <generator object NAME> (its function's name)
+        sta p0
+        stx p0+1
+        ldz #4
+        lda [p0],z
+        pha
+        inz
+        lda [p0],z
+        sta p0+1
+        pla
+        sta p0
+        SBPRINT "<generator object "
+        bra repr_fname
 
 repr_builtin:
         sta p0

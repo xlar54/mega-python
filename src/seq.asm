@@ -882,6 +882,8 @@ get_iter:
         jsr type_of
         cmp #T_ITER
         beq _self
+        cmp #T_GEN                      ; a generator is its own iterator
+        beq _self
         ldy #IT_SEQ
         cmp #T_LIST
         beq _new
@@ -953,6 +955,11 @@ _inst:  ; __iter__ returns the iterator; we drive it with __next__
 
 op_for_iter:
         #PEEK 0
+        jsr type_of
+        cmp #T_GEN
+        bne +
+        jmp gen_for_iter                ; (runs it in the loop, as a call: gen.asm)
++       #PEEK 0
         jsr iter_next
         bcs _end
         #PUSH
@@ -969,7 +976,14 @@ _end:   #DROP 1
 iter_next:
         sta p2
         stx p2+1
-        ldz #4
+        ldz #0
+        lda [p2],z
+        cmp #T_GEN
+        bne +
+        lda p2
+        ldx p2+1
+        jmp gen_next_native
++       ldz #4
         lda [p2],z
         asl
         tax

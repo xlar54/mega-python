@@ -2020,6 +2020,69 @@ lambda_expr:
         rts
 lambda_text:    .text "<lambda>", 0
 
+; yield_expr - 'yield' [exprlist] or 'yield from' expr (the pre-scan made the function
+; a generator). yield from is the loop  GET_ITER; t: FOR_ITER x; YIELD_VALUE; POP;
+; JUMP t; x: None  (values sent to it are dropped, and its result is None).
+yf_exit:        .word 0
+yield_expr:
+        jsr scope_kind
+        cmp #SK_FUNC
+        beq +
+        jsr syntax_error
+        .text "'yield' outside function", 0
++       ldy #SC_FLAGS
+        lda (sc),y
+        beq +
+        jsr syntax_error
+        .text "yield in a lambda is not supported", 0
++       jsr lex
+        lda tok
+        cmp #KW_FROM
+        beq _from
+        ldx #yield_ends_n - 1           ; nothing follows: None
+-       cmp yield_ends,x
+        beq _none
+        dex
+        bpl -
+        jsr exprlist
+        bra _emit
+_none:  lda #R_NONE
+        ldx #0
+        jsr emit_const
+_emit:  lda #OP_YIELD_VALUE
+        jsr emit
+_done:  lda #$ff                        ; (not an assignment target)
+        sta c_last_op+1
+        rts
+_from:  jsr lex
+        jsr expr
+        lda #OP_GET_ITER
+        jsr emit
+        jsr c_here                      ; the loop top
+        pha
+        phx
+        ldy #OP_FOR_ITER
+        jsr emit_jump
+        sta yf_exit
+        stx yf_exit+1
+        lda #OP_YIELD_VALUE
+        jsr emit
+        lda #OP_POP
+        jsr emit
+        plx
+        pla
+        ldy #OP_JUMP
+        jsr emit_op_word
+        lda yf_exit
+        ldx yf_exit+1
+        jsr patch_here
+        lda #R_NONE                     ; its result
+        ldx #0
+        jsr emit_const
+        bra _done
+yield_ends:     .byte TK_NEWLINE, TK_SEMI, TK_EOF, TK_RPAREN, TK_RBRACK, TK_RBRACE
+yield_ends_n = * - yield_ends
+
 ; function_body - after a def's name ('(' next) or after 'lambda' (Y = 1).
 ; A/X = the name ref, fb_sym = the name's symbol. Emits the defaults, MAKE_FUNCTION,
 ; the store of the name (def), and the body (jumped over).
@@ -2205,6 +2268,12 @@ _ndef:  jsr fb_defaults                 ; the defaults tuple (unless '*' built i
         jsr lx_pop
         pla
         sta fb_tmp
+        lda ps_yield                    ; a yield: a generator function
+        beq _cells
+        ldy #SC_FFLAGS
+        lda (sc),y
+        ora #FF_GEN
+        sta (sc),y
 _cells: jsr fb_cells
         ; MAKE_FUNCTION code nargs nlocals name ndefaults params
         lda #1
@@ -2247,7 +2316,7 @@ _cells: jsr fb_cells
         jsr emit_word
         ldy #SC_FFLAGS                  ; *args / **kwargs, keyword-only parameters
         lda (sc),y
-        and #FF_VARARGS | FF_VARKW
+        and #FF_VARARGS | FF_VARKW | FF_GEN
         jsr emit
         ldy #SC_NKWONLY
         lda (sc),y
@@ -2651,6 +2720,7 @@ ps_last:        .word 0                 ; last name seen
 ps_single:      .byte 0                 ; one-line body (ends at NEWLINE)
 ps_wcount:      .byte 0                 ; with statements seen
 ps_lam:         .byte 0                 ; in a lambda (to the end of the statement)
+ps_yield:       .byte 0                 ; the body has a yield (not 0)
 PS_INNER_N      = 64
 ps_ninner:      .byte 0
 ps_allcells:    .byte 0                 ; ps_inner overflowed: every local is a cell
@@ -2716,6 +2786,7 @@ ps_inner_reset:
 prescan:
         jsr ps_inner_reset
         lda #0
+        sta ps_yield
         sta ps_wcount
         sta ps_level
         sta ps_brk
@@ -2836,6 +2907,10 @@ _notname:
         bne +
         lda #1
         sta ps_lam
+        jmp _next
++       cmp #KW_YIELD                   ; the function is a generator
+        bne +
+        sta ps_yield
         jmp _next
 +       cmp #KW_DEF
         bne +
@@ -4192,6 +4267,9 @@ expr:
         cmp #KW_LAMBDA
         bne +
         jmp lambda_expr
++       cmp #KW_YIELD
+        bne +
+        jmp yield_expr
 +       jsr c_here
         pha
         phx

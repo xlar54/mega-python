@@ -11,8 +11,14 @@ Language
 * Arbitrary-precision ints (now 32-bit with OverflowError).
 * Sets: methods with several other iterables (`a.union(b, c)`), `|=` and friends
   changing the set in place, CPython's hash order.
-* Generators and `yield` (a frame object that keeps its locals off the value stack).
-  Then real lazy `map`/`filter`/`zip`/generator expressions and `dict` views.
+* Generator expressions as real generators (now lists: `sum(x * x for x in
+  range(10**5))` needs the whole list), then lazy `map`/`filter` and `dict` views.
+* Generators: `throw()`, `close()` raising `GeneratorExit` inside (so `finally` blocks
+  run), `yield from` passing `send` values on and giving the inner return value,
+  `StopIteration.value`, PEP 479 (`StopIteration` inside a generator -> `RuntimeError`).
+* Error messages that name the type: "object of type 'int' has no len()", "'int'
+  object is not subscriptable" (now "object has no len()", "object is not
+  subscriptable").
 * Closures: `del` of a captured variable; the free variable's name in the
   "cannot access free variable" NameError.
 * Unpacking in displays (`[*a, *b]`, `{**d, 'k': 1}`), positional-only parameters
@@ -55,8 +61,8 @@ Environment
 Memory
 ------
 
-* Code space (see the sizes `build.bat` prints): part 1 has about 1.9 KB free, overlay R
-  about 0.9 KB, part 2 almost nothing (new resident code must go elsewhere); each tail has room left, and more tails can be
+* Code space (see the sizes `build.bat` prints): part 1, overlay R and part 2 each
+  have only about 100-150 bytes left; new code must go in a tail or overlay C; each tail has room left, and more tails can be
   added (`docs/INTERNALS.md`, "Tails"). More code should go into tails (only code that never
   runs Python code; see `docs/INTERNALS.md`) or overlay C (compile time).
 

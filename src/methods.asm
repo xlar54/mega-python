@@ -693,3 +693,163 @@ bi_dict_copy:
         plx
         pla
         rts
+
+;---------------------------------------------------------------------------------------
+; generators: the parts of gen.asm that only run with overlay R in
+; gen_create - (call_py, with the locals pushed; p0 = c_func) the generator instead of
+; the call: its locals go in the tuple, and it is the call's result
+;---------------------------------------------------------------------------------------
+gen_create:
+        ldz #7
+        lda [p0],z                      ; nlocals
+        sta nitems
+        lda #0
+        sta nitems+1
+        jsr tuple_new                   ; (may collect: the locals are on the stack)
+        ldz #4
+        lda [p0],z
+        beq +
+        asl
+        sta t0
+        lda #0
+        sta t0+1
+        lda vsp
+        ldx vsp+1
+        clc
+        jsr gen_xfer
++       lda p0
+        ldx p0+1
+        #PUSH                           ; (kept while the generator is made)
+        lda #GEN_SIZE
+        sta alloc_size
+        lda #0
+        sta alloc_size+1
+        lda #T_GEN
+        jsr alloc                       ; (the body is zeroed: GS_NEW)
+        ldz #4
+        lda c_func
+        sta [p0],z
+        inz
+        lda c_func+1
+        sta [p0],z
+        #POP
+        ldz #6
+        sta [p0],z
+        inz
+        txa
+        sta [p0],z
+        lda c_func                      ; it starts at the function's code
+        sta p1
+        lda c_func+1
+        sta p1+1
+        ldz #4
+        lda [p1],z
+        ldz #10
+        sta [p0],z
+        ldz #5
+        lda [p1],z
+        ldz #11
+        sta [p0],z
+        lda c_slot                      ; the locals go; the generator is the result
+        sta vsp
+        lda c_slot+1
+        sta vsp+1
+        lda p0
+        ldx p0+1
+        jmp store_result
+
+;---------------------------------------------------------------------------------------
+; gen_alive - p0 = generator gen_ref, state GS_RUN: C set if its frame is still on the
+; frame stack (it is running), clear if an exception dropped it
+;---------------------------------------------------------------------------------------
+gen_alive:
+        ldz #14
+        lda [p0],z
+        sta fp2
+        inz
+        lda [p0],z
+        sta fp2+1
+        lda #<(FSTACK >> 16)
+        sta fp2+2
+        lda #0
+        sta fp2+3
+        lda fp2+1                       ; below the top frame?
+        cmp frp+1
+        bcc +
+        bne _no
+        lda fp2
+        cmp frp
+        bcs _no
++       ldz #6
+        lda [fp2],z
+        and #FR_GEN
+        beq _no
+        ldz #4                          ; and that frame's generator is this one
+        lda [fp2],z
+        sta t0
+        inz
+        lda [fp2],z
+        sta t0+1
+        ldy #2
+        lda (t0),y
+        cmp gen_ref
+        bne _no
+        iny
+        lda (t0),y
+        cmp gen_ref+1
+        bne _no
+        sec
+        rts
+_no:    clc
+        rts
+
+; gen_end - p0 = a generator: it is finished (it lets go of its frame)
+gen_end:
+        lda #GS_DONE
+        ldz #12
+        sta [p0],z
+        lda #0
+        inz
+        sta [p0],z
+        ldz #6
+        sta [p0],z
+        inz
+        sta [p0],z
+        inz
+        sta [p0],z
+        inz
+        sta [p0],z
+        rts
+
+; gen_next_native - A/X = generator -> C clear and A/X = the next value, or C set (it
+; is exhausted). gen_send_native: the same with gen_sent = the value for its yield.
+gen_next_native:
+        ldy #R_NONE
+        sty gen_sent
+        ldy #0
+        sty gen_sent+1
+gen_send_native:
+        #PUSH
+        #NATIVE_SAVE
+        jsr _run
+        sta vcn_a
+        stx vcn_x
+        lda #0
+        rol a
+        sta gen_c
+        #NATIVE_RESTORE
+        #DROP 1
+        lda gen_c
+        lsr a
+        lda vcn_a
+        ldx vcn_x
+        rts
+_run:   jsr lev_enter
+        lda #FR_NESTED
+        jmp gen_resume
+
+;---------------------------------------------------------------------------------------
+; generator methods (gen.asm has the rest; these are in overlay R)
+;---------------------------------------------------------------------------------------
+bi_gen_send:    #TAILCALL TAIL_X, xg_send        ; (args.asm)
+bi_gen_close:   #TAILCALL TAIL_X, xg_close

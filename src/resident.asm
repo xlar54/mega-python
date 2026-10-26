@@ -874,6 +874,7 @@ os_mod:         .word 0                 ; the os module (made at the first impor
         .include "errors.asm"
         .include "opcodes.asm"
         .include "vm.asm"
+        .include "gen.asm"
         .include "arith.asm"
         .include "module.asm"
         .include "fcore.asm"

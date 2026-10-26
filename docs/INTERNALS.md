@@ -15,13 +15,14 @@
 | `errors.asm` | exception classes, raising from native code, tracebacks |
 | `lexer.asm`, `compiler.asm` | tokens with INDENT/DEDENT; the single-pass compiler |
 | `opcodes.asm`, `vm.asm` | bytecode, the dispatch loop, calls, frames, exception unwinding |
+| `gen.asm` | generators: resuming, `YIELD_VALUE`, finishing (the rest is in `methods.asm`, overlay R, and `args.asm`, tail X) |
 | `arith.asm` | operators (32-bit ints via the hardware multiplier/divider), comparisons |
 | `classes.asm` | attributes, method lookup, `isinstance`, `super`, dunder calls (overlay R) |
 | `seq.asm` | subscripts, slices, ranges, iterators (part 2) |
 | `tailcall.asm` | `tcall`: the stubs' way into a tail and back (part 2) |
 | `builtins.asm`, `methods.asm` | builtin functions; list/dict methods, and the stubs of the tail methods |
 | `editor.asm` | the full-screen editor |
-| `fcore.asm`, `fbig.asm` | floats: registers, pack/unpack, float objects; bignums and decimal text -> double |
+| `fcore.asm`, `fbig.asm` | floats: registers, pack/unpack, float objects; bignums and decimal text -> double (`fbig.asm` is in tail A, and again in overlay C for the lexer) |
 | `fmath.asm`, `float.asm` | float arithmetic (+ - * / divmod fmod sqrt floor); operators, conversions, tail entry stubs |
 | `fdtoa.asm`, `floata.asm` | tail A: double -> decimal digits and the repr/format layouts; `float()`, `round()`, `hash()`, `divmod()` |
 | `ftrans.asm`, `floatb.asm` | tail B: exp, log, sin, cos, atan, pow; the `math` module |
@@ -31,7 +32,7 @@
 | `sets.asm` | sets and frozensets (overlay R): operators, methods, `set()`, `BUILD_SET`, repr |
 | `env.asm` | closures (overlay R): the environment opcodes |
 | `desc.asm` | `staticmethod`, `classmethod`, `property` (overlay R), `LOAD_CLASSNAME` |
-| `args.asm` | tail X: binding `*args`/`**kwargs`/keyword-only parameters, `f(*a, **k)` calls |
+| `args.asm` | tail X: binding `*args`/`**kwargs`/keyword-only parameters, `f(*a, **k)` calls; a generator's saved exception handlers, `send()` and `close()` |
 | `strmeth.asm` | tail S: the `str` methods, `list.insert` / `list.reverse` |
 | `fmtsort.asm` | tail P: format specs (`format()`, f-strings), `%`, `str.format`; `sorted()` / `list.sort()` |
 | `module.asm` | modules from the disk: hidden global names, `import` (compile and run), attribute access |
@@ -81,7 +82,7 @@ program may be showing the graphics screen.
 | `$8140000-$816FFFF` | sort scratch |
 | `$8170010` | compiler cut stack |
 | `$8113000` | the hidden symbols of modules -> their plain symbols (`SYM_BASE`) |
-| `$8180000` / `$8190000` | overlay R / overlay C images |
+| `$8180000` / `$8190000` | overlay R / overlay C images (tail A, the end of R, holds `fbig.asm`; C has its own copy, `c_fbig`, for the lexer's float literals) |
 | `$81C0000` | the source of a module being imported |
 | `$81A0000-$81A6FFF` | tail B, H, F, S, P, I, X images, 4 KB each (tail A is the end of R's image) |
 
@@ -365,6 +366,31 @@ It leaves that tuple under the callable, so it stays referenced during the call 
 GC does not see `kwnames`); `ROT2`, `POP` after the call drop it. The compiler keeps
 each call's argument state per nesting level (`ca_*`), so keyword names of a call
 inside another call's arguments do not mix.
+
+## Generators
+
+The pre-scan notes a `yield` in the body; the function gets `FF_GEN` (`T_FUNC` `+18`),
+and `call_py` binds its arguments as usual but then makes a `T_GEN` object
+(`gen_create`) holding its locals in a tuple, instead of running it. `yield x` is
+`YIELD_VALUE`, whose result is the value sent in; `yield from it` compiles to a loop
+(`GET_ITER; FOR_ITER; YIELD_VALUE; POP; JUMP`).
+
+`gen_resume` (`gen.asm`) rebuilds the generator's part of the value stack as
+`[generator][result slot][locals][temporaries]`, so `vfp` is the result slot minus
+`2 * nlocals`, pushes a call frame flagged `FR_GEN`, and runs on at the saved ip.
+`FOR_ITER` resumes a generator inline (`FR_FORIT`: no native recursion, so deep
+`yield from` chains are fine); native code (`iter_next`: `list()`, `sum()`, `next()`,
+`send()`) resumes it in a run level of its own (`FR_NESTED`, like `vm_call_nested`).
+`YIELD_VALUE` copies everything under the result slot into the generator, and the
+handlers of its frame (relative to the result slot, in a raw `T_ARR`: tail X does that
+copying, only when there are any), then returns like `RETURN`; a `RETURN` in a
+generator frame finishes it (`gen_return`). An exception that leaves a generator drops
+its frame without telling it: it still says running, and `gen_alive` checks whether its
+frame is really still on the frame stack. `ENTER_ENV` reads `c_func`, so starting a
+generator sets it to the generator's function.
+
+Type numbers: sets and frozensets (`T_SET`, `T_FSET`, which only `type_of` returns) must
+stay the last types, because code tests `>= T_SET` for "a set or frozenset".
 
 ## Sets
 

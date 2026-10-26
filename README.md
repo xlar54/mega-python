@@ -279,6 +279,7 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_mix` | features combined: closures with `*args`, decorated methods, sets of tuples from comprehensions, nested unpacking in loops |
 | `t_excmix` | exceptions raised from inside closures, decorators, `*args` calls, comprehensions, class bodies and iterators, and what is left working afterwards |
 | `t_gcmix` | the same features while the heap is nearly full (many collections) |
+| `t_generators` | `yield`, `yield from` (also recursive), `send`, `close`, `try`/`finally` across a `yield`, exceptions leaving a generator, a running generator re-entered, generators in closures and methods, driven by `for`, `next`, `zip`, `sorted`, `sum`, `in`, `join`, and leaving a loop then going on |
 | `t_edges` | edge cases: deep recursion through a closure, many parameters and locals, changing a dict or set while iterating it (`RuntimeError`: "changed size", and CPython's "keys changed" when keys are deleted and added), imports inside functions, `RecursionError` and recovering from it, lazy `sum` of a big range |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
@@ -409,7 +410,15 @@ Differences from CPython
 * **Parameters and calls**: `*args`, `**kwargs`, keyword-only parameters (after `*` or
   `*args`), and `f(*iterable, **dict)` in calls work as in CPython (at most 16
   arguments reach a builtin, 48 locals a function).
-* Not supported yet: generators/`yield`, unpacking in displays (`[*a, *b]`,
+* **Generators**: a function with `yield` returns a generator, as in CPython: `for`
+  loops, `next()`, builtins and other generators drive it, `send()` passes a value in,
+  `return` ends it, `yield from` delegates, and `try`/`except`/`finally` blocks may
+  span a `yield`. Differences: `close()` does not run the generator's `finally` blocks,
+  `throw()` is missing, `yield from` drops values sent to it and gives `None` (not the
+  inner generator's return value), `StopIteration` carries no value, a
+  `StopIteration` raised inside a generator is not turned into `RuntimeError`, and
+  `yield` cannot be used in a lambda.
+* Not supported yet: unpacking in displays (`[*a, *b]`,
   `{**d}`), multiple inheritance, `from module import *`, packages (`import a.b`), the
   `bytes` type, attributes on functions (`f.cache = {}`; use a closure or a class).
 * **Modules**: a module's code and name are kept until `run()` or `new()`; a name a
