@@ -50,7 +50,7 @@ BUILTINS = [
     ("float", "float", "t"), ("open", "open", "f"), ("TextIOWrapper", "filetype", "T"),
     ("module", "moduletype", "T"),
     ("NoneType", "nonetype", "T"), ("function", "functype", "T"),
-    ("__init__", "exc_init", "-"),
+    ("__init__", "exc_init", "-"), ("__init__", "obj_init", "-"),
     # MEGA65 / environment
     ("run", "run", "f"), ("edit", "edit", "f"), ("new", "new", "f"),
     ("load", "load", "f"), ("save", "save", "f"), ("files", "files", "f"),
@@ -188,7 +188,7 @@ def main():
         if kind in "MOP":
             cname = "B_%s_" % {"M": "MATH", "O": "OS", "P": "PATH"}[kind] + ident(name)
         if cname in labels:
-            cname += "_%d" % i
+            cname = ("B_" + ident(label)) if kind == "-" else cname + "_%d" % i
         labels.append(cname)
         out.append("%-24s= %d" % (cname, i))
     out.append("NBUILTINS               = %d" % len(BUILTINS))

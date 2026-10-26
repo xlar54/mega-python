@@ -713,7 +713,7 @@ mod_make:
         sta fl_mode
         stx fl_lfn
         phy
-        lda #10
+        lda #14
         sta alloc_size
         lda #0
         sta alloc_size+1

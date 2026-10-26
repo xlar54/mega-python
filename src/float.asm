@@ -19,7 +19,10 @@ num_to_fa:
         rts
 _int:   plx
         pla
-        jsr int_val
+        jsr is_big
+        bcc +
+        jmp big_to_fa
++       jsr int_val
         bcs +
         jsr f_from_int
         clc
@@ -113,9 +116,12 @@ f_int_result:
         cmp #FC_NAN
         bne +
         #RAISE EXC_VALUE, "cannot convert float NaN to integer"
++       lda fa+F_CLS
+        beq +
+        #RAISE EXC_OVERFLOW, "cannot convert float infinity to integer"
 +       jsr f_to_int
         bcc +
-        #RAISE EXC_OVERFLOW, "int too large to convert (ints are 32-bit)"
+        jmp big_from_fa                 ; beyond 32 bits (tail N)
 +       jmp int_new
 
 ;---------------------------------------------------------------------------------------
@@ -295,3 +301,14 @@ import_math:
 +       clc
         rts
 
+
+; big ints (tail N, bigint.asm)
+big_binop:      #TAILCALL TAIL_N, xn_binop      ; r2 <bop> r3 -> A/X
+big_unary:      #TAILCALL TAIL_N, xn_unary      ; A = op, r2 -> A/X
+big_cmp:        #TAILCALL TAIL_N, xn_cmp        ; r2 vs r3 -> A = $ff / 0 / 1
+big_repr:       #TAILCALL TAIL_N, xn_repr       ; A/X -> the string builder
+big_hash:       #TAILCALL TAIL_N, xn_hash       ; A/X -> A/X
+big_to_fa:      #TAILCALL TAIL_N, xn_to_fa      ; A/X -> fa
+big_from_fa:    #TAILCALL TAIL_N, xn_from_fa    ; fa -> A/X
+big_parse:      #TAILCALL TAIL_N, xn_parse      ; r2 = str, t6 = base -> A/X (C: invalid)
+big_digits:     #TAILCALL TAIL_N, xn_digits     ; A/X, t6 = base -> the string builder

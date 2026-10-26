@@ -17,7 +17,7 @@ Python support
 What works (each item as in CPython, apart from the notes in "Differences from
 CPython" below):
 
-* **Types**: `int` (32-bit), `float` (IEEE double), `bool`, `None`, `str`, `list`,
+* **Types**: `int` (any size up to about 500 digits), `float` (IEEE double), `bool`, `None`, `str`, `list`,
   `tuple`, `dict`, `set`, `frozenset`, `range`, slices, files, generators.
 * **Statements**: `if`/`elif`/`else`, `while` and `for` (with `else`), `break`,
   `continue`, `pass`, `def`, `class`, `return`, `del`, `global`, `nonlocal`, `assert`,
@@ -32,7 +32,8 @@ CPython" below):
   and displays (`[*a, *b]`, `{**d, 'k': 1}`) and starred targets (`first, *rest = x`).
 * **Functions**: defaults, keyword arguments, `*args`, `**kwargs`, keyword-only
   parameters, closures and `nonlocal`, decorators, generators (`send`, `throw`, `close`).
-* **Classes**: single inheritance, `super()`, `staticmethod`, `classmethod`, `property`
+* **Classes**: single and multiple inheritance (CPython's C3 method resolution order,
+  `__mro__`, `__bases__`), `super()` (along the MRO), `staticmethod`, `classmethod`, `property`
   (with setters), the operator dunders (`__add__` ... `__radd__`, comparisons,
   `__eq__`/`__hash__`, also against other types), `__str__`/`__repr__`, `__len__`,
   `__bool__`, `__getitem__`/`__setitem__`/`__delitem__`, `__contains__`, `__iter__`/`__next__`, `__call__`,
@@ -61,9 +62,9 @@ CPython" below):
 
 Not supported yet:
 
-* Integers beyond 32 bits, `complex`, `bytes`/`bytearray` (`b'...'` is a `str`),
+* `complex`, `bytes`/`bytearray` (`b'...'` is a `str`),
   `decimal`, `fractions`.
-* Multiple inheritance, subclassing builtin types (`class D(dict)`), metaclasses,
+* Subclassing builtin types (`class D(dict)`), metaclasses, `cls.mro()`,
   `__slots__`, `__getattr__`/`__setattr__` hooks, `property` deleters.
 * `match`, `async`/`await`, positional-only parameters (`/`), `yield` in a lambda,
   `del` of a variable a nested function uses.
@@ -275,6 +276,12 @@ Example programs on the disk:
   saves it again), pretty-printed with `indent`
 * `counter`: `Counter`, `defaultdict` and `deque` on a paragraph (letter and word
   counts with a text bar chart)
+* `mixins`: multiple inheritance: animals built from ability mixins whose methods and
+  `__init__`s chain through `super()`, a diamond where each class runs once, the
+  method resolution order (`__mro__`), a mixin on an exception class, and an
+  inconsistent order being refused
+* `bignums`: big ints: 50!, Fibonacci(300), `2 ** 256` in decimal and hex, digits with
+  commas, `divmod` and a modular power proving a Mersenne prime
 * `recursion`: factorials, memoised Fibonacci (a closure), the Towers of Hanoi,
   permutations and the N queens puzzle (recursive generators with `yield from`), a
   flood fill, flattening nested lists, Ackermann's function and `RecursionError`
@@ -352,6 +359,8 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_edges` | edge cases: deep recursion through a closure, many parameters and locals, changing a dict or set while iterating it (`RuntimeError`: "changed size", and CPython's "keys changed" when keys are deleted and added), imports inside functions, `RecursionError` and recovering from it, lazy `sum` of a big range |
 | `t_blocks` | `finally` on `break`/`continue`/`return` (nested, mixed with `with`, `return` and `break` inside `finally`), `with` passing the exception to `__exit__` and swallowing it, several managers in one `with` |
 | `t_unpack` | `*` and `**` in list / tuple / set / dict displays, starred assignment and `for` targets |
+| `t_bigint` | ints beyond 32 bits: the operators (floored `//` and `%`, `**`, shifts, `&`, `\|`, `^`, `~` on negatives), comparisons, `int()` of strings and floats, literals, `float()`, hashing, `str`/`repr`, `%d`/`%x`/`format` with `,`, `hex`/`bin`/`oct`, `divmod`, `pow` with a modulus |
+| `t_mi` | multiple inheritance: diamonds and the C3 order, `super()` chains through both sides, `__mro__`/`__bases__`, mixins on exceptions, an inconsistent order (`TypeError`), `super().__init__()` reaching `object` |
 | `t_introsp` | `dir`, `vars`, `globals`, `delattr`, `slice` objects and their attributes, `ascii` |
 | `t_strmeth` | the newer `str` methods (`rfind`, `partition`, `rsplit`, `expandtabs`, ...) and methods of builtin types as values |
 | `t_errors` | error messages that name the type, `issubclass` (also of builtin types and `object`), `min`/`max` `default=`, `!r` with a format spec, `#` in format specs, annotated assignments |
@@ -426,7 +435,8 @@ Architecture
   (`opcodes.asm`); a VM (`vm.asm`) with call frames, exception handlers and nested runs
   (native code calling back into Python for `key=`, `__str__`, `__eq__`, ...).
 * **Values** are 16-bit refs: odd = small int (15-bit), 2/4/6 = None/False/True,
-  otherwise an object in the 64 KB heap in bank 4. Bigger ints are boxed 32-bit.
+  otherwise an object in the 64 KB heap in bank 4. Bigger ints are boxed 32-bit, and
+  beyond 32 bits big ints (a sign and up to 210 bytes; `bigint.asm`, tail N).
   Mark-and-sweep garbage collector with a free list (`heap.asm`).
 * **Memory**: interrupts off, ROMs unmapped while Python runs; resident code at
   `$2001-$7FFF` and `$F000-$FEFF`; a 20 KB overlay window at `$8000` holds either the
@@ -444,7 +454,13 @@ Architecture
 Differences from CPython
 ------------------------
 
-* **Integers are 32-bit**: results outside that range raise `OverflowError`.
+* **Integers** have any size up to 505 decimal digits (about 1680 bits); a bigger
+  result raises `OverflowError`. Ints within 32 bits are as fast as before; beyond that
+  the work is done digit by digit (byte by byte), so `2 ** 1000` takes a moment.
+  Indexes, `range()` bounds, repeat counts and the like must fit in 32 bits
+  (`OverflowError`). `/` of two big ints, and big ints mixed with floats, go through
+  floats (CPython divides exactly). `hash()` of a big int is not CPython's. `round()` of
+  an int ignores a negative `ndigits` (`round(1234, -2)` gives 1234).
 * **Floats**: `float` has no methods (`is_integer()`, `hex()`, ...); no `complex` (a
   negative number to a fractional power raises `ValueError`). The `math` functions are
   computed here, not by a C library, so a result can differ from CPython's in the last

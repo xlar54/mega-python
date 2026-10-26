@@ -1498,8 +1498,8 @@ _ok:    lda #0
 ; MAKE_CLASS (vm.asm runs it)
 ;---------------------------------------------------------------------------------------
 xx_make_class:
-        ; base -> cls  (+4 name, +6 base, +8 dict)
-        lda #10
+        ; base -> cls  (+4 name, +6 base, +8 dict, +10 MRO, +12 bases: classm.asm)
+        lda #14
         sta alloc_size
         lda #0
         sta alloc_size+1
@@ -1515,47 +1515,9 @@ xx_make_class:
         inz
         txa
         sta [p0],z
-        #PEEK 0                         ; only a class is a real base (None, object: none)
-        pha
-        phx
-        jsr type_of                     ; (points p0 at the base)
-        plx
-        cmp #T_CLASS
-        beq +
-        cmp #T_BUILTIN                  ; a builtin type: only object
-        bne _nob
-        ldz #4
-        lda [p0],z
-        cmp #B_OBJECT
-        beq _nob
-        jmp raise_subclass              ; (builtins.asm)
-_nob:   pla
-        lda #0
-        tax
-        bra ++
-+       pla
-+       ldy r0
-        sty p0
-        ldy r0+1
-        sty p0+1
-        ldz #6
-        sta [p0],z
-        inz
-        txa
-        sta [p0],z
-        beq +                           ; a base with properties: so has this class
-        sta p1+1
-        dez
-        lda [p0],z
-        sta p1
-        ldz #1
-        lda [p1],z
-        and #F_PROPS
-        ora [p0],z
-        sta [p0],z
-+
-        lda r0
-        ldx r0+1
+        jsr class_bases                 ; the bases (tail M) -> A/X = the class
+        sta r0
+        stx r0+1
         #POKE 0
         jsr dict_new
         sta t0

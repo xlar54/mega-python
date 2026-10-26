@@ -18,7 +18,7 @@ T_ARR           = 6                     ; +4 refs
 T_FUNC          = 7                     ; +4 code, +6 nargs, +7 nlocals, +8 name, +10 defaults, +12 params, +14 closure, +16 kwdefaults, +18 flags, +19 nkwonly
 T_BUILTIN       = 8                     ; +4 id, +5 flags, +6 name
 T_BOUND         = 9                     ; +4 self, +6 func
-T_CLASS         = 10                    ; +4 name, +6 base, +8 dict
+T_CLASS         = 10                    ; +4 name, +6 base, +8 dict, +10 MRO, +12 bases (classm.asm)
 T_INST          = 11                    ; +4 class, +6 dict
 T_RANGE         = 12                    ; +4 start, +8 stop, +12 step (dwords)
 T_ITER          = 13                    ; +4 kind, +6 seq, +8 index/cur dword, +12 stop, +16 step
@@ -40,6 +40,7 @@ F_INTERN        = $20
 F_SET           = $10                   ; (dicts) a set: the GC and len() see a dict
 F_PROPS         = $10                   ; (classes) it or a base holds a property
 F_FROZEN        = $08                   ; (sets) a frozenset
+F_BIG           = $10                   ; (ints) a big int (bigint.asm)
 
 R_NULL          = 0
 R_NONE          = 2
@@ -769,6 +770,6 @@ gc_off:
         .byte 6, 4, 0, 0
 gc_cnt:
         .byte 0, 0, 0, 0, 0, 0, 0, 5    ; (FUNC: name, defaults, params, closure, kwdefaults)
-        .byte 0, 2, 3, 2, 0, 1, 0, 0
+        .byte 0, 2, 5, 2, 0, 1, 0, 0    ; (CLASS: name, base, dict, MRO, bases)
         .byte 0, 3, 2, 1, 1
         .byte 2, 3, 0, 0                ; (GEN: function, slots, handlers: a raw T_ARR)

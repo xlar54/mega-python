@@ -17,6 +17,7 @@
 | `opcodes.asm`, `vm.asm` | bytecode, the dispatch loop, calls, frames, exception unwinding |
 | `gen.asm` | generators: resuming, `YIELD_VALUE`, finishing (the rest is in `methods.asm`, overlay R, and `args.asm`, tail X) |
 | `arith.asm` | operators (32-bit ints via the hardware multiplier/divider), comparisons |
+| `bigint.asm` | tail N: ints beyond 32 bits (arithmetic, comparison, decimal and hex digits, parsing, float conversion) |
 | `classes.asm` | attributes, method lookup, `isinstance`, `super`, dunder calls (overlay R) |
 | `seq.asm` | subscripts, slices, ranges, iterators (part 2) |
 | `tailcall.asm` | `tcall`: the stubs' way into a tail and back (part 2) |
@@ -30,6 +31,7 @@
 | `taili.asm` | tail I: `py_reset` (heap, symbol table, exception classes; the fixed symbols' names) |
 | `file.asm` | tail F: Python files (`open()` and the file methods), the `os` module, loading a module's file |
 | `sets.asm`, `setsr.asm` | tail T: sets and frozensets (operators, methods, `set()`, repr); overlay R: `BUILD_SET` and the stubs |
+| `classm.asm` | tail M: a new class's bases (several: CPython's C3 method resolution order, kept at +10), `__mro__`, `__bases__` |
 | `introsp.asm` | tail T: `dir`, `vars`, `globals`, `delattr`, `slice()` and a slice's attributes |
 | `listslice.asm` | tail T: assigning to and deleting list slices (`a[i:j] = x` rebuilds the list in place; an extended slice stores or deletes item by item) |
 | `env.asm` | closures (overlay R): the environment opcodes |
@@ -87,7 +89,7 @@ program may be showing the graphics screen.
 | `$8114000` | `SYM_VAL` as `py_reset` left it (`SYM_BOOT`): `globals()` leaves out the symbols still holding their boot value (the builtins) |
 | `$8180000` / `$8190000` | overlay R / overlay C images (tail A, the end of R, holds `fbig.asm`; C has its own copy, `c_fbig`, for the lexer's float literals) |
 | `$81C0000` | the source of a module being imported |
-| `$81A0000-$81A7FFF` | tail B, H, F, S, P, I, X, T images, 4 KB each (tail A is the end of R's image) |
+| `$81A0000-$81A9FFF` | tail B, H, F, S, P, I, X, T, M, N images, 4 KB each (tail A is the end of R's image) |
 
 The KERNAL's areas are left alone, as the MEGA65 book's chip RAM map asks:
 `0.0002-0.15FF`, `1.0000-1.1FFF` (DOS), `1.F700-1.F7FF`, `1.F800-` (colour RAM window)
@@ -100,8 +102,8 @@ replaces them, so R's variables survive a compile in the middle of runtime code 
 module imported by a key function, say); C keeps nothing between compiles. A variable
 that resident code uses while C is in must not live in R.
 
-Tails: with R in, the window's last 4 KB (`TAIL`) holds one of eight tails (A, B, H, F,
-S, P, I, X), swapped by a 4 KB DMA from attic (`need_tail` in `resident.asm`; `ovl_runtime`
+Tails: with R in, the window's last 4 KB (`TAIL`) holds one of the tails (A, B, H, F,
+S, P, I, X, T, M, N), swapped by a 4 KB DMA from attic (`need_tail` in `resident.asm`; `ovl_runtime`
 brings back R with tail A). Code reaches a tail routine only through a stub,
 `label: #TAILCALL TAIL_x, target` (6 bytes: `jsr tcall` and the data; the `#TAILA`,
 `#TAILB`, `#TAILF`, `#TAILS` macros make them). `tcall` (`tailcall.asm`) loads the tail,
@@ -357,6 +359,46 @@ whose slot is at or above the current stack top are stale, and `MAKE_CLASS` /
 `LOAD_CLASSNAME` drop them (`cb_prune`). Its names
 load with `LOAD_CLASSNAME`: the class's own attribute if it has one, else the global, so
 `b = a * 2` and `@x.setter` see what the body defined before.
+
+## Big ints
+
+An int beyond 32 bits is a `T_INT` object with `F_BIG` in its header flags: +4 the length
+of its magnitude in bytes (4 to 210), +5 the sign (`$80` negative), +6 the magnitude,
+little-endian, no zero bytes on top. A value that fits in 32 bits is always a plain int
+(`bg_store` makes sure), so all the 32-bit code is unchanged: `int_binop` sends a big
+operand, and every 32-bit overflow (`int_overflow`), to `xn_binop` (tail N), which
+redoes the operation from `r2`, `r3` and `bop`. `op_unary`, `obj_eq`, `obj_cmp`,
+`obj_hash`, `repr_int`, `num_to_fa`, `f_int_result`, `int()`, `abs()`, `divmod()`,
+`hex()`..., `format_value` (tail P) and `pow()` with a modulus (tail B: int objects
+through `binop` when the modulus is 46341 or more) check `is_big` first. `int_val` of a
+big int raises `OverflowError`: everything that wants a machine int (indexes, counts)
+gets that. The lexer (overlay C, which cannot reach tail N) builds a big literal itself
+and hands it over as a constant (`TK_FLOAT` with `tok_ref`); unary minus folds only real
+floats.
+
+Tail N works in four 256-byte registers in the `BIGNUM` workspace (bank 1; the float
+conversions use it too, never at the same time), with `bg_len` / `bg_neg` per register
+and the bytes above a register's length kept zero. Magnitudes are added and subtracted
+byte by byte (counted in Y: `cpz` would destroy the carry), multiplied with the hardware
+multiplier byte by byte, divided by a single byte with `bg_div8` (also for decimal
+output: two digits per division by 100) and otherwise bit by bit. `&`, `|`, `^` work on
+two's complement forms one byte longer than both operands; `>>` of a negative number is
+`-((|a| - 1) >> n) - 1`.
+
+## Inheritance
+
+A class (`T_CLASS`, 14 bytes) keeps its first base at +6. `class C(A, B)` compiles the
+bases to a tuple for `MAKE_CLASS`, whose base handling is in tail M (`xm_bases`): with
+several bases, or a base that has an MRO of its own, it computes CPython's C3
+linearization (the class, then the merge of the bases' MROs and the bases: repeatedly the
+first head that is in no list's tail) and keeps it at +10 as a tuple (`object` left
+out), the bases tuple at +12. Single inheritance leaves +10 at 0 and everything walks the
++6 chain as before. `class_lookup` (attributes, methods), `isinstance_r2_r3` (also
+`except` matching) and `dir()` follow +10 when it is set. `super()` looks in the MRO of
+`self`'s class from just after the class it was written in (`class_lookup_at`), and an
+`__init__` it does not find there is `object`'s, a no-op (`bi_obj_init`). `__mro__` and
+`__bases__` (with `object` added, as CPython shows them) are made when asked for
+(`xm_class_attr`).
 
 ## *args, **kwargs, keyword-only parameters, f(*a, **k)
 

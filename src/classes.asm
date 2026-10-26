@@ -219,8 +219,9 @@ _class: lda r1
         lda r0+1
         sta r2+1
         jsr class_lookup
-        bcs _err
+        bcs _cattr
         jmp desc_class                  ; (classmethods bind to the class)
+_cattr: jmp class_attr                  ; __mro__, __bases__ (tail M)
 _super: ldz #4                          ; self
         lda [p0],z
         sta groot+10
@@ -228,10 +229,57 @@ _super: ldz #4                          ; self
         lda [p0],z
         sta groot+11
         inz
-        lda [p0],z                      ; class -> its base
-        sta p1
+        lda [p0],z                      ; the class super() is in
+        sta cl_cur
         inz
         lda [p0],z
+        sta cl_cur+1
+        lda groot+10                    ; the MRO of self's class (of self, a class)
+        ldx groot+11
+        jsr type_of
+        cmp #T_CLASS
+        beq +
+        ldz #4
+        lda [p0],z
+        tax
+        inz
+        lda [p0],z
+        stx p0
+        sta p0+1
++       lda p0
+        sta r2
+        lda p0+1
+        sta r2+1
+        ldz #11
+        lda [p0],z
+        beq _chain
+        sta p1+1                        ; it has one: after the class in it
+        dez
+        lda [p0],z
+        sta p1
+        ldz #4
+        lda [p1],z
+        sta t5
+        ldx #0
+        ldz #6
+-       cpx t5
+        bcs +
+        inx
+        lda [p1],z
+        inz
+        cmp cl_cur
+        bne _nx
+        lda [p1],z
+        cmp cl_cur+1
+        beq +
+_nx:    inz
+        bra -
++       txa
+        jsr class_lookup_at
+        bra _sfound
+_chain: lda cl_cur                      ; no MRO: the class's base chain
+        sta p1
+        lda cl_cur+1
         sta p1+1
         ldz #6
         lda [p1],z
@@ -240,8 +288,21 @@ _super: ldz #4                          ; self
         lda [p1],z
         sta r2+1
         jsr class_lookup
-        bcs _err
+_sfound:
+        bcs _snone
         jmp desc_resolve
+_snone: lda #<S_INIT                    ; past the last class: object's __init__
+        ldx #>S_INIT
+        jsr sym_name
+        cmp r1
+        bne +
+        cpx r1+1
+        bne +
+        lda #B_OBJ_INIT
+        jsr builtin_obj
+        clc
+        rts
++       jmp _err
 
 ; is_name_attr / is_class_attr - A/X = name ref -> C set if it is __name__ / __class__
 is_name_attr:
@@ -268,12 +329,23 @@ _no:    clc
         rts
 
 ; class_lookup - r2 = class (or 0), r1 = name ref -> C clear and A/X if found.
-; Follows the base chain. r2 is left as the class where it was found.
+; Follows the class's MRO (+10, classm.asm) if it has one, else the base chain. r2 is
+; left as the class where it was found. class_lookup_at: A = the MRO index to start at.
 class_lookup:
+        lda #0
+class_lookup_at:
+        sta cl_i
         lda r2
         sta groot+12
         lda r2+1
         sta groot+13
+        beq _miss
+        sta p0+1
+        lda r2
+        sta p0
+        ldz #11
+        lda [p0],z
+        bne _mro
 _loop:  lda groot+13
         beq _miss
         sta p0+1
@@ -309,12 +381,55 @@ _hit:   pha
         sta r2
         lda groot+13
         sta r2+1
-        lda #0
+_hit2:  lda #0
         sta groot+12
         sta groot+13
         pla
         clc
         rts
+_mro:   lda groot+12                    ; item cl_i of the MRO
+        sta p0
+        lda groot+13
+        sta p0+1
+        ldz #10
+        lda [p0],z
+        sta p1
+        inz
+        lda [p0],z
+        sta p1+1
+        ldz #4
+        lda cl_i
+        cmp [p1],z
+        bcs _miss
+        asl a
+        adc #6
+        taz
+        lda [p1],z
+        sta cl_cur
+        inz
+        lda [p1],z
+        sta cl_cur+1
+        sta p0+1
+        lda cl_cur
+        sta p0
+        inc cl_i
+        ldz #9                          ; its dict
+        lda [p0],z
+        beq _mro
+        sta r0+1
+        dez
+        lda [p0],z
+        sta r0
+        jsr dict_get
+        bcs _mro
+        pha
+        lda cl_cur
+        sta r2
+        lda cl_cur+1
+        sta r2+1
+        bra _hit2
+cl_i:   .byte 0
+cl_cur: .word 0
 
 ; setattr - r0 = object, r1 = name ref, r2 = value
 setattr:
@@ -467,13 +582,38 @@ isinstance_r2_r3:
         sta p1
         lda p0+1
         sta p1+1
-        bra _walk
+        bra _start
 _inst:  ldz #4
         lda [p0],z
         sta p1
         inz
         lda [p0],z
         sta p1+1
+_start: lda p1+1                        ; a class with an MRO: is r3 in it?
+        beq _no
+        ldz #11
+        lda [p1],z
+        beq _walk
+        sta p2+1
+        dez
+        lda [p1],z
+        sta p2
+        ldz #4
+        lda [p2],z
+        sta t5
+        ldz #6
+-       lda t5
+        beq _no
+        dec t5
+        lda [p2],z
+        inz
+        cmp r3
+        bne +
+        lda [p2],z
+        cmp r3+1
+        beq _yes
++       inz
+        bra -
         ; walk the class chain of the instance
 _walk:  lda p1+1
         beq _no
@@ -919,3 +1059,7 @@ _obj:   lda #'<'
         jsr sb_type_name
         #SBPRINT " object>"
         rts
+
+; the bases and MRO of a new class; __mro__ / __bases__ (tail M, classm.asm)
+class_bases:    #TAILCALL TAIL_M, xm_bases
+class_attr:     #TAILCALL TAIL_M, xm_class_attr
