@@ -96,7 +96,8 @@ OP_PACK_ARGS    = 90                    ; b npos, w names: a * / ** call's list 
 OP_EX_ARG       = 91                    ; b kind: one more argument into them (args.asm)
 OP_CALL_EX      = 92                    ; b method: the call (names left under it)
 OP_YIELD_VALUE  = 93                    ; value -> sent value (gen.asm)
-OP_COUNT        = 94
+OP_SEND         = 94                    ; w exit   it value -> it next | result (yield from)
+OP_COUNT        = 95
 
 ; operand bytes per opcode, bit 7 = has a jump target (word at +1)
 op_len:
@@ -109,4 +110,4 @@ op_len:
         .byte 2, 2, 1, $82, 0, 0, 1, 0, 0, 3    ; 60-69
         .byte 2, 1, 1, 2, 0, 2, 1, 1, 1, 2      ; 70-79
         .byte 3, 2, 1, 0, 2, 2, 1, 0, 2, 0      ; 80-89
-        .byte 3, 1, 1, 0                        ; 90-93
+        .byte 3, 1, 1, 0, $82                   ; 90-94

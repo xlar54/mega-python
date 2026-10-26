@@ -30,7 +30,8 @@ EXC_EOF         = 24
 EXC_SYSTEM      = 25
 EXC_SYSEXIT     = 26
 EXC_FILENOTFOUND = 27
-EXC_N           = 28
+EXC_GENEXIT     = 28                    ; GeneratorExit (gen.asm: close())
+EXC_N           = 29
 
 exc_cls_lo:     .fill EXC_N
 exc_cls_hi:     .fill EXC_N

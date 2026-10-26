@@ -1215,7 +1215,7 @@ it_enum:
         sta p2+1
         pla
         sta p2
-        bcs _end
+        bcs _out
         ldz #8
         lda [p2],z
         sta acc
@@ -1240,6 +1240,11 @@ it_enum:
         jsr tuple2
         clc
 _end:   rts
+_out:   lda #0                          ; (r3 held no value: it must not stay a root)
+        sta r3
+        sta r3+1
+        sec
+        rts
 
 it_zip:
         ; a tuple of next() of every inner iterator; stop at the first exhausted. The
@@ -1330,8 +1335,52 @@ it_inst:
         inz
         lda [p2],z
         sta r2+1
-        ; __next__ under an error context of our own: StopIteration ends the loop
-        #NATIVE_SAVE                    ; (our caller's: a builtin's arguments, its tail)
+        lda #<_next                     ; __next__, catching what it raises:
+        ldx #>_next                     ; StopIteration ends the loop
+        jsr try_call
+        bcs _exc
+        lda tc_c
+        bne _bad
+        lda tc_res
+        ldx tc_res+1
+        rts                             ; (C clear)
+_exc:   lda cur_exc
+        sta r2
+        lda cur_exc+1
+        sta r2+1
+        lda #EXC_STOPITER
+        jsr exc_is
+        bcs +
+        jmp throw                       ; (anything else: out to the enclosing handler)
++       jsr clear_exc                   ; exhausted (A/X = 0: no value)
+        ldx #0
+        sec
+        rts
+_next:  lda #S_NEXT
+        jmp inst_unary
+_bad:   #RAISE EXC_TYPE, "iterator has no __next__"
+
+; clear_exc - forget the current exception (a native catcher handled it)
+clear_exc:
+        lda #0
+        sta cur_exc
+        sta cur_exc+1
+        sta exc_ip_set
+        jmp clear_rregs
+
+;---------------------------------------------------------------------------------------
+; try_call - A/X = a routine: call it under an error context of our own. C clear: it
+; returned (tc_res = its A/X, tc_c = its carry); C set: it raised cur_exc, which the
+; caller now handles (jmp throw passes it on). The caller's native state (its builtin's
+; arguments, its tail: NATIVE_SAVE) and ip, vsp, vfp are as they were either way.
+;---------------------------------------------------------------------------------------
+tc_res:         .word 0
+tc_c:           .byte 0
+tc_vec:         .word 0
+try_call:
+        sta tc_vec
+        stx tc_vec+1
+        #NATIVE_SAVE
         lda ip+2
         pha
         lda ip+1
@@ -1362,24 +1411,18 @@ it_inst:
         sta err_vec
         lda #>_catch
         sta err_vec+1
-        lda #S_NEXT
-        jsr inst_unary
-        sta _res
-        stx _res+1
+        jsr _go
+        sta tc_res
+        stx tc_res+1
         lda #0
-        rol a                           ; 0 = a value, 1 = no __next__
+        rol a
+        sta tc_c
+        lda #0                          ; it returned
         bra _restore
-_catch: lda cur_exc                     ; (the stack is back at our context)
-        sta r2
-        lda cur_exc+1
-        sta r2+1
-        lda #EXC_STOPITER
-        jsr exc_is
-        lda #2                          ; 2 = StopIteration, 3 = anything else
-        bcs _restore
-        lda #3
+_go:    jmp (tc_vec)
+_catch: lda #1                          ; (the CPU stack is back at our context)
 _restore:
-        sta _how
+        sta tc_how
         pla
         sta err_sp
         pla
@@ -1403,26 +1446,10 @@ _restore:
         pla
         sta ip+2
         #NATIVE_RESTORE
-        lda _how
-        beq _ok
-        cmp #2
-        bcc _bad
-        bne _throw
-        lda #0                          ; exhausted
-        sta cur_exc
-        sta cur_exc+1
-        sta exc_ip_set
-        jsr clear_rregs
-        sec
+        lda tc_how
+        lsr a
         rts
-_throw: jmp throw                       ; (out to the enclosing handler)
-_ok:    lda _res
-        ldx _res+1
-        clc
-        rts
-_bad:   #RAISE EXC_TYPE, "iterator has no __next__"
-_res:   .word 0
-_how:   .byte 0
+tc_how:         .byte 0
 
 ;---------------------------------------------------------------------------------------
 ; helpers for builtins

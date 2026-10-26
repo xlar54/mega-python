@@ -1525,13 +1525,23 @@ _next:  jsr iter_next
         ply
         ply
         rts
-_end:   plx
+_end:   sta nx_val                      ; (a generator: what it returned)
+        stx nx_val+1
+        plx
         pla
         ply
         cpy #2
         bne +
-        rts
+        rts                             ; the default
++       #ARG 0
+        jsr type_of
+        cmp #T_GEN
+        bne +
+        lda nx_val                      ; StopIteration(value)
+        ldx nx_val+1
+        jmp gen_stop
 +       #RAISE EXC_STOPITER, ""
+nx_val:         .word 0
 
 bi_reversed:
         #NARGS 1, 1

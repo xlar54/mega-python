@@ -414,12 +414,13 @@ Differences from CPython
   loops, `next()`, builtins and other generators drive it, `send()` passes a value in,
   `return` ends it, `yield from` delegates, and `try`/`except`/`finally` blocks may
   span a `yield`. Generator expressions are lazy generators too (`sum(x for x in
-  range(60000))` needs no list). Differences: `close()` does not run the generator's
-  `finally` blocks,
-  `throw()` is missing, `yield from` drops values sent to it and gives `None` (not the
-  inner generator's return value), `StopIteration` carries no value, a
-  `StopIteration` raised inside a generator is not turned into `RuntimeError`, and
-  `yield` cannot be used in a lambda.
+  range(60000))` needs no list). `close()` raises `GeneratorExit` at the `yield`, so
+  `finally` blocks and `with` exits run; `throw()` raises an exception there; `yield
+  from` passes `send()` values on and gives the inner generator's return value, which
+  `StopIteration.value` carries too. Differences: `yield from` does not pass `throw()`
+  and `close()` on to the inner generator, a `StopIteration` raised inside a generator
+  is not turned into `RuntimeError`, `raise StopIteration(v)` in your own code gives
+  no `.value` (only `.args`), and `yield` cannot be used in a lambda.
 * Not supported yet: unpacking in displays (`[*a, *b]`,
   `{**d}`), multiple inheritance, `from module import *`, packages (`import a.b`), the
   `bytes` type, attributes on functions (`f.cache = {}`; use a closure or a class).

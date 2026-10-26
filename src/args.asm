@@ -975,12 +975,11 @@ _new:   #RAISE EXC_TYPE, "can't send non-None value to a just-started generator"
         jsr gen_send_native
         bcs +
         rts
-+       #RAISE EXC_STOPITER, ""
++       jmp xg_stop                     ; (A/X = what it returned)
 
-; g.close(): it is finished (as CPython, unless it is running; its finally blocks do
-; not run)
-xg_close:
-        #NARGS 1, 1
+; xg_state - ARG 0 = a generator -> A = its state (GS_DONE for one an exception
+; left); a running one raises ValueError
+xg_state:
         #ARG 0
         sta gen_ref
         stx gen_ref+1
@@ -990,10 +989,194 @@ xg_close:
         cmp #GS_RUN
         bne +
         jsr gen_alive
+        lda #GS_DONE
         bcc +
         #RAISE EXC_VALUE, "generator already executing"
-+       jsr gen_p0
-        jsr gen_end
-        lda #R_NONE
++       rts
+; xg_end - ARG 0 is finished
+xg_end:
+        #ARG 0
+        sta p0
+        stx p0+1
+        jmp gen_end
+
+; g.close(): GeneratorExit at its yield, so its finally blocks run; it must end (or
+; raise GeneratorExit / StopIteration). One that yields again: RuntimeError.
+xg_close:
+        #NARGS 1, 1
+        jsr xg_state
+        cmp #GS_SUSP
+        beq _exit
+_end:   jsr xg_end                      ; (not started, or finished)
+_none:  lda #R_NONE
         ldx #0
         rts
+_exit:  lda #<_run
+        ldx #>_run
+        jsr try_call
+        bcs _exc
+        lda tc_c
+        bne _none                       ; it ended
+        #RAISE EXC_RUNTIME, "generator ignored GeneratorExit"
+_exc:   lda #EXC_GENEXIT
+        jsr _is
+        bcs _ok
+        lda #EXC_STOPITER
+        jsr _is
+        bcs _ok
+        jmp throw                       ; anything else goes on
+_ok:    jsr clear_exc
+        bra _end
+_is:    ldx cur_exc                     ; is cur_exc an instance of class id A?
+        stx r2
+        ldx cur_exc+1
+        stx r2+1
+        jmp exc_is
+_run:   lda #EXC_GENEXIT
+        jsr exc_new_empty
+        sta gen_exc
+        stx gen_exc+1
+        #ARG 0
+        jmp gen_resume_native
+
+; g.throw(exc) / g.throw(cls, value): exc raised at its yield -> the next value it
+; yields (StopIteration when it ends). A generator not started or finished raises it
+; here (and is finished).
+xg_throw:
+        #NARGS 2, 3
+        #ARG 1
+        ldy npos
+        cpy #3
+        bne +
+        ldy argv+4                      ; cls(value)
+        sty r1
+        ldy argv+5
+        sty r1+1
+        jsr call1
++       jsr make_exception
+        #PUSH                           ; (kept while the state is checked)
+        jsr xg_state
+        cmp #GS_SUSP
+        beq _go
+        jsr xg_end
+        #POP
+        sta cur_exc
+        stx cur_exc+1
+        lda #0
+        sta exc_ip_set
+        jmp throw
+_go:    #POP
+        sta gen_exc
+        stx gen_exc+1
+        #ARG 0
+        jsr gen_resume_native
+        bcs +
+        rts
++       jmp xg_stop                     ; (A/X = what it returned)
+
+;---------------------------------------------------------------------------------------
+; generators: the parts of gen.asm that only run with overlay R in
+; xg_create - (call_py through gen_make, with the locals pushed) the generator instead
+; of the call: its locals go in the tuple -> A/X = it, the call's result (vsp = the
+; result slot)
+;---------------------------------------------------------------------------------------
+xg_create:
+        lda c_func
+        sta p0
+        lda c_func+1
+        sta p0+1
+        ldz #7
+        lda [p0],z                      ; nlocals
+        sta nitems
+        lda #0
+        sta nitems+1
+        jsr tuple_new                   ; (may collect: the locals are on the stack)
+        ldz #4
+        lda [p0],z
+        beq +
+        asl
+        sta t0
+        lda #0
+        sta t0+1
+        lda vsp
+        ldx vsp+1
+        clc
+        jsr gen_xfer
++       lda p0
+        ldx p0+1
+        #PUSH                           ; (kept while the generator is made)
+        lda #GEN_SIZE
+        sta alloc_size
+        lda #0
+        sta alloc_size+1
+        lda #T_GEN
+        jsr alloc                       ; (the body is zeroed: GS_NEW)
+        ldz #4
+        lda c_func
+        sta [p0],z
+        inz
+        lda c_func+1
+        sta [p0],z
+        #POP
+        ldz #6
+        sta [p0],z
+        inz
+        txa
+        sta [p0],z
+        lda c_func                      ; it starts at the function's code
+        sta p1
+        lda c_func+1
+        sta p1+1
+        ldz #4
+        lda [p1],z
+        ldz #10
+        sta [p0],z
+        ldz #5
+        lda [p1],z
+        ldz #11
+        sta [p0],z
+        lda c_slot                      ; the locals go; the generator is the result
+        sta vsp
+        lda c_slot+1
+        sta vsp+1
+        lda p0
+        ldx p0+1
+        rts
+
+; xg_stop - A/X = what a generator returned: raise StopIteration with it as .value (and
+; in .args, unless it is None)
+xg_stop:
+        #PUSH                           ; (kept while the exception is made)
+        sta r1
+        stx r1+1
+        cpx #0
+        bne _arg
+        cmp #R_NONE
+        bne _arg
+        lda #0                          ; None: no args
+        sta r1
+        sta r1+1
+_arg:   lda #EXC_STOPITER
+        jsr exc_new
+        sta r0
+        stx r0+1
+        lda #<S_VALUE
+        ldx #>S_VALUE
+        jsr sym_name
+        sta r1
+        stx r1+1
+        #POP
+        sta r2
+        stx r2+1
+        lda r0
+        pha
+        lda r0+1
+        pha
+        jsr setattr
+        pla
+        sta cur_exc+1
+        pla
+        sta cur_exc
+        lda #0
+        sta exc_ip_set
+        jmp throw

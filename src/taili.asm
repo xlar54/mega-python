@@ -263,6 +263,7 @@ exc_defs:
         .text "SystemError", 0, EXC_EXCEPTION
         .text "SystemExit", 0, EXC_BASE
         .text "FileNotFoundError", 0, EXC_OS
+        .text "GeneratorExit", 0, EXC_BASE
         .byte 0
 
         .include "gen/symnames.asm"

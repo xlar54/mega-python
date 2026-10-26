@@ -18,6 +18,7 @@ FR_NESTED       = 2                     ; return to native code (vm_call_nested)
 FR_EXTRA        = 4                     ; the result slot is one below the callable
 FR_GEN          = 8                     ; a generator's frame (gen.asm), resumed by
 FR_FORIT        = 16                    ; FOR_ITER (else FR_NESTED: native code)
+FR_SENDX        = 32                    ; (with FR_FORIT) SEND: yield from
 
 PUSH    .macro                          ; push A/X
         dew vsp
@@ -312,7 +313,7 @@ op_table:
         .word op_load_deref, op_store_deref, op_enter_env, op_set_closure    ; 84-87 (env.asm)
         .word op_load_classname, op_end_class                                ; 88-89
         .word op_pack_args, op_ex_arg, op_call_ex                            ; 90-92 (args.asm)
-        .word op_yield                                                       ; 93 (gen.asm)
+        .word op_yield, op_send                                              ; 93-94 (gen.asm, methods.asm)
 
 op_bad:
         #RAISE EXC_SYSTEM, "bad opcode"
@@ -970,7 +971,8 @@ _locals:
         lda [p0],z
         and #FF_GEN
         beq +
-        jmp gen_create
+        jsr gen_make                    ; (methods.asm)
+        jmp store_result
 +       ; stack and frame limits
         lda vsp+1
         cmp #>(VSTACK + $100)

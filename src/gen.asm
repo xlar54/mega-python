@@ -25,6 +25,7 @@ GEN_SIZE        = 16
 
 gen_ref:        .word 0                 ; the generator being resumed / suspended
 gen_sent:       .word 0                 ; the value a resumed yield returns
+gen_exc:        .word 0                 ; or the exception it raises (throw(), close())
 gen_mode:       .byte 0                 ; FR_FORIT or FR_NESTED
 gen_c:          .byte 0
 gen_n:          .word 0
@@ -93,11 +94,9 @@ _state: cmp #GS_DONE
         lda gen_mode
         and #FR_NESTED
         bne _ndone
-        #DROP 1                         ; FOR_ITER: drop it, leave the loop
-        #FETCHW
-        sta ip
-        stx ip+1
-        jmp vm_loop
+        lda #R_NONE                     ; FOR_ITER: drop it, leave the loop; SEND:
+        ldx #0                          ; its result (None) instead of it
+        jmp gen_exit
 _ndone: jsr lev_leave
         lda #R_NONE
         ldx #0
@@ -249,10 +248,22 @@ _deep:  jmp raise_recursion
         lda [p0],z
         sta c_func+1
         jmp vm_loop
-+       lda gen_sent                    ; at a yield: its value
++       lda gen_exc                     ; at a yield: throw() / close() raise there
+        ora gen_exc+1
+        bne _throw
+        lda gen_sent                    ; else its value
         ldx gen_sent+1
         #PUSH
         jmp vm_loop
+_throw: lda gen_exc
+        sta cur_exc
+        lda gen_exc+1
+        sta cur_exc+1
+        lda #0
+        sta gen_exc
+        sta gen_exc+1
+        sta exc_ip_set
+        jmp throw
 
 ;---------------------------------------------------------------------------------------
 ; YIELD_VALUE - value -> (the generator's caller gets it; the sent value comes back)
@@ -448,21 +459,34 @@ gen_return:
         sta p0
         stx p0+1
         jsr gen_end
+        #DROP 1                         ; the result slot
         lda c_flags
+        sta gen_mode
         and #FR_NESTED
-        bne _nested
-        #DROP 2                         ; FOR_ITER: drop the slot and the generator,
-        #FETCHW                         ; leave the loop
-        sta ip
-        stx ip+1
-        jmp vm_loop
-_nested:
-        #DROP 1
+        beq _loop
         jsr lev_leave
         lda r0
         ldx r0+1
         sec
         rts
+_loop:  lda r0
+        ldx r0+1
+; gen_exit - leave a FOR_ITER / SEND loop (ip at its operand) for a finished generator
+; on top: FOR_ITER drops it, SEND (gen_mode FR_SENDX) puts A/X there (its result)
+gen_exit:
+        pha
+        lda gen_mode
+        and #FR_SENDX
+        bne +
+        pla
+        #DROP 1
+        bra ++
++       pla
+        #POKE 0
++       #FETCHW
+        sta ip
+        stx ip+1
+        jmp vm_loop
 
 ;---------------------------------------------------------------------------------------
 ; entries: FOR_ITER (seq.asm) and native code (iter_next, send())
@@ -472,6 +496,8 @@ gen_for_iter:                           ; the generator on top, ip at FOR_ITER's
         sta gen_sent
         lda #0
         sta gen_sent+1
+        sta gen_exc
+        sta gen_exc+1
         lda #FR_FORIT
         jmp gen_resume
 

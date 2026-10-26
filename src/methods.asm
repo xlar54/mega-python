@@ -695,68 +695,48 @@ bi_dict_copy:
         rts
 
 ;---------------------------------------------------------------------------------------
-; generators: the parts of gen.asm that only run with overlay R in
-; gen_create - (call_py, with the locals pushed; p0 = c_func) the generator instead of
-; the call: its locals go in the tuple, and it is the call's result
+; SEND - iterator value -> iterator next-item (into the loop) | result (to the exit):
+; a step of yield from. A generator gets the value and runs inline, as FOR_ITER runs it
+; (gen.asm: its return value is the result); another iterator gives its next item, and
+; takes only None.
 ;---------------------------------------------------------------------------------------
-gen_create:
-        ldz #7
-        lda [p0],z                      ; nlocals
-        sta nitems
-        lda #0
-        sta nitems+1
-        jsr tuple_new                   ; (may collect: the locals are on the stack)
-        ldz #4
-        lda [p0],z
-        beq +
-        asl
-        sta t0
-        lda #0
-        sta t0+1
-        lda vsp
-        ldx vsp+1
-        clc
-        jsr gen_xfer
-+       lda p0
-        ldx p0+1
-        #PUSH                           ; (kept while the generator is made)
-        lda #GEN_SIZE
-        sta alloc_size
-        lda #0
-        sta alloc_size+1
-        lda #T_GEN
-        jsr alloc                       ; (the body is zeroed: GS_NEW)
-        ldz #4
-        lda c_func
-        sta [p0],z
-        inz
-        lda c_func+1
-        sta [p0],z
+op_send:
         #POP
-        ldz #6
-        sta [p0],z
-        inz
-        txa
-        sta [p0],z
-        lda c_func                      ; it starts at the function's code
-        sta p1
-        lda c_func+1
-        sta p1+1
-        ldz #4
-        lda [p1],z
-        ldz #10
-        sta [p0],z
-        ldz #5
-        lda [p1],z
-        ldz #11
-        sta [p0],z
-        lda c_slot                      ; the locals go; the generator is the result
-        sta vsp
-        lda c_slot+1
-        sta vsp+1
-        lda p0
-        ldx p0+1
-        jmp store_result
+        sta gen_sent
+        stx gen_sent+1
+        #PEEK 0
+        jsr type_of
+        cmp #T_GEN
+        bne _iter
+        lda #0
+        sta gen_exc
+        sta gen_exc+1
+        lda #FR_FORIT | FR_SENDX
+        jmp gen_resume
+_iter:  lda gen_sent+1
+        bne _bad
+        lda gen_sent
+        cmp #R_NONE
+        bne _bad
+        #PEEK 0
+        jsr iter_next
+        bcs _end
+        #PUSH
+        inw ip
+        inw ip
+        jmp vm_loop
+_end:   lda #FR_SENDX                   ; its result: None
+        sta gen_mode
+        lda #R_NONE
+        ldx #0
+        jmp gen_exit
+_bad:   #RAISE EXC_ATTR, "object has no attribute 'send'"
+
+; gen_stop - raise StopIteration for a generator that returned A/X (stop_value)
+gen_stop:       #TAILCALL TAIL_X, xg_stop
+
+; gen_make - (call_py) a generator instead of the call (tail X, args.asm)
+gen_make:       #TAILCALL TAIL_X, xg_create
 
 ;---------------------------------------------------------------------------------------
 ; gen_alive - p0 = generator gen_ref, state GS_RUN: C set if its frame is still on the
@@ -829,6 +809,10 @@ gen_next_native:
         ldy #0
         sty gen_sent+1
 gen_send_native:
+        ldy #0
+        sty gen_exc
+        sty gen_exc+1
+gen_resume_native:                      ; (gen_exc set: throw() / close())
         #PUSH
         #NATIVE_SAVE
         jsr _run
@@ -853,3 +837,4 @@ _run:   jsr lev_enter
 ;---------------------------------------------------------------------------------------
 bi_gen_send:    #TAILCALL TAIL_X, xg_send        ; (args.asm)
 bi_gen_close:   #TAILCALL TAIL_X, xg_close
+bi_gen_throw:   #TAILCALL TAIL_X, xg_throw

@@ -119,12 +119,13 @@ BUILTINS += [("setter", "desc_setter", "m", "property"),
              ("getter", "desc_getter", "m", "property")]
 # generators (gen.asm)
 BUILTINS += [("generator", "gentype", "T"),
-             ("send", "gen_send", "m", "generator"), ("close", "gen_close", "m", "generator")]
+             ("send", "gen_send", "m", "generator"), ("close", "gen_close", "m", "generator"),
+             ("throw", "gen_throw", "m", "generator")]
 
 OWNERS = ["list", "tuple", "str", "dict", "file", "set", "frozenset", "property",
           "generator"]
 # other names the interpreter needs as symbols (modules and their constants)
-NAMES = "math pi e tau inf nan os path".split()
+NAMES = "math pi e tau inf nan os path value".split()
 
 
 def ident(name):

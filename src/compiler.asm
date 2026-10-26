@@ -2318,8 +2318,8 @@ _end:   lda #0
         jmp lx_pop
 
 ; yield_expr - 'yield' [exprlist] or 'yield from' expr (the pre-scan made the function
-; a generator). yield from is the loop  GET_ITER; t: FOR_ITER x; YIELD_VALUE; POP;
-; JUMP t; x: None  (values sent to it are dropped, and its result is None).
+; a generator). yield from is the loop  GET_ITER; None; t: SEND x; YIELD_VALUE; JUMP t;
+; x:  (SEND passes the sent values on; at x its result is on the stack).
 yf_exit:        .word 0
 yield_expr:
         jsr scope_kind
@@ -2355,27 +2355,25 @@ _from:  jsr lex
         jsr expr
         lda #OP_GET_ITER
         jsr emit
+        lda #R_NONE                     ; the first value sent
+        ldx #0
+        jsr emit_const
         jsr c_here                      ; the loop top
         pha
         phx
-        ldy #OP_FOR_ITER
+        ldy #OP_SEND
         jsr emit_jump
         sta yf_exit
         stx yf_exit+1
-        lda #OP_YIELD_VALUE
-        jsr emit
-        lda #OP_POP
+        lda #OP_YIELD_VALUE             ; (what it yields; what is sent comes back)
         jsr emit
         plx
         pla
         ldy #OP_JUMP
         jsr emit_op_word
-        lda yf_exit
+        lda yf_exit                     ; the exit: its result is on the stack
         ldx yf_exit+1
         jsr patch_here
-        lda #R_NONE                     ; its result
-        ldx #0
-        jsr emit_const
         bra _done
 yield_ends:     .byte TK_NEWLINE, TK_SEMI, TK_EOF, TK_RPAREN, TK_RBRACK, TK_RBRACE
 yield_ends_n = * - yield_ends

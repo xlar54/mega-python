@@ -32,7 +32,7 @@
 | `sets.asm` | sets and frozensets (overlay R): operators, methods, `set()`, `BUILD_SET`, repr |
 | `env.asm` | closures (overlay R): the environment opcodes |
 | `desc.asm` | `staticmethod`, `classmethod`, `property` (overlay R), `LOAD_CLASSNAME` |
-| `args.asm` | tail X: binding `*args`/`**kwargs`/keyword-only parameters, `f(*a, **k)` calls; a generator's saved exception handlers, `send()` and `close()` |
+| `args.asm` | tail X: binding `*args`/`**kwargs`/keyword-only parameters, `f(*a, **k)` calls; making a generator, its saved exception handlers, `send()`, `throw()`, `close()`, `StopIteration(value)` |
 | `strmeth.asm` | tail S: the `str` methods, `list.insert` / `list.reverse` |
 | `fmtsort.asm` | tail P: format specs (`format()`, f-strings), `%`, `str.format`; `sorted()` / `list.sort()` |
 | `module.asm` | modules from the disk: hidden global names, `import` (compile and run), attribute access |
@@ -388,6 +388,20 @@ generator frame finishes it (`gen_return`). An exception that leaves a generator
 its frame without telling it: it still says running, and `gen_alive` checks whether its
 frame is really still on the frame stack. `ENTER_ENV` reads `c_func`, so starting a
 generator sets it to the generator's function.
+
+`yield from it` compiles to `GET_ITER; None; t: SEND x; YIELD_VALUE; JUMP t; x:`.
+`SEND` resumes a generator inline with the value under it (`FR_FORIT | FR_SENDX`:
+when it finishes, its return value replaces it and `SEND` jumps to `x`), or takes the
+next item of another iterator. `throw()` and `close()` set `gen_exc`, and the resumed
+generator raises it at its `yield`, where its own handlers (restored with its frame)
+see it. `close()` catches what comes back out with `try_call` (`seq.asm`, part 2: a
+native call under an error context of its own, as a user iterator's `__next__` runs
+too): `GeneratorExit` or `StopIteration` is a clean close. A generator that finishes
+for native code returns its return value with the carry set; `next()`, `send()` and
+`throw()` raise `StopIteration` with it as `.value` (`xg_stop`).
+
+`iter_next` callers must not keep A/X when it says "exhausted" (C set): `it_enum` put
+them in `r3`, a GC root, and the next collection marked whatever that pointed at.
 
 A generator expression is a generator function of its own, as in CPython (`genexp`):
 the element was compiled before its `for` showed up, so its code is dropped and the

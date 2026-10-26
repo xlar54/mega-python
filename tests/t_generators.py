@@ -239,3 +239,164 @@ def naturals():
 
 inf = (n * n for n in naturals())
 print(next(inf), next(inf))
+
+
+# close() runs finally / with exits (GeneratorExit), throw()
+log = []
+
+
+def worker():
+    try:
+        n = 0
+        while True:
+            yield n
+            n += 1
+    finally:
+        log.append('cleanup')
+
+
+w = worker()
+print(next(w), next(w))
+w.close()
+print(log, list(w), w.close())
+
+
+class Res:
+    def __enter__(self):
+        log.append('open')
+        return self
+
+    def __exit__(self, *a):
+        log.append('closed')
+
+
+def reader():
+    with Res():
+        yield 1
+        yield 2
+
+
+r = reader()
+print(next(r))
+r.close()
+print(log)
+
+
+def stubborn():
+    try:
+        yield 1
+    except GeneratorExit:
+        yield 'no'
+
+
+s = stubborn()
+next(s)
+try:
+    s.close()
+except RuntimeError as e:
+    print('RuntimeError', e)
+
+
+def catcher():
+    while True:
+        try:
+            yield 'ok'
+        except ValueError as e:
+            yield 'caught ' + str(e)
+
+
+c = catcher()
+print(next(c), c.throw(ValueError('bad')), next(c), c.throw(ValueError))
+try:
+    c.throw(KeyError('k'))
+except KeyError as e:
+    print('KeyError', e)
+print(next(c, 'finished'))
+fresh = catcher()
+try:
+    fresh.throw(TypeError('early'))
+except TypeError as e:
+    print('TypeError', e, next(fresh, 'finished'))
+
+
+def ender():
+    try:
+        yield 1
+    except ValueError:
+        return
+
+
+e = ender()
+next(e)
+try:
+    e.throw(ValueError)
+except StopIteration:
+    print('StopIteration')
+print(isinstance(GeneratorExit(), BaseException), isinstance(GeneratorExit(), Exception))
+never = worker()
+never.close()
+print(log[-1], list(never))
+
+
+# yield from passes send() on and gives the inner return value; StopIteration.value
+def inner():
+    total = 0
+    while True:
+        x = yield total
+        if x is None:
+            return total
+        total += x
+
+
+def outer():
+    result = yield from inner()
+    yield 'inner gave %d' % result
+    r2 = yield from [7, 8]
+    yield r2
+
+
+o = outer()
+print(next(o), o.send(5), o.send(10), o.send(None), next(o), next(o), next(o, 'end'))
+
+
+def ret(v):
+    yield 1
+    return v
+
+
+g = ret(42)
+next(g)
+try:
+    next(g)
+except StopIteration as e:
+    print('value', e.value, e.args)
+g = ret(None)
+next(g)
+try:
+    g.send(3)
+except StopIteration as e:
+    print('value', e.value, e.args)
+
+
+def layer(n):
+    if n == 0:
+        got = yield 'bottom'
+        return got * 2
+    r = yield from layer(n - 1)
+    return r + 1
+
+
+d = layer(25)
+print(next(d))
+try:
+    d.send(10)
+except StopIteration as e:
+    print('deep', e.value)
+
+
+def gen_from_range():
+    x = yield from range(3)
+    yield x
+
+
+print(list(gen_from_range()))
