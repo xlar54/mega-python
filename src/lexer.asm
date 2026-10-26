@@ -88,6 +88,7 @@ lx_istack:      .fill 32, 0
 lx_quote:       .byte 0
 lx_raw:         .byte 0
 lx_fstr:        .byte 0
+lx_bytes:       .byte 0                 ; a b'...' literal
 lx_triple:      .byte 0
 
 ; lx_init - start lexing at the far pointer lx_ptr
@@ -267,6 +268,7 @@ _dot:   lda #'.'
 _str:   lda #0
         sta lx_raw
         sta lx_fstr
+        sta lx_bytes
         jmp lx_string
 +       jmp lx_op
 
@@ -451,6 +453,7 @@ _prefix:
         lda #0
         sta lx_raw
         sta lx_fstr
+        sta lx_bytes
         ldy #0
 -       phz
         tya
@@ -468,6 +471,7 @@ _prefix:
         bra _pn
 +       cmp #'b'
         bne _plain
+        sta lx_bytes
 _pn:    iny
         sty t0
         cpz t0
@@ -846,7 +850,17 @@ _done:  pla                             ; builder mark: hi, then lo
         jsr sb_take
         sta tok_ref
         stx tok_ref+1
-        lda #TK_STR
+        lda lx_bytes                    ; b'...': a bytes object (bytes.asm)
+        beq +
+        lda tok_ref                     ; (its flags: F_BYTES)
+        sta p0
+        lda tok_ref+1
+        sta p0+1
+        ldz #1
+        lda [p0],z
+        ora #F_BYTES
+        sta [p0],z
++       lda #TK_STR
         sta tok
         rts
 _skip:  lda #TK_STR

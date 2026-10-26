@@ -25,7 +25,8 @@ Language
 * Positional-only parameters
   (`/`); `property` deleters, `functools.wraps`; the names in argument errors
   ("f() got an unexpected keyword argument 'x'").
-* Files: `seek`/`tell`, binary mode (`bytes`), more of `os` (`getcwd`, `stat`,
+* `bytearray`, `bytes.fromhex`, `%` formatting of bytes, `int.to_bytes`/`from_bytes`.
+* Files: `seek`/`tell`, more of `os` (`getcwd`, `stat`,
   `path.getsize`), other drives, closing a forgotten file when it is collected (it
   keeps its drive channel, and the drive will not remove it).
 * Modules (`lib/*.py`, using `peek`/`poke`/`os.sys`): 16-colour
@@ -58,8 +59,8 @@ Environment
 Memory
 ------
 
-* Code space (see the sizes `build.bat` prints): part 1 has about 580 bytes free, overlay R
-  about 290, part 2 about 120, tail B about 150, tail X about 190, tail H about 300, tail T
+* Code space (see the sizes `build.bat` prints): part 1 has about 70 bytes free, overlay R
+  about 150 (both nearly full: new code must go to tails), part 2 about 120, tail B about 150, tail X about 190, tail H about 300, tail T
   about 360, tail P about 430, tail N about 650, tail M about 2.8 KB (one more tail fits
   in mpy-ovl's 64 KB before the boot loader must change);
   move cold code out before it fills up again (as sets went to tail T, fbig.asm to tail A,

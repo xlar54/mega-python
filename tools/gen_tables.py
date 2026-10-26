@@ -45,7 +45,9 @@ BUILTINS = [
     ("setattr", "setattr", "f"), ("hasattr", "hasattr", "f"), ("map", "map", "f"),
     ("delattr", "delattr", "f"), ("dir", "dir", "f"), ("vars", "vars", "f"),
     ("globals", "globals", "f"), ("ascii", "repr", "f"), ("slice", "slice", "t"),
-    ("eval", "eval", "f"), ("exec", "exec", "f"),
+    ("eval", "eval", "f"), ("exec", "exec", "f"), ("bytes", "bytes", "t"),
+    ("encode", "str_encode", "m", "str"), ("decode", "bytes_decode", "m", "bytes"),
+    ("hex", "bytes_hex", "m", "bytes"),
     ("filter", "filter", "f"), ("round", "round", "f"), ("object", "object", "t"),
     ("super", "super", "f"), ("exit", "exit", "f"), ("quit", "exit", "f"),
     ("float", "float", "t"), ("open", "open", "f"), ("TextIOWrapper", "filetype", "T"),
@@ -135,7 +137,7 @@ BUILTINS += [("generator", "gentype", "T"),
              ("throw", "gen_throw", "m", "generator")]
 
 OWNERS = ["list", "tuple", "str", "dict", "file", "set", "frozenset", "property",
-          "generator"]
+          "generator", "bytes"]
 # other names the interpreter needs as symbols (modules and their constants)
 NAMES = "math pi e tau inf nan os path value default".split()
 
@@ -209,7 +211,8 @@ def main():
     # its self: str.upper(5) is a TypeError)
     owner_t = {"list": "T_LIST", "tuple": "T_TUPLE", "str": "T_STR", "dict": "T_DICT",
                "file": "T_FILE", "set": "T_SET", "frozenset": "T_FSET",
-               "property": "T_DESC", "generator": "T_GEN"}
+               "property": "T_DESC", "generator": "T_GEN",
+               "bytes": "OWN_BYTES"}         # (a T_STR with F_BYTES: bm_check)
     out.append("builtin_flags:")
     for b in BUILTINS:
         f = "0"

@@ -17,7 +17,7 @@ Python support
 What works (each item as in CPython, apart from the notes in "Differences from
 CPython" below):
 
-* **Types**: `int` (any size up to about 500 digits), `float` (IEEE double), `bool`, `None`, `str`, `list`,
+* **Types**: `int` (any size up to about 500 digits), `float` (IEEE double), `bool`, `None`, `str`, `bytes`, `list`,
   `tuple`, `dict`, `set`, `frozenset`, `range`, slices, files, generators.
 * **Statements**: `if`/`elif`/`else`, `while` and `for` (with `else`), `break`,
   `continue`, `pass`, `def`, `class`, `return`, `del`, `global`, `nonlocal`, `assert`,
@@ -42,7 +42,7 @@ CPython" below):
   `KeyError`, `StopIteration`, `GeneratorExit`, ...), your own exception classes,
   tracebacks with the chain of calls.
 * **Builtins**: `abs all any ascii bin bool callable chr classmethod delattr dict dir
-  divmod enumerate eval exec exit filter float format frozenset getattr globals hasattr hash hex id
+  bytes divmod enumerate eval exec exit filter float format frozenset getattr globals hasattr hash hex id
   input int isinstance issubclass iter len list map max min next object oct open ord pow
   print property quit range repr reversed round set setattr slice sorted staticmethod str
   sum super tuple type vars zip` (`isinstance`/`issubclass` know `object` and that `bool`
@@ -62,7 +62,7 @@ CPython" below):
 
 Not supported yet:
 
-* `complex`, `bytes`/`bytearray` (`b'...'` is a `str`),
+* `complex`, `bytearray`, `bytes.fromhex`,
   `decimal`, `fractions`.
 * Subclassing builtin types (`class D(dict)`), metaclasses, `cls.mro()`,
   `__slots__`, `__getattr__`/`__setattr__` hooks, `property` deleters.
@@ -363,6 +363,8 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_mi` | multiple inheritance: diamonds and the C3 order, `super()` chains through both sides, `__mro__`/`__bases__`, mixins on exceptions, an inconsistent order (`TypeError`), `super().__init__()` reaching `object` |
 | `t_compscope` | comprehensions keep their loop variables to themselves: at the top level, in functions and class bodies, nested, with lambdas over them (late binding and `i=i` defaults), the first iterable taken from outside |
 | `t_eval` | `eval` and `exec`: expressions, statements, definitions that stay, loops of `eval` (its code is reclaimed), errors inside, nesting, an import inside |
+| `t_bytes` | `bytes`: literals, indexing and iteration as ints, slices, `+`, `*`, `==` (never equal to a `str`), repr, `bytes()`, `encode`/`decode`, `hex`, `str` methods giving `bytes`, dict keys |
+| `t_binfile` | binary files: all 256 byte values written and read back, lines of bytes, a `write()` of more than 255 bytes |
 | `t_introsp` | `dir`, `vars`, `globals`, `delattr`, `slice` objects and their attributes, `ascii` |
 | `t_strmeth` | the newer `str` methods (`rfind`, `partition`, `rsplit`, `expandtabs`, ...) and methods of builtin types as values |
 | `t_errors` | error messages that name the type, `issubclass` (also of builtin types and `object`), `min`/`max` `default=`, `!r` with a format spec, `#` in format specs, annotated assignments |
@@ -469,7 +471,8 @@ Differences from CPython
   digit (CPython's own results vary by platform the same way). Float literals and
   `float()` keep 30 significant digits. `hash()` of a non-integral float differs from
   CPython's. `math` is a class object: `print(math)` shows `<class 'math'>`.
-* **Files**: text only (`'b'` in the mode is ignored and gives `str`), no `seek`/`tell`,
+* **Files**: text, or binary with `'b'` in the mode (`'rb'`, `'wb'`, `'ab'`: bytes as they are,
+  read as `bytes`), no `seek`/`tell`,
   file names of 1-16 characters on drive 8 (`os` refuses `* ? , : =` and quotes, which
   the drive would read as patterns or commands). `os` has only `remove`, `unlink`,
   `rename`, `listdir`, `path.exists` and `sys` (a MEGA65 addition); `listdir()` ignores its argument (one disk, no

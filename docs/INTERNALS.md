@@ -32,6 +32,7 @@
 | `file.asm` | tail F: Python files (`open()` and the file methods), the `os` module, loading a module's file |
 | `sets.asm`, `setsr.asm` | tail T: sets and frozensets (operators, methods, `set()`, repr); overlay R: `BUILD_SET` and the stubs |
 | `classm.asm` | tail M: a new class's bases (several: CPython's C3 method resolution order, kept at +10), `__mro__`, `__bases__` |
+| `bytes.asm` | tail M: `bytes` (a `T_STR` with `F_BYTES`): repr, `bytes()`, `encode`/`decode`/`hex`, str methods' results made bytes |
 | `introsp.asm` | tail T: `dir`, `vars`, `globals`, `delattr`, `slice()` and a slice's attributes |
 | `listslice.asm` | tail T: assigning to and deleting list slices (`a[i:j] = x` rebuilds the list in place; an extended slice stores or deletes item by item) |
 | `env.asm` | closures (overlay R): the environment opcodes |
@@ -386,6 +387,20 @@ a `[` or `{`), and `fb_cells` makes one a cell when a nested lambda or generator
 expression uses the plain name. At the top level they are globals that `globals()`,
 `dir()` and `import *` leave out; in a class body, globals too (not class attributes).
 `cmap_leave` drops a level's names at its closing bracket.
+
+## bytes
+
+A bytes object is a `T_STR` with `F_BYTES` ($10) in its header flags, so the string code
+handles length, slicing, `+`, `*`, `in`, searching and hashing. The flag is tested where
+bytes differ: `char_or_byte` (indexing and iteration give ints), `repr_str` / `obj_str`
+(b'...'), `obj_eq` and `str_concat` (`str_kinds`: a bytes never equals a str, and they
+do not concatenate), `str_like_r2` (slices, `+`, `*` of bytes are bytes),
+`builtin_type_of_r2` (`type()`, `isinstance`) and `builtin_method` (bytes' own methods,
+`meth_bytes`, before str's). A str method called with bytes for self sets `bm_wrap` in
+`bm_check`, and `call_native` turns its result into bytes (`xy_wrap`: strings, and lists
+or tuples of them); bytes-only methods have the owner `OWN_BYTES`. The lexer flags
+`b'...'` literals; a file opened with `'b'` (`FF_BIN`) reads without CR translation and
+gives bytes (`f_bin`).
 
 ## Big ints
 

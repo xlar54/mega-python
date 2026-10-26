@@ -62,3 +62,11 @@ bi_set_issuperset:      lda #$62
                         bra set_method
 bi_set_isdisjoint:      lda #$41
                         bra set_method
+
+; bytes (tail M, bytes.asm)
+bytes_repr:     #TAILCALL TAIL_M, xy_repr       ; A/X -> the string builder
+bytes_wrap:     #TAILCALL TAIL_M, xy_wrap       ; a str method's result -> bytes
+bi_bytes:       #TAILCALL TAIL_M, xy_bytes
+bi_str_encode:  #TAILCALL TAIL_M, xy_encode
+bi_bytes_decode: #TAILCALL TAIL_M, xy_decode
+bi_bytes_hex:   #TAILCALL TAIL_M, xy_hex

@@ -814,11 +814,15 @@ _call:  lda argc
         ldz #4
         lda [p0],z
         tax
+        lda #0
+        sta bm_wrap
         lda builtin_flags,x             ; a method checks its self (str.upper(5))
         cmp #8
         bcc +
         jsr bm_check                    ; (builtins.asm; keeps X)
-+       lda c_flags
++       lda bm_wrap                     ; (a str method on bytes: the result as bytes)
+        pha
+        lda c_flags
         pha
         lda c_slot
         pha
@@ -833,7 +837,14 @@ _call:  lda argc
         sta c_slot
         pla
         sta c_flags
-        lda c_slot
+        pla
+        beq +
+        lda t0
+        ldx t0+1
+        jsr bytes_wrap
+        sta t0
+        stx t0+1
++       lda c_slot
         sta vsp
         lda c_slot+1
         sta vsp+1

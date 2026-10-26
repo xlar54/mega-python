@@ -757,9 +757,12 @@ str_concat:
         lda r3
         ldx r3+1
         jsr _part
-        lda r1
+        jsr str_kinds                   ; bytes + bytes: bytes; with a str: TypeError
+        bcc +
+        #RAISE EXC_TYPE, "can't concat str to bytes"
++       lda r1
         ldx r1+1
-        rts
+        jmp str_like_r2
 ; append string A/X into r1 at offset t5
 _part:  jsr str_info
         lda str_len
@@ -992,7 +995,8 @@ seq_repeat:
         bra -
 +       plx
         pla
-        jmp sb_take
+        jsr sb_take
+        jmp str_like_r2                 ; (bytes * n: bytes)
 _zero:  lda #0
         sta t6
         sta t6+1
@@ -1002,7 +1006,8 @@ _zero:  lda #0
         lda #0
         sta str_len
         sta str_len+1
-        jmp str_alloc
+        jsr str_alloc
+        jmp str_like_r2
 _mem:   jmp raise_memory
 _seq:   ; list or tuple: make a list of len * n, then convert for tuples
         lda t6                          ; (the count: allocating may clobber t6)
