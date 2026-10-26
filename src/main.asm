@@ -45,6 +45,7 @@ r_main_end:
         * = TAIL
         .include "fdtoa.asm"
         .include "floata.asm"
+        .include "fbig.asm"                ; (also in overlay C, for the lexer)
 ovl_r_end:
         .cerror * > WINDOW + WINDOW_SIZE, "overlay R is too big"
         .virtual TAIL
@@ -104,6 +105,9 @@ ovl_c_start:
         .include "lexer.asm"
         .include "compiler.asm"
         .include "editor.asm"
+c_fbig  .block                          ; the lexer's copy of fbig.asm (tail A has the
+        .include "fbig.asm"                ; runtime's; C cannot reach a tail)
+        .bend
 ovl_c_end:
         .cerror * > WINDOW + WINDOW_SIZE, "overlay C is too big"
         .endv
@@ -130,6 +134,7 @@ r_main_end:
         * = TAIL
         .include "fdtoa.asm"
         .include "floata.asm"
+        .include "fbig.asm"                ; (also in overlay C, for the lexer)
 ovl_r_end:
         .cerror * > WINDOW + WINDOW_SIZE, "overlay R is too big"
         .endv
@@ -146,6 +151,9 @@ ovl_c_start:
         .include "lexer.asm"
         .include "compiler.asm"
         .include "editor.asm"
+c_fbig  .block                          ; the lexer's copy of fbig.asm (tail A has the
+        .include "fbig.asm"                ; runtime's; C cannot reach a tail)
+        .bend
 ovl_c_end:
         .cerror * > WINDOW + WINDOW_SIZE, "overlay C is too big"
         .endlogical

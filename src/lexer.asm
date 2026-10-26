@@ -593,7 +593,7 @@ lx_float:
         sta fsp,x
         dex
         bpl -
-        jsr f_parse
+        jsr c_fbig.f_parse              ; (overlay C's own copy of fbig.asm)
         bcc +
         jsr syntax_error
         .text "invalid decimal literal", 0
@@ -612,7 +612,7 @@ lx_float:
         sta tok
         lda lx_scan
         bne +
-        jsr f_from_digits
+        jsr c_fbig.f_from_digits
         jsr float_new_dbl
         sta tok_ref
         stx tok_ref+1

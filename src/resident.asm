@@ -877,4 +877,5 @@ os_mod:         .word 0                 ; the os module (made at the first impor
         .include "arith.asm"
         .include "module.asm"
         .include "fcore.asm"
-        .include "fbig.asm"
+        ; (fbig.asm, decimal text <-> double, is in tail A, with a copy in overlay C
+        ; for the lexer's float literals: main.asm)
