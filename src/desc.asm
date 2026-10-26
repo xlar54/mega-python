@@ -312,11 +312,12 @@ op_load_classname:
         #FETCHW
         sta vtmp
         stx vtmp+1
+        jsr cb_prune
         ldx cb_sp
         beq _global
-        lda cb_stack-2,x                ; the class whose body runs
+        lda cb_stack-4,x                ; the class whose body runs
         sta p0
-        lda cb_stack-1,x
+        lda cb_stack-3,x
         sta p0+1
         ldz #8
         lda [p0],z

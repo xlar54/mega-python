@@ -38,6 +38,11 @@ Language
   keys again; deletes are O(n) (the pairs move down and the index is rebuilt).
 * `str` methods still missing: `partition`, `rsplit`, `swapcase`, `expandtabs`, ...
 * Tracebacks with the call chain (the frames hold the return ips).
+* Iterate lazily where a list is built first today: `min`/`max`, `x in it` for
+  non-sequences (`x in range(10**6)` should be arithmetic, as CPython), `str.join`,
+  `set()`/`tuple()` of an iterator. Big ranges give `MemoryError` there (`sum` is lazy).
+* A dict whose keys change but whose size stays the same during iteration
+  (delete one, add one): CPython raises "dictionary keys changed during iteration".
 
 Environment
 -----------
@@ -53,7 +58,7 @@ Memory
 ------
 
 * Code space (see the sizes `build.bat` prints): part 1 has about 1.9 KB free, overlay R
-  about 2 KB, part 2 about 190 bytes; each tail has room left, and more tails can be
+  about 0.9 KB, part 2 almost nothing (new resident code must go elsewhere); each tail has room left, and more tails can be
   added (`docs/INTERNALS.md`, "Tails"). More code should go into tails (only code that never
   runs Python code; see `docs/INTERNALS.md`) or overlay C (compile time).
 

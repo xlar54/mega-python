@@ -551,8 +551,16 @@ xs_str_split:
 +       lda #0
         sta nitems
         sta nitems+1
+        lda t6                          ; (list_new may collect, which clobbers t6)
+        pha
+        lda t6+1
+        pha
         jsr list_new
         #PUSH                           ; [out]
+        pla
+        sta t6+1
+        pla
+        sta t6
         lda #0
         sta t7                          ; position
         sta t7+1

@@ -8,6 +8,8 @@ back from the interpreter's output transcript in attic RAM and compared.
   python tools/run_tests.py t_lists    just the named ones
   -v                                   show the full output of failing tests
   --show                               run Xemu in a window (watch the tests run)
+  --gc                                 collect garbage at every allocation (slow: finds
+                                       references the GC does not see)
 
 Exit status 0 when everything passed.
 """
@@ -85,10 +87,14 @@ def main():
             print('the interpreter did not reach the prompt')
             print('\n'.join(m.screen()))
             return 1
+        timeout = 60
+        if '--gc' in sys.argv:
+            m.poke(X.LABELS['gc_stress'], [1])
+            timeout = 900
         for f in files:
             name = os.path.splitext(os.path.basename(f))[0]
             want = expected(f)
-            got, err = run_one(m, name, 60)
+            got, err = run_one(m, name, timeout)
             if err is None and got == want:
                 passed += 1
                 print('PASS', name)

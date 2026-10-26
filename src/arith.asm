@@ -996,16 +996,20 @@ _zero:  lda #0
         jmp str_alloc
 _mem:   jmp raise_memory
 _seq:   ; list or tuple: make a list of len * n, then convert for tuples
+        lda t6                          ; (the count: allocating may clobber t6)
+        pha
+        lda t6+1
+        pha
         lda #0
         sta nitems
         sta nitems+1
         jsr list_new
-        sta r1
-        stx r1+1
-        lda r1
         sta r0
-        lda r1+1
-        sta r0+1
+        stx r0+1
+        pla
+        sta t6+1
+        pla
+        sta t6
 -       lda t6
         ora t6+1
         beq +

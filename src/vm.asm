@@ -1658,14 +1658,28 @@ op_make_class:
         inz
         lda t0+1
         sta [p0],z
-        ldx cb_sp                       ; its body runs now (LOAD_CLASSNAME)
-        cpx #CB_MAX * 2
+        clc                             ; its body runs now (LOAD_CLASSNAME); an entry
+        lda vsp                         ; at this slot or above is left from a failed one
+        adc #1
+        sta cb_lim
+        lda vsp+1
+        adc #0
+        sta cb_lim+1
+        jsr cb_prune_lim
+        ldx cb_sp
+        cpx #CB_MAX * 4
         bcc +
         #RAISE EXC_RUNTIME, "classes nested too deeply"
 +       lda r0
         sta cb_stack,x
         lda r0+1
         sta cb_stack+1,x
+        lda vsp                         ; (where it is on the value stack)
+        sta cb_stack+2,x
+        lda vsp+1
+        sta cb_stack+3,x
+        inx
+        inx
         inx
         inx
         stx cb_sp
@@ -1674,18 +1688,47 @@ op_make_class:
         sta r0+1
         jmp vm_loop
 
-; the classes whose bodies are running, innermost last (also on the value stack: no GC
-; root needed). An exception out of a class body leaves its entry: the REPL resets it.
+; the classes whose bodies are running, innermost last: (class, its value stack slot);
+; the class is also on the value stack (no GC root needed). END_CLASS pops one; a class
+; body left by an exception leaves its entry, which cb_prune drops once the stack is
+; back above that slot.
 CB_MAX          = 8
 cb_sp:          .byte 0
-cb_stack:       .fill 2 * CB_MAX
+cb_stack:       .fill 4 * CB_MAX
 
 op_end_class:
         lda cb_sp
         beq +
-        dec cb_sp
-        dec cb_sp
+        sec
+        sbc #4
+        sta cb_sp
 +       jmp vm_loop
+
+; cb_prune - drop the entries of class bodies an exception left. The stack grows down:
+; a running body's class slot is at vsp or above it, a left one's below (the handler
+; reset vsp above it). cb_prune_lim: drop those below cb_lim.
+cb_lim:         .word 0
+cb_prune:
+        lda vsp
+        sta cb_lim
+        lda vsp+1
+        sta cb_lim+1
+cb_prune_lim:
+        ldx cb_sp
+        beq _done
+        lda cb_stack-1,x                ; slot < cb_lim: stale
+        cmp cb_lim+1
+        bcc _drop
+        bne _done
+        lda cb_stack-2,x
+        cmp cb_lim
+        bcs _done
+_drop:  txa
+        sec
+        sbc #4
+        sta cb_sp
+        bra cb_prune_lim
+_done:  rts
 
 op_store_classattr:
         #FETCHW                         ; name ref
@@ -1975,12 +2018,17 @@ op_unpack:
         beq _seq
         cmp #T_LIST
         beq _seq
-        ; anything else: materialise it as a list first
+        ; anything else: materialise it as a list first (keeping the count: that
+        ; allocates, and may run Python code)
+        lda t6
+        pha
         lda r0
         ldx r0+1
         jsr list_from_iterable
         sta r0
         stx r0+1
+        pla
+        sta t6
 _seq:   lda r0
         ldx r0+1
         jsr seq_len
@@ -2015,13 +2063,15 @@ _bad:   lda t0
 op_build_slice:
         ; start stop [step] -> slice
         #FETCHB
-        sta t6
+        pha                             ; (2 or 3: allocating may clobber the t registers)
         lda #10
         sta alloc_size
         lda #0
         sta alloc_size+1
         lda #T_SLICE
         jsr alloc
+        pla
+        sta t6
         lda #R_NONE
         ldz #8
         sta [p0],z

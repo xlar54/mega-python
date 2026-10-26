@@ -794,8 +794,8 @@ bi_min:
 bi_max:
         lda #1
 minmax:
-        sta t6+1                        ; the obj_cmp result that replaces the best
-        sec
+        sta mm_dir                      ; the obj_cmp result that replaces the best (not in
+        sec                             ; a t register: tuple_new may collect garbage)
         lda nargc
         sbc nkw
         sta npos
@@ -836,7 +836,7 @@ _go:    ldy mm_key                      ; (the key function stays on the CPU sta
         phy
         ldy mm_key+1
         phy
-        ldy t6+1
+        ldy mm_dir
         phy
         jsr list_from_iterable
         #PUSH                           ; [list]
@@ -988,6 +988,7 @@ _done:  #DROP 1                         ; [list]
         #POP
         jmp seq_get_t2
 mm_key:         .word 0
+mm_dir:         .byte 0
 
 bi_sum:
         #NARGS 1, 2
@@ -997,30 +998,13 @@ bi_sum:
         cpy #2
         bne +
         #ARG 1
-+       #PUSH
++       #PUSH                           ; [total]
         #ARG 0
-        jsr list_from_iterable
-        #PUSH
-        jsr seq_len
-        lda #0
-        sta t2
-        sta t2+1
-_loop:  lda t2
-        cmp t0
-        bne +
-        lda t2+1
-        cmp t0+1
-        beq _done
-+       lda t0
-        pha
-        lda t0+1
-        pha
-        lda t2
-        pha
-        lda t2+1
-        pha
-        #PEEK 0
-        jsr seq_get_t2
+        jsr get_iter                    ; (lazily, as CPython: sum(range(10**6)) fits)
+        #PUSH                           ; [total, iterator]
+_loop:  #PEEK 0
+        jsr iter_next
+        bcs _done
         sta r3
         stx r3+1
         #PEEK 1
@@ -1031,15 +1015,6 @@ _loop:  lda t2
         jsr binop
         #POKE 1
         jsr clear_rregs
-        pla
-        sta t2+1
-        pla
-        sta t2
-        pla
-        sta t0+1
-        pla
-        sta t0
-        inw t2
         bra _loop
 _done:  #DROP 1
         #POP

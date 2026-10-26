@@ -412,6 +412,15 @@ bi_list_clear:
 ;---------------------------------------------------------------------------------------
 ; dict
 ;---------------------------------------------------------------------------------------
+; the dict or set p0 changed size while an iterator went through it (seq.asm it_dindex)
+raise_dict_changed:
+        ldz #1
+        lda [p0],z
+        and #F_SET
+        bne _set
+        #RAISE EXC_RUNTIME, "dictionary changed size during iteration"
+_set:   #RAISE EXC_RUNTIME, "Set changed size during iteration"
+
 bi_dict_keys:
         lda #IT_DICT
         bra dict_view

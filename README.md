@@ -246,7 +246,8 @@ Tests
 `load()` and `run()`. It compares the output with what desktop CPython prints for the
 same file. It reads the output from a transcript the interpreter keeps in attic RAM.
 Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs,
-`--show` to watch it run in an Xemu window.
+`--show` to watch it run in an Xemu window, `--gc` to collect garbage before every
+allocation (finds objects the interpreter forgot to keep alive; slow, minutes per test).
 
 | Test | Covers |
 |---|---|
@@ -275,6 +276,10 @@ Options: test names (also `examples/` names, like `mandel`), `-v` for full diffs
 | `t_libs` | `string`, `bisect`, `heapq`, `functools`, `copy` |
 | `t_stats` | `statistics` |
 | `t_colls` | `collections` (`deque`, `Counter`, `defaultdict`) and `textwrap` |
+| `t_mix` | features combined: closures with `*args`, decorated methods, sets of tuples from comprehensions, nested unpacking in loops |
+| `t_excmix` | exceptions raised from inside closures, decorators, `*args` calls, comprehensions, class bodies and iterators, and what is left working afterwards |
+| `t_gcmix` | the same features while the heap is nearly full (many collections) |
+| `t_edges` | edge cases: deep recursion through a closure, many parameters and locals, changing a dict or set while iterating it (`RuntimeError`), imports inside functions, `RecursionError` and recovering from it, lazy `sum` of a big range |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
 Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, screenshot),
@@ -303,7 +308,9 @@ About 60 KB of the heap is free after start-up (the rest holds the builtins, exc
 names of symbols). Small ints (-16384..16383), `None`, `True` and `False` take no heap
 space. The heap is shared by everything a program creates, so it is the limit that
 matters for big data. When a collection frees less than 1 KB, the program gets a
-`MemoryError` instead of slowing to a crawl.
+`MemoryError` instead of slowing to a crawl. The collector does not move objects, so
+thousands of small live objects with gaps between them can also cause a `MemoryError`
+for a big list or string while `mem()` still shows free space.
 
 What objects cost, roughly (4-byte header included):
 
@@ -404,7 +411,7 @@ Differences from CPython
   arguments reach a builtin, 48 locals a function).
 * Not supported yet: generators/`yield`, unpacking in displays (`[*a, *b]`,
   `{**d}`), multiple inheritance, `from module import *`, packages (`import a.b`), the
-  `bytes` type.
+  `bytes` type, attributes on functions (`f.cache = {}`; use a closure or a class).
 * **Modules**: a module's code and name are kept until `run()` or `new()`; a name a
   module does not define falls back to the main program's global of that name (CPython
   would raise `NameError`). Module names are up to 13 characters (`name.py`), or 9 for

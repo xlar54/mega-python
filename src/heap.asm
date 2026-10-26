@@ -83,12 +83,27 @@ heap_init:
         sta free_list
         sta free_list+1
         sta al_perm
+        ; forget every root: a ref left by an earlier program (an exception leaves
+        ; groot slots set) would point into the middle of a new object
+        ldx #15
+-       sta groot,x
+        dex
+        bpl -
+        ldy #gc_roots_n-1
+-       ldx gc_roots,y
+        sta $1600,x
+        sta $1600+1,x
+        dey
+        bpl -
         lda #<HEAP_START
         sta heap_top
         lda #>HEAP_START
         sta heap_top+1
         rts
 
+al_tries:       .byte 0                 ; alloc: collections tried for this request
+gc_stress:      .byte 0                 ; non-zero: a collection at every allocation
+                                        ; (tools/run_tests.py --gc pokes it)
 ;---------------------------------------------------------------------------------------
 ; alloc - A = type, alloc_size = bytes (header included). Returns A/X = ref and p0
 ; pointing at the object, with the header written and the body zeroed.
@@ -107,7 +122,12 @@ alloc:
         lda #6
         sta alloc_size
 +       lda #0
-        sta gc_n                        ; collections tried
+        sta al_tries                    ; collections tried (not gc_n: the GC uses that)
+        lda gc_stress                   ; (testing: collect before every allocation, so a
+        beq _retry                      ; reference held unrooted across one shows; not
+        lda al_perm                     ; for permanent objects: py_reset's setup, which
+        bne _retry                      ; never collects for real on its fresh heap)
+        jsr gc_collect
 _retry:
         ; first fit through the free list; t1 = current, t2 = previous (0 = head)
         lda free_list
@@ -210,9 +230,9 @@ _bump:  clc
         lda t3
         cmp #<HEAP_LIMIT
         bcc _ok
-_full:  lda gc_n
+_full:  lda al_tries
         bne _oom
-        inc gc_n
+        inc al_tries
         jsr gc_collect
         lda gc_free+1                   ; under 1 KB free even after collecting: give
         cmp #>1024                      ; up rather than collect on every allocation

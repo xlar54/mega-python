@@ -860,7 +860,28 @@ iter_alloc:
         inz
         lda r0+1
         sta [p0],z
-        lda p0
+        ; a dict or set: its size at +12, so that a change is noticed (it_dindex)
+        ldz #4
+        lda [p0],z
+        cmp #IT_DICT
+        beq _view
+        cmp #IT_ITEMS
+        bcc _done
+        cmp #IT_VALUES+1
+        bcs _done
+_view:  lda r0
+        sta p1
+        lda r0+1
+        sta p1+1
+        ldz #4
+        lda [p1],z
+        ldz #12
+        sta [p0],z
+        ldz #5
+        lda [p1],z
+        ldz #13
+        sta [p0],z
+_done:  lda p0
         ldx p0+1
         rts
 
@@ -903,12 +924,12 @@ _new:   tya
         lda p0
         ldx p0+1
         rts
-_range: lda r0
+_range: lda #IT_RANGE
+        jsr iter_alloc
+        lda r0                          ; (after allocating: a collection clobbers p1-p3)
         sta p3
         lda r0+1
         sta p3+1
-        lda #IT_RANGE
-        jsr iter_alloc
         ldz #4                          ; copy start, stop, step to +8..+19
 -       lda [p3],z
         phz
@@ -1070,8 +1091,28 @@ it_str: jsr it_index
         clc
 _end:   rts
 
-it_dict:
+; it_index for a dict or set; RuntimeError if its size changed since the iterator was
+; made (as CPython, also at the end)
+it_dindex:
         jsr it_index
+        php
+        ldz #12
+        lda [p2],z
+        ldz #4
+        cmp [p0],z
+        bne _changed
+        ldz #13
+        lda [p2],z
+        ldz #5
+        cmp [p0],z
+        bne _changed
+        plp
+        rts
+_changed:
+        jmp raise_dict_changed          ; (overlay R, methods.asm)
+
+it_dict:
+        jsr it_dindex
         bcs _end
         jsr it_inc
         asw t0
@@ -1085,7 +1126,7 @@ it_dict:
 _end:   rts
 
 it_values:
-        jsr it_index
+        jsr it_dindex
         bcs _end
         jsr it_inc
         asw t0
@@ -1099,7 +1140,7 @@ it_values:
 _end:   rts
 
 it_items:
-        jsr it_index
+        jsr it_dindex
         bcs _end
         jsr it_inc
         asw t0
@@ -1225,7 +1266,10 @@ it_enum:
 _end:   rts
 
 it_zip:
-        ; a tuple of next() of every inner iterator; stop at the first exhausted
+        ; a tuple of next() of every inner iterator; stop at the first exhausted. The
+        ; tuple being filled is on the value stack: an inner __next__ may run Python code
+        ; (and collect garbage) between its items. (The tuple of iterators is the zip
+        ; iterator's, which its caller keeps.)
         ldz #6
         lda [p2],z
         sta r0
@@ -1244,8 +1288,7 @@ it_zip:
         lda r0+1
         pha
         jsr tuple_new
-        sta r1
-        stx r1+1
+        #PUSH                           ; [result]
         pla
         sta r0+1
         pla
@@ -1271,15 +1314,7 @@ _each:  lda r0
         phy
         ldy r0+1
         phy
-        ldy r1
-        phy
-        ldy r1+1
-        phy
         jsr iter_next
-        ply
-        sty r1+1
-        ply
-        sty r1
         ply
         sty r0+1
         ply
@@ -1293,10 +1328,11 @@ _each:  lda r0
         clc
         adc #6
         taz
-        lda r1
+        phx
+        #PEEK 0                         ; the result tuple
         sta p1
-        lda r1+1
-        sta p1+1
+        stx p1+1
+        plx
         pla
         sta [p1],z
         inz
@@ -1304,11 +1340,11 @@ _each:  lda r0
         sta [p1],z
         inc t6
         bra _each
-_done:  lda r1
-        ldx r1+1
+_done:  #POP
         clc
         rts
-_end:   sec
+_end:   #DROP 1
+        sec
         rts
 
 it_inst:

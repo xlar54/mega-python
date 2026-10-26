@@ -150,7 +150,26 @@ freed. `run()` and `new()` reset the whole heap.
 Native code passes refs in A (lo) / X (hi). Anything that allocates can collect garbage.
 Refs that must survive go in `r0`-`r3`, `groot`, or on the value stack: those are roots.
 The `t` registers are clobbered by allocation (the lexer allocates when it interns a new
-name).
+name), and so are `p0`-`p3` and `fp0`-`fp2`. A count, index or ref that must live
+across an allocation, or across a call that may run Python code (`vm_call_nested`,
+dunders, `__eq__`, `__hash__`, iterators), goes on the CPU stack, in a static byte, or
+(refs) on the value stack. Never keep a new object only in `r1` or on the CPU stack
+while the next allocation happens. Re-derive pointers such as `fp0` (`self_str`)
+after the allocation.
+
+`heap_init` (`run()`, `new()`) clears every root (`groot`, `r0`-`r3`, `cur_exc`, ...).
+An exception can leave a `groot` slot set, and the stale ref would otherwise point into
+the middle of an object of the next program, where marking it sets bit 7 of a size or
+length byte.
+
+`run_tests.py --gc` pokes `gc_stress` (heap.asm), so the allocator collects before
+every non-perm allocation. Most bugs of this kind show up at once in that mode. Each
+collection runs while about 50 KB of the heap is live, so a stress run takes minutes per
+test.
+
+The GC does not move objects. Many live small objects with free holes between them can
+leave no hole big enough for a larger request: the allocator then raises `MemoryError`
+after two collections (`al_tries`) even though `mem()` shows space free.
 
 ## Bytecode and calls
 
@@ -312,7 +331,10 @@ first, which looks for a property only in classes flagged `F_PROPS` (set when a
 property is stored in a class, inherited by `MAKE_CLASS`), so plain stores stay cheap.
 
 A class body runs in its function's (or the module's) frame, with the class on the
-VM's class-body stack (`cb_stack`: `MAKE_CLASS` pushes, `END_CLASS` pops). Its names
+VM's class-body stack (`cb_stack`: `MAKE_CLASS` pushes the class and its value-stack
+slot, `END_CLASS` pops). A body left by an exception leaves its entry behind. Entries
+whose slot is at or above the current stack top are stale, and `MAKE_CLASS` /
+`LOAD_CLASSNAME` drop them (`cb_prune`). Its names
 load with `LOAD_CLASSNAME`: the class's own attribute if it has one, else the global, so
 `b = a * 2` and `@x.setter` see what the body defined before.
 
