@@ -351,10 +351,48 @@ xt_dir:
         lda [p0],z
         tax
         tya
-        bra _chain
+        bra _chain0
 _cls:   cmp #T_CLASS
         bne _type
         #ARG 0
+_chain0:
+        sta r0                          ; a class with an MRO (classm.asm): its classes
+        stx r0+1
+        ora r0+1
+        beq _list
+        lda r0
+        sta p0
+        lda r0+1
+        sta p0+1
+        ldz #11
+        lda [p0],z
+        beq _c1
+        sta in_s+1
+        dez
+        lda [p0],z
+        sta in_s
+        lda #0
+        sta in_j
+_mro:   lda in_s
+        ldx in_s+1
+        jsr seq_len
+        lda in_j
+        cmp t0
+        bcs _list
+        sta t2
+        lda #0
+        sta t2+1
+        lda in_s
+        ldx in_s+1
+        jsr seq_get_t2
+        sta r0
+        stx r0+1
+        jsr in_attrs
+        jsr in_keys
+        inc in_j
+        bra _mro
+_c1:    lda r0
+        ldx r0+1
 _chain: sta r0                          ; the class, then its bases
         stx r0+1
         ora r0+1

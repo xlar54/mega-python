@@ -129,7 +129,7 @@ _loop:  ldy #0
         phx
         jsr _skip
         ; class object (+4 name, +6 base, +8 dict)
-        lda #10
+        lda #14
         sta alloc_size
         lda #0
         sta alloc_size+1

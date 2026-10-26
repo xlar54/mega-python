@@ -4,7 +4,7 @@
 xb_math_init:
         lda #F_PERM
         sta al_perm
-        lda #10
+        lda #14
         sta alloc_size
         lda #0
         sta alloc_size+1

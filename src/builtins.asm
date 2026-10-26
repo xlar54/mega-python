@@ -1989,6 +1989,10 @@ bi_exit:
         jsr exc_new_empty
         jmp raise_obj
 
+; object.__init__ (super().__init__() past the last class): nothing to do
+bi_obj_init:
+        #RET_NONE
+
 ; BaseException.__init__(self, *args): self.args = args
 bi_exc_init:
         lda nargc

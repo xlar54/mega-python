@@ -18,7 +18,7 @@ Language
   types and reprs per kind (`map`, `filter`, `zip`, `list_iterator`: now `iterator`).
 * `.value` of a `StopIteration` raised by Python code; traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in
   tracebacks.
-* Multiple inheritance, subclassing builtin types, `__getattr__`/`__setattr__` hooks,
+* `cls.mro()`, subclassing builtin types, `__getattr__`/`__setattr__` hooks,
   `match`, `eval`/`exec`, `locals()`, `bytes`; `globals()` of a module's code (it gives
   the main program's), a live `globals()` dict.
 * Closures: `del` of a captured variable; the free variable's name in the
@@ -60,7 +60,8 @@ Memory
 ------
 
 * Code space (see the sizes `build.bat` prints): part 1 has about 730 bytes free, overlay R
-  about 860, part 2 about 120, tail X about 110, tail H about 300, tail T about 450;
+  about 540, part 2 about 120, tail X about 110, tail H about 300, tail T about 360,
+  tail M about 2.8 KB;
   move cold code out before it fills up again (as sets went to tail T, fbig.asm to tail A,
   tracebacks / keyword binding / class creation to tails H and X); new code should go in a
   tail or overlay C; each tail has room left, and more tails can be

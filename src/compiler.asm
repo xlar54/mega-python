@@ -6813,6 +6813,7 @@ fs_esc_n = * - fs_esc_in
 fs_esc_out:     .byte 10, 9, 13, '\', "'", '"', 0
 
 ;---------------------------------------------------------------------------------------
+cl_nb:          .byte 0                 ; the number of bases
 st_class:
         lda fb_ndeco                    ; decorators (st_decorated), applied at the end
         pha
@@ -6838,9 +6839,26 @@ st_class:
         lda tok
         cmp #TK_RPAREN
         beq +
+        jsr expr                        ; the bases: several make a tuple
+        lda #1
+        sta cl_nb
+-       lda #TK_COMMA
+        jsr accept
+        bcc _close
+        lda tok
+        cmp #TK_RPAREN
+        beq _close
+        inc cl_nb
         jsr expr
-        lda #TK_RPAREN
+        bra -
+_close: lda #TK_RPAREN
         jsr expect
+        lda cl_nb
+        cmp #2
+        bcc _make
+        ldy #OP_BUILD_TUPLE
+        ldx #0
+        jsr emit_op_word
         bra _make
 +       jsr lex
 _nobase:

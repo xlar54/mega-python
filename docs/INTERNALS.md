@@ -30,6 +30,7 @@
 | `taili.asm` | tail I: `py_reset` (heap, symbol table, exception classes; the fixed symbols' names) |
 | `file.asm` | tail F: Python files (`open()` and the file methods), the `os` module, loading a module's file |
 | `sets.asm`, `setsr.asm` | tail T: sets and frozensets (operators, methods, `set()`, repr); overlay R: `BUILD_SET` and the stubs |
+| `classm.asm` | tail M: a new class's bases (several: CPython's C3 method resolution order, kept at +10), `__mro__`, `__bases__` |
 | `introsp.asm` | tail T: `dir`, `vars`, `globals`, `delattr`, `slice()` and a slice's attributes |
 | `listslice.asm` | tail T: assigning to and deleting list slices (`a[i:j] = x` rebuilds the list in place; an extended slice stores or deletes item by item) |
 | `env.asm` | closures (overlay R): the environment opcodes |
@@ -87,7 +88,7 @@ program may be showing the graphics screen.
 | `$8114000` | `SYM_VAL` as `py_reset` left it (`SYM_BOOT`): `globals()` leaves out the symbols still holding their boot value (the builtins) |
 | `$8180000` / `$8190000` | overlay R / overlay C images (tail A, the end of R, holds `fbig.asm`; C has its own copy, `c_fbig`, for the lexer's float literals) |
 | `$81C0000` | the source of a module being imported |
-| `$81A0000-$81A7FFF` | tail B, H, F, S, P, I, X, T images, 4 KB each (tail A is the end of R's image) |
+| `$81A0000-$81A8FFF` | tail B, H, F, S, P, I, X, T, M images, 4 KB each (tail A is the end of R's image) |
 
 The KERNAL's areas are left alone, as the MEGA65 book's chip RAM map asks:
 `0.0002-0.15FF`, `1.0000-1.1FFF` (DOS), `1.F700-1.F7FF`, `1.F800-` (colour RAM window)
@@ -100,8 +101,8 @@ replaces them, so R's variables survive a compile in the middle of runtime code 
 module imported by a key function, say); C keeps nothing between compiles. A variable
 that resident code uses while C is in must not live in R.
 
-Tails: with R in, the window's last 4 KB (`TAIL`) holds one of eight tails (A, B, H, F,
-S, P, I, X), swapped by a 4 KB DMA from attic (`need_tail` in `resident.asm`; `ovl_runtime`
+Tails: with R in, the window's last 4 KB (`TAIL`) holds one of the tails (A, B, H, F,
+S, P, I, X, T, M), swapped by a 4 KB DMA from attic (`need_tail` in `resident.asm`; `ovl_runtime`
 brings back R with tail A). Code reaches a tail routine only through a stub,
 `label: #TAILCALL TAIL_x, target` (6 bytes: `jsr tcall` and the data; the `#TAILA`,
 `#TAILB`, `#TAILF`, `#TAILS` macros make them). `tcall` (`tailcall.asm`) loads the tail,
@@ -357,6 +358,21 @@ whose slot is at or above the current stack top are stale, and `MAKE_CLASS` /
 `LOAD_CLASSNAME` drop them (`cb_prune`). Its names
 load with `LOAD_CLASSNAME`: the class's own attribute if it has one, else the global, so
 `b = a * 2` and `@x.setter` see what the body defined before.
+
+## Inheritance
+
+A class (`T_CLASS`, 14 bytes) keeps its first base at +6. `class C(A, B)` compiles the
+bases to a tuple for `MAKE_CLASS`, whose base handling is in tail M (`xm_bases`): with
+several bases, or a base that has an MRO of its own, it computes CPython's C3
+linearization (the class, then the merge of the bases' MROs and the bases: repeatedly the
+first head that is in no list's tail) and keeps it at +10 as a tuple (`object` left
+out), the bases tuple at +12. Single inheritance leaves +10 at 0 and everything walks the
++6 chain as before. `class_lookup` (attributes, methods), `isinstance_r2_r3` (also
+`except` matching) and `dir()` follow +10 when it is set. `super()` looks in the MRO of
+`self`'s class from just after the class it was written in (`class_lookup_at`), and an
+`__init__` it does not find there is `object`'s, a no-op (`bi_obj_init`). `__mro__` and
+`__bases__` (with `object` added, as CPython shows them) are made when asked for
+(`xm_class_attr`).
 
 ## *args, **kwargs, keyword-only parameters, f(*a, **k)
 
