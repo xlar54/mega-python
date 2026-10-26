@@ -851,7 +851,16 @@ _go:    ldy mm_key                      ; (the key function stays on the CPU sta
         lda t0
         ora t0+1
         bne +
-        #RAISE EXC_VALUE, "min()/max() arg is an empty sequence"
+        lda #<S_DEFAULT                 ; empty: default=, else ValueError
+        ldx #>S_DEFAULT
+        jsr kw_get
+        bcs _empty
+        ply
+        ply
+        ply
+        #DROP 1
+        rts
+_empty: #RAISE EXC_VALUE, "min()/max() arg is an empty sequence"
 +       pla
         sta t6+1
         pla
@@ -2396,6 +2405,9 @@ _msg:   ; "Name: message", or just "Name" when str(exc) is empty
         lda #COL_NORMAL
         sta scr_color
         rts
+
+raise_subclass:                         ; (MAKE_CLASS with a builtin type as the base)
+        #RAISE EXC_TYPE, "subclassing builtin types is not supported"
 
 ; raise_typed - A/X = an object, Y = RT_*: "'int' object is not subscriptable" (tail H)
 raise_typed:    #TAILCALL TAIL_H, xh_raise_typed

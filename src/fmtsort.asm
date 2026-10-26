@@ -17,6 +17,7 @@ xp_format_spec:
         sta fs_width+1
         sta fs_type
         sta fs_comma
+        sta fs_alt
         lda #'-'
         sta fs_sign
         lda #$ff
@@ -58,7 +59,13 @@ _sign:  jsr _peek
         bne _zero
 +       sta fs_sign
         jsr _adv
-_zero:  jsr _peek
+_zero:  jsr _peek                       ; '#': 0x / 0o / 0b before the digits
+        bcs _end
+        cmp #'#'
+        bne +
+        sta fs_alt
+        jsr _adv
++       jsr _peek
         bcs _end
         cmp #'0'
         bne _width
@@ -147,6 +154,8 @@ _num:   lda #0
 +       jsr _adv
         bra -
 
+fs_alt:         .byte 0                 ; '#' in the spec
+
 is_align:
         cmp #'<'
         beq +
@@ -200,7 +209,23 @@ _pos:   lda fs_sign
         beq _digits
         jsr sb_putc
 _digits:
+        lda fs_alt                      ; '#': the radix prefix
+        beq _nopre
         lda fs_type
+        cmp #'x'
+        beq +
+        cmp #'X'
+        beq +
+        cmp #'o'
+        beq +
+        cmp #'b'
+        bne _nopre
++       pha
+        lda #'0'
+        jsr sb_putc
+        pla
+        jsr sb_putc
+_nopre: lda fs_type
         cmp #'x'
         beq _hex
         cmp #'X'

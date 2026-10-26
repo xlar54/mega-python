@@ -1640,7 +1640,14 @@ op_make_class:
         plx
         cmp #T_CLASS
         beq +
-        pla
+        cmp #T_BUILTIN                  ; a builtin type: only object
+        bne _nob
+        ldz #4
+        lda [p0],z
+        cmp #B_OBJECT
+        beq _nob
+        jmp raise_subclass              ; (builtins.asm)
+_nob:   pla
         lda #0
         tax
         bra ++
@@ -2276,7 +2283,16 @@ op_format:
         bra _take
 +       jsr obj_repr
         bra _take
-_spec:  sta r2
+_spec:  ldy t6                           ; !r: the spec formats repr(value)
+        beq _sp
+        jsr obj_repr
+        plx
+        pla
+        pha
+        phx
+        jsr sb_take
+        #POKE 0
+_sp:    sta r2
         stx r2+1
         jsr format_spec                 ; r2 value, r3 spec string
 _take:  plx

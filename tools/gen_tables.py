@@ -126,7 +126,7 @@ BUILTINS += [("generator", "gentype", "T"),
 OWNERS = ["list", "tuple", "str", "dict", "file", "set", "frozenset", "property",
           "generator"]
 # other names the interpreter needs as symbols (modules and their constants)
-NAMES = "math pi e tau inf nan os path value".split()
+NAMES = "math pi e tau inf nan os path value default".split()
 
 
 def ident(name):

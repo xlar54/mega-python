@@ -59,3 +59,24 @@ try:
     issubclass(SB(), SA)
 except TypeError as e:
     print('TypeError', e)
+
+
+# min/max default=, !r with a format spec, '#' in format specs, annotated assignments
+print(min([], default=0), max((), default=9), max([3, 5], default=0), min(4, 2, key=lambda v: -v))
+print(f'{"x"!r:>5}|{255:#x}|{255:#X}|{8:#o}|{5:#b}|{-255:#x}')
+y: int = 5
+z: int
+
+
+def ah():
+    a: int = 3
+    b: list
+    return a
+
+
+class Pt:
+    x: int = 1
+    y: float
+
+
+print(y, ah(), Pt.x, 'z' in globals() if False else 'ok')

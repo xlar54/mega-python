@@ -3220,6 +3220,31 @@ params_tuple:
         ldx t5+1
         rts
 
+; st_annot - (st_expr, tok = the ':' after a target) skip the annotation. C clear: an
+; '=' follows (an assignment); C set: no value (the target's code is dropped)
+st_annot:
+        lda c_last_op                   ; (the target's load must stay the last one)
+        pha
+        lda c_last_op+1
+        pha
+        jsr lex
+        jsr discard_expr
+        pla
+        sta c_last_op+1
+        pla
+        sta c_last_op
+        lda tok
+        cmp #TK_ASSIGN
+        bne +
+        clc
+        rts
++       lda el_start
+        sta cp
+        lda el_start+1
+        sta cp+1
+        sec
+        rts
+
 ; discard_expr - compile an expression (annotation) and drop its code
 discard_expr:
         jsr c_here
@@ -4056,6 +4081,15 @@ st_expr:
         pha                             ; CPU: [cut mark][target mark]
         jsr target_or_exprlist          ; -> se_n elements, se_tuple
         lda tok
+        cmp #TK_COLON                   ; x: annotation [= value]
+        bne +
+        jsr st_annot
+        bcc +
+        pla                             ; only an annotation: nothing to run
+        pla
+        pla
+        rts
++       lda tok
         cmp #TK_ASSIGN
         beq _assign
         cmp #TK_AUG
