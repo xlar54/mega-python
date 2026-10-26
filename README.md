@@ -210,6 +210,9 @@ Example programs on the disk:
   saves it again), pretty-printed with `indent`
 * `counter`: `Counter`, `defaultdict` and `deque` on a paragraph (letter and word
   counts with a text bar chart)
+* `recursion`: factorials, memoised Fibonacci (a closure), the Towers of Hanoi,
+  permutations and the N queens puzzle (recursive generators with `yield from`), a
+  flood fill, flattening nested lists, Ackermann's function and `RecursionError`
 * `sprites` (MEGA65 only): bouncing ball sprites and a multicolour ship with `lib/sprite.py`
 * `dice` (MEGA65 only): dice, cards, a lottery draw and weighted coins with `random`
 * `clock` (MEGA65 only): the date in several formats, a stopwatch and a ticking clock
