@@ -73,3 +73,73 @@ print(r(50))
 print(''.join(str(i % 10) for i in range(300))[-12:])
 print(sum(range(50000)), max(range(-5, 5), key=abs))
 print((1, (2, [3, {4: (5,)}]))[1][1][1][4])
+
+# dict keys deleted and added during iteration (same size): CPython's 'keys changed'
+def trial(name, d, f):
+    seen = []
+    try:
+        for k in d:
+            seen.append(k)
+            f(d, k)
+        print(name, seen, 'ok', d)
+    except RuntimeError as e:
+        print(name, seen, e)
+
+
+def swap_cur(d, k):                     # delete the current key, add another
+    del d[k]
+    d[k + 10] = 0
+
+
+def swap_later(d, k):                   # delete a key not reached yet
+    if k == 1:
+        del d[3]
+        d[4] = 0
+
+
+def swap_last(d, k):                    # at the last key: delete the first
+    if k == 3:
+        del d[1]
+        d[4] = 0
+
+
+def swap_earlier(d, k):                 # delete a key already seen
+    if k == 2:
+        del d[1]
+        d[4] = 0
+
+
+def readd(d, k):                        # delete and re-add the same key
+    if k == 1:
+        del d[1]
+        d[1] = 'again'
+
+
+def update(d, k):                       # only values change: fine
+    d[k] = d[k] * 2
+
+
+trial('cur', {1: 1, 2: 2}, swap_cur)
+trial('later', {1: 1, 2: 2, 3: 3}, swap_later)
+trial('last', {1: 1, 2: 2, 3: 3}, swap_last)
+trial('earlier', {1: 1, 2: 2, 3: 3}, swap_earlier)
+trial('readd', {1: 1, 2: 2, 3: 3}, readd)
+trial('update', {1: 1, 2: 2, 3: 3}, update)
+s = {1, 2, 3}                           # sets never raise "keys changed"
+seen = []
+for x in s:
+    seen.append(x)
+    if x == 1:
+        s.discard(3)
+        s.add(4)
+print('set', seen, sorted(s))
+trial('big', {i: i for i in range(12)}, swap_cur)
+
+
+def swap_mid(d, k):                    # a hashed dict (8+ keys): pop an earlier key
+    if k == 8:
+        d.pop(k - 3)
+        d[k + 50] = 0
+
+
+trial('bigmid', {i: i for i in range(12)}, swap_mid)

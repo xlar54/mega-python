@@ -296,6 +296,14 @@ frozensets use their size, instances call `__hash__` or use their identity.
 (`__hash__`, `__eq__`), which is why `dict_find` keeps its probing state on the CPU stack
 around them, and why `op_in` keeps its operator there across `contains`.
 
+Dict and set iterators (`IT_DICT`, `IT_ITEMS`, `IT_VALUES`) hold the size at creation
+(`+12`), the keys left (`+14`) and the last key returned (`+16`, which the GC marks as
+well). `it_dpair` (overlay R, `methods.asm`) raises "changed size" when the size differs.
+Because `dict_del` moves pairs down where CPython leaves a hole, it puts the position
+back after the last key: it finds that key again, or steps back one place if the key
+itself was deleted. Finding a key when none are left raises CPython's "dictionary keys
+changed during iteration" (dicts only; sets never raise it).
+
 ## Closures
 
 The compiler is single-pass, so a function's shared variables must be known before its

@@ -41,8 +41,6 @@ Language
 * Iterate lazily where a list is built first today: `min`/`max`, `x in it` for
   non-sequences (`x in range(10**6)` should be arithmetic, as CPython), `str.join`,
   `set()`/`tuple()` of an iterator. Big ranges give `MemoryError` there (`sum` is lazy).
-* A dict whose keys change but whose size stays the same during iteration
-  (delete one, add one): CPython raises "dictionary keys changed during iteration".
 
 Environment
 -----------

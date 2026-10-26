@@ -279,7 +279,7 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_mix` | features combined: closures with `*args`, decorated methods, sets of tuples from comprehensions, nested unpacking in loops |
 | `t_excmix` | exceptions raised from inside closures, decorators, `*args` calls, comprehensions, class bodies and iterators, and what is left working afterwards |
 | `t_gcmix` | the same features while the heap is nearly full (many collections) |
-| `t_edges` | edge cases: deep recursion through a closure, many parameters and locals, changing a dict or set while iterating it (`RuntimeError`), imports inside functions, `RecursionError` and recovering from it, lazy `sum` of a big range |
+| `t_edges` | edge cases: deep recursion through a closure, many parameters and locals, changing a dict or set while iterating it (`RuntimeError`: "changed size", and CPython's "keys changed" when keys are deleted and added), imports inside functions, `RecursionError` and recovering from it, lazy `sum` of a big range |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
 Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, screenshot),

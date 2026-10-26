@@ -4,7 +4,8 @@
 ; T_ITER kinds
 IT_SEQ          = 0                     ; list / tuple: +6 seq, +8 index
 IT_STR          = 1                     ; +6 str, +8 index
-IT_DICT         = 2                     ; keys: +6 dict, +8 index
+IT_DICT         = 2                     ; keys: +6 dict, +8 index, +12 size, +14 keys
+                                        ; left, +16 last key (methods.asm it_dpair)
 IT_RANGE        = 3                     ; +8 cur, +12 stop, +16 step
 IT_ITEMS        = 4                     ; dict items
 IT_VALUES       = 5                     ; dict values
@@ -860,7 +861,7 @@ iter_alloc:
         inz
         lda r0+1
         sta [p0],z
-        ; a dict or set: its size at +12, so that a change is noticed (it_dindex)
+        ; a dict or set: note its size, to notice changes (methods.asm it_dpair)
         ldz #4
         lda [p0],z
         cmp #IT_DICT
@@ -869,18 +870,7 @@ iter_alloc:
         bcc _done
         cmp #IT_VALUES+1
         bcs _done
-_view:  lda r0
-        sta p1
-        lda r0+1
-        sta p1+1
-        ldz #4
-        lda [p1],z
-        ldz #12
-        sta [p0],z
-        ldz #5
-        lda [p1],z
-        ldz #13
-        sta [p0],z
+_view:  jsr iter_view_init
 _done:  lda p0
         ldx p0+1
         rts
@@ -1091,32 +1081,10 @@ it_str: jsr it_index
         clc
 _end:   rts
 
-; it_index for a dict or set; RuntimeError if its size changed since the iterator was
-; made (as CPython, also at the end)
-it_dindex:
-        jsr it_index
-        php
-        ldz #12
-        lda [p2],z
-        ldz #4
-        cmp [p0],z
-        bne _changed
-        ldz #13
-        lda [p2],z
-        ldz #5
-        cmp [p0],z
-        bne _changed
-        plp
-        rts
-_changed:
-        jmp raise_dict_changed          ; (overlay R, methods.asm)
-
+; the dict iterators: it_dpair (overlay R, methods.asm) finds the pair
 it_dict:
-        jsr it_dindex
+        jsr it_dpair
         bcs _end
-        jsr it_inc
-        asw t0
-        jsr list_item_ptr
         ldz #1
         lda [p1],z
         tax
@@ -1126,11 +1094,8 @@ it_dict:
 _end:   rts
 
 it_values:
-        jsr it_dindex
+        jsr it_dpair
         bcs _end
-        jsr it_inc
-        asw t0
-        jsr list_item_ptr
         ldz #3
         lda [p1],z
         tax
@@ -1140,11 +1105,8 @@ it_values:
 _end:   rts
 
 it_items:
-        jsr it_dindex
+        jsr it_dpair
         bcs _end
-        jsr it_inc
-        asw t0
-        jsr list_item_ptr
         ; (key, value) tuple
         ldz #0
         lda [p1],z

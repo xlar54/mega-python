@@ -412,7 +412,148 @@ bi_list_clear:
 ;---------------------------------------------------------------------------------------
 ; dict
 ;---------------------------------------------------------------------------------------
-; the dict or set p0 changed size while an iterator went through it (seq.asm it_dindex)
+; iter_view_init - p0 = a new dict iterator over r0: its size, keys left = size
+; (last key: 0 from alloc)
+iter_view_init:
+        lda r0
+        sta p1
+        lda r0+1
+        sta p1+1
+        ldz #4
+        lda [p1],z
+        ldz #12
+        sta [p0],z
+        ldz #14
+        sta [p0],z
+        ldz #5
+        lda [p1],z
+        ldz #13
+        sta [p0],z
+        ldz #15
+        sta [p0],z
+        rts
+
+;---------------------------------------------------------------------------------------
+; it_dpair - the next pair of the dict iterator p2 (seq.asm it_dict, it_values,
+; it_items): C clear and p1 -> the pair, or C set at the end. As CPython: a change of
+; size raises RuntimeError, and so does finding more keys than the dict had ("keys
+; changed": a key deleted and another added). A delete moves the later pairs down, so
+; the position follows the last key returned (CPython leaves a hole instead).
+; Uses t0-t3.
+;---------------------------------------------------------------------------------------
+it_dpair:
+        ldz #6
+        lda [p2],z
+        sta p0
+        inz
+        lda [p2],z
+        sta p0+1
+        ldz #12                         ; the size
+        lda [p2],z
+        ldz #4
+        cmp [p0],z
+        bne _size
+        ldz #13
+        lda [p2],z
+        ldz #5
+        cmp [p0],z
+        beq +
+_size:  jmp raise_dict_changed
++       ldz #8                          ; t2 = position
+        lda [p2],z
+        sta t2
+        inz
+        lda [p2],z
+        sta t2+1
+        ora t2
+        beq _at
+        dew t2                          ; the last key is still just before it?
+        lda t2
+        sta t3
+        lda t2+1
+        sta t3+1
+        jsr _is_last
+        beq _found
+_down:  lda t2                          ; no: pairs moved down; find it lower
+        ora t2+1
+        beq _gone
+        dew t2
+        jsr _is_last
+        bne _down
+_found: inw t2
+        bra _at
+_gone:  lda t3                          ; it was deleted itself: one back
+        sta t2
+        lda t3+1
+        sta t2+1
+_at:    ldz #4                          ; the end?
+        lda t2
+        cmp [p0],z
+        inz
+        lda t2+1
+        sbc [p0],z
+        bcc _more
+        rts
+_more:  ldz #1
+        lda [p0],z
+        and #F_SET                      ; (sets do not count)
+        bne _take
+        ldz #14                         ; keys left
+        lda [p2],z
+        inz
+        ora [p2],z
+        bne +
+        #RAISE EXC_RUNTIME, "dictionary keys changed during iteration"
++       ldz #14
+        lda [p2],z
+        sec
+        sbc #1
+        sta [p2],z
+        inz
+        lda [p2],z
+        sbc #0
+        sta [p2],z
+_take:  jsr _pair
+        ldz #0                          ; the last key; the position after it
+        lda [p1],z
+        ldz #16
+        sta [p2],z
+        ldz #1
+        lda [p1],z
+        ldz #17
+        sta [p2],z
+        inw t2
+        ldz #8
+        lda t2
+        sta [p2],z
+        inz
+        lda t2+1
+        sta [p2],z
+        clc
+        rts
+; p1 -> pair t2
+_pair:  lda t2
+        asl
+        sta t0
+        lda t2+1
+        rol
+        sta t0+1
+        jmp list_item_ptr
+; Z set when pair t2's key is the last key returned
+_is_last:
+        jsr _pair
+        ldz #0
+        lda [p1],z
+        ldz #16
+        cmp [p2],z
+        bne +
+        ldz #1
+        lda [p1],z
+        ldz #17
+        cmp [p2],z
++       rts
+
+; the dict or set p0 changed size while an iterator went through it (it_dpair)
 raise_dict_changed:
         ldz #1
         lda [p0],z

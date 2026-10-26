@@ -654,7 +654,24 @@ gc_children:
         cmp #3
         beq _dict
         ; fixed ref fields: gc_kind = offset | count << 5 ... encoded as kind 4+: table
-        tya
+        cpy #T_ITER                     ; a dict iterator also holds its last key (+16)
+        bne _fixed
+        ldz #4
+        lda [p2],z
+        cmp #IT_DICT
+        beq _view
+        cmp #IT_ITEMS
+        bcc _fixed
+        cmp #IT_VALUES+1
+        bcs _fixed
+_view:  ldz #17
+        lda [p2],z
+        tax
+        dez
+        lda [p2],z
+        jsr gc_mark                     ; (uses p1, fp1, Y)
+        ldy #T_ITER
+_fixed: tya
         tax
         lda gc_off,x
         sta p3
