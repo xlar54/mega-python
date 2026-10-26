@@ -13,10 +13,6 @@ Language
   indexes beyond 32 bits, `int.bit_length()` and the other int methods, `round()` with
   a negative `ndigits` (for all ints), `math.gcd`/`isqrt`/`comb`/`factorial`.
 * Sets: CPython's hash order.
-* Comprehensions in a scope of their own (now their loop variables leak into the code
-  around them; at the top level they replace a global of that name). Generator
-  expressions already have one: compiling list / dict / set comprehensions the same way
-  costs a generator per comprehension, so a cheaper scheme (hidden local slots) is better.
 * Live `dict` views (`keys()`, `values()`, `items()` are list snapshots); iterator
   types and reprs per kind (`map`, `filter`, `zip`, `list_iterator`: now `iterator`).
 * `.value` of a `StopIteration` raised by Python code; traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in

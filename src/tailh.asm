@@ -1129,6 +1129,9 @@ is_public:
         cmp #'.'
         bne _no
         inz
+        lda [fp0],z                     ; (a hidden comprehension variable: " x")
+        cmp #' '
+        beq _no
         tza                             ; intern what follows the dot
         clc
         adc fp0

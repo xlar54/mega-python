@@ -360,6 +360,23 @@ whose slot is at or above the current stack top are stale, and `MAKE_CLASS` /
 load with `LOAD_CLASSNAME`: the class's own attribute if it has one, else the global, so
 `b = a * 2` and `@x.setter` see what the body defined before.
 
+## Comprehension scopes
+
+A list, set or dict comprehension compiles inline (a loop in the code around it), but its
+loop variables get hidden names, a space and the name (`" x"`: no source can spell it),
+so they neither leak nor overwrite a variable of the same name. At the `[` or `{`,
+`cmap_enter` scans ahead (the lexer comes back) for the names between each `for` and
+its `in` at the comprehension's own depth and records them with their hidden symbols
+(`cm_hide`; SYM_BASE gives the plain name back) and the scope record they belong to.
+`emit_load_name` and `store_op_for_sym` look every name up there (`cmap_get`), except
+in the first iterable, which runs in the enclosing scope (`cmap_off`), and except a
+name that a function inside the comprehension has as a local of its own (a lambda's
+parameter). In a function the prescan makes the hidden names locals (`ps_infor` = 2 in
+a `[` or `{`), and `fb_cells` makes one a cell when a nested lambda or generator
+expression uses the plain name. At the top level they are globals that `globals()`,
+`dir()` and `import *` leave out; in a class body, globals too (not class attributes).
+`cmap_leave` drops a level's names at its closing bracket.
+
 ## Big ints
 
 An int beyond 32 bits is a `T_INT` object with `F_BIG` in its header flags: +4 the length

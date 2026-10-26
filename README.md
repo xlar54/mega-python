@@ -361,6 +361,7 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_unpack` | `*` and `**` in list / tuple / set / dict displays, starred assignment and `for` targets |
 | `t_bigint` | ints beyond 32 bits: the operators (floored `//` and `%`, `**`, shifts, `&`, `\|`, `^`, `~` on negatives), comparisons, `int()` of strings and floats, literals, `float()`, hashing, `str`/`repr`, `%d`/`%x`/`format` with `,`, `hex`/`bin`/`oct`, `divmod`, `pow` with a modulus |
 | `t_mi` | multiple inheritance: diamonds and the C3 order, `super()` chains through both sides, `__mro__`/`__bases__`, mixins on exceptions, an inconsistent order (`TypeError`), `super().__init__()` reaching `object` |
+| `t_compscope` | comprehensions keep their loop variables to themselves: at the top level, in functions and class bodies, nested, with lambdas over them (late binding and `i=i` defaults), the first iterable taken from outside |
 | `t_introsp` | `dir`, `vars`, `globals`, `delattr`, `slice` objects and their attributes, `ascii` |
 | `t_strmeth` | the newer `str` methods (`rfind`, `partition`, `rsplit`, `expandtabs`, ...) and methods of builtin types as values |
 | `t_errors` | error messages that name the type, `issubclass` (also of builtin types and `object`), `min`/`max` `default=`, `!r` with a format spec, `#` in format specs, annotated assignments |
@@ -522,10 +523,6 @@ Differences from CPython
   and their type is `iterator` (CPython: `<map object at ...>`, `map`).
 * A program's globals stay after `run()`, so a program that defines `load`, `save`,
   `run`, ... replaces those REPL commands until `new()`.
-* **Comprehensions** (`[x for x in ...]`, dict and set ones) run in the code around
-  them, so their loop variables stay set afterwards (in CPython they have their own
-  scope; generator expressions have it here too). At the top level that also replaces a
-  global of the same name.
 * `globals()` and `vars()` with no argument give a new dict of the main program's global
   names: changing it does not change the variables. `dir(obj)` lists what the object
   holds and its class's (and the bases') names and a builtin type's methods, not the
