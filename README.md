@@ -40,11 +40,12 @@ CPython" below):
 * **Exceptions**: the builtin hierarchy (`BaseException`, `Exception`, `ValueError`,
   `KeyError`, `StopIteration`, `GeneratorExit`, ...), your own exception classes,
   tracebacks with the chain of calls.
-* **Builtins**: `abs all any bin bool callable chr classmethod dict divmod enumerate exit
-  filter float format frozenset getattr hasattr hash hex id input int isinstance
-  issubclass iter len list map max min next object oct open ord pow print property quit
-  range repr reversed round set setattr sorted staticmethod str sum super tuple type
-  zip`, and for the MEGA65 `run edit new load save files cls peek poke mem help gc`.
+* **Builtins**: `abs all any ascii bin bool callable chr classmethod delattr dict dir
+  divmod enumerate exit filter float format frozenset getattr globals hasattr hash hex id
+  input int isinstance issubclass iter len list map max min next object oct open ord pow
+  print property quit range repr reversed round set setattr slice sorted staticmethod str
+  sum super tuple type vars zip` (`isinstance`/`issubclass` know `object` and that `bool`
+  is an `int`), and for the MEGA65 `run edit new load save files cls peek poke mem help gc`.
 * **Methods**: `str` (`upper lower split join strip lstrip rstrip find replace
   startswith endswith isdigit isalpha isalnum isspace isupper islower isascii isdecimal
   isnumeric count index rfind rindex format center ljust rjust zfill title capitalize
@@ -66,12 +67,10 @@ Not supported yet:
   `__slots__`, `__getattr__`/`__setattr__` hooks, `property` deleters.
 * `match`, `async`/`await`, positional-only parameters (`/`), `yield` in a lambda,
   `del` of a variable a nested function uses.
-* `eval`, `exec`, `dir`, `vars`, `globals`, `locals`, `delattr`, `ascii`, `slice`,
-  `issubclass` of builtin types (`issubclass(bool, int)`).
+* `eval`, `exec`, `locals`, `compile`.
 * Attributes on functions (`f.cache = {}`), live `dict` views (`keys()` and friends
   return lists).
-* `str.encode`, `str.translate`, `str.format_map`; `float` methods; set methods with
-  several other iterables (`a.union(b, c)`).
+* `str.encode`, `str.translate`, `str.format_map`; `float` methods.
 * Packages (`import a.b`), relative imports.
 * The modules `re`, `datetime`, and most of the standard library. A `namedtuple` is a
   class of its own, not a `tuple` subclass (`isinstance(p, tuple)` is `False`).
@@ -335,7 +334,7 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_random` | `random`: seeds repeat, ranges, shuffle, sample, weighted choices, errors (properties that hold for CPython's generator too) |
 | `t_sys` | `sys`: the version values, `version_info` comparisons, `stdout.write`, `exit` |
 | `t_time` | `time`: `gmtime`, `strftime`, `asctime` of fixed times, `struct_time`, the clock's plausibility |
-| `t_sets` | set and frozenset literals, comprehensions, operators, subset comparisons, methods, `unhashable` errors |
+| `t_sets` | set and frozenset literals, comprehensions, operators, subset comparisons, methods (also with several iterables), in-place operators, `unhashable` errors |
 | `t_args` | `*args`, `**kwargs`, keyword-only parameters, `f(*a, **k)`, forwarding wrappers, argument errors |
 | `t_decorators` | function, factory, stacked and class decorators; `staticmethod`, `classmethod`, `property` with setters, inherited |
 | `t_closures` | nested functions and lambdas over enclosing variables, `nonlocal`, late binding, recursion through a closure, classes inside functions |
@@ -353,8 +352,9 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_edges` | edge cases: deep recursion through a closure, many parameters and locals, changing a dict or set while iterating it (`RuntimeError`: "changed size", and CPython's "keys changed" when keys are deleted and added), imports inside functions, `RecursionError` and recovering from it, lazy `sum` of a big range |
 | `t_blocks` | `finally` on `break`/`continue`/`return` (nested, mixed with `with`, `return` and `break` inside `finally`), `with` passing the exception to `__exit__` and swallowing it, several managers in one `with` |
 | `t_unpack` | `*` and `**` in list / tuple / set / dict displays, starred assignment and `for` targets |
+| `t_introsp` | `dir`, `vars`, `globals`, `delattr`, `slice` objects and their attributes, `ascii` |
 | `t_strmeth` | the newer `str` methods (`rfind`, `partition`, `rsplit`, `expandtabs`, ...) and methods of builtin types as values |
-| `t_errors` | error messages that name the type, `issubclass`, `min`/`max` `default=`, `!r` with a format spec, `#` in format specs, annotated assignments |
+| `t_errors` | error messages that name the type, `issubclass` (also of builtin types and `object`), `min`/`max` `default=`, `!r` with a format spec, `#` in format specs, annotated assignments |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
 Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, screenshot),
@@ -469,8 +469,7 @@ Differences from CPython
 * **Sets** (`{1, 2}`, `set()`, `frozenset()`, set comprehensions, `| & - ^`, `<=` and
   the other subset comparisons, and the set methods) keep their members in the order
   they were added, where CPython uses hash order: `print({3, 1, 2})` shows `{3, 1, 2}`
-  (CPython: `{1, 2, 3}`). Methods that take other iterables (`union`, `update`, ...)
-  take one. `s |= t` makes a new set (CPython changes `s`).
+  (CPython: `{1, 2, 3}`).
 * **Dicts and sets** with 8 or more entries are hashed (smaller ones are searched one
   by one, which is as fast for them). Keys follow CPython's rules: lists, dicts, sets
   and instances whose class defines `__eq__` but not `__hash__` are unhashable
@@ -507,6 +506,14 @@ Differences from CPython
   and their type is `iterator` (CPython: `<map object at ...>`, `map`).
 * A program's globals stay after `run()`, so a program that defines `load`, `save`,
   `run`, ... replaces those REPL commands until `new()`.
+* **Comprehensions** (`[x for x in ...]`, dict and set ones) run in the code around
+  them, so their loop variables stay set afterwards (in CPython they have their own
+  scope; generator expressions have it here too). At the top level that also replaces a
+  global of the same name.
+* `globals()` and `vars()` with no argument give a new dict of the main program's global
+  names: changing it does not change the variables. `dir(obj)` lists what the object
+  holds and its class's (and the bases') names and a builtin type's methods, not the
+  dunder methods every object has in CPython.
 * Tracebacks show each level as `  line N, in name` (no file name or source line), the
   innermost 12 levels at most.
 * Memory: Python objects share a 64 KB heap (see "Memory" above).

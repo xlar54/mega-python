@@ -96,6 +96,7 @@ tail_x_end:
 tail_t_start:
         .include "sets.asm"
         .include "listslice.asm"
+        .include "introsp.asm"
 tail_t_end:
         .cerror * > WINDOW + WINDOW_SIZE, "tail T is too big"
         .endv
@@ -213,6 +214,7 @@ tail_x_end:
 tail_t_start:
         .include "sets.asm"
         .include "listslice.asm"
+        .include "introsp.asm"
 tail_t_end:
         .endlogical
         .cerror TAILS_N != 8, "TAILS_N must count the tails written after overlay C"

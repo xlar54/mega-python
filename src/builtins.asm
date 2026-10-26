@@ -163,6 +163,38 @@ builtin_method:
         ldx r0+1
         jsr type_of
 builtin_method_a:
+        jsr meth_table
+        bcs _miss
+_next:  ldy #1
+        lda (t6),y
+        cmp #$ff
+        beq _miss
+        tax
+        dey
+        lda (t6),y
+        jsr sym_name
+        cmp r1
+        bne _skip
+        cpx r1+1
+        bne _skip
+        ldy #2
+        lda (t6),y
+        jsr builtin_obj
+        clc
+        rts
+_skip:  clc
+        lda t6
+        adc #4
+        sta t6
+        bcc _next
+        inc t6+1
+        bra _next
+_miss:  sec
+        rts
+
+; meth_table - A = type -> C clear, t6 = its method table (meth_*: symbol, builtin id
+; words, $ffff at the end); C set if the type has none
+meth_table:
         ldx #<meth_list
         ldy #>meth_list
         cmp #T_LIST
@@ -204,31 +236,7 @@ builtin_method_a:
 _search:
         stx t6
         sty t6+1
-_next:  ldy #1
-        lda (t6),y
-        cmp #$ff
-        beq _miss
-        tax
-        dey
-        lda (t6),y
-        jsr sym_name
-        cmp r1
-        bne _skip
-        cpx r1+1
-        bne _skip
-        ldy #2
-        lda (t6),y
-        jsr builtin_obj
         clc
-        rts
-_skip:  clc
-        lda t6
-        adc #4
-        sta t6
-        bcc _next
-        inc t6+1
-        bra _next
-_miss:  sec
         rts
 
 ; kw_get - A/X = symbol: is it among the keyword arguments? -> C clear, A/X = value
@@ -298,7 +306,7 @@ builtin_type_of_r2:
 type_builtin:
         .byte B_NONETYPE, B_INT, B_STR, B_LIST, B_TUPLE, B_DICT, B_NONETYPE, B_FUNCTION
         .byte B_FUNCTION, B_FUNCTION, B_TYPE, $ff, B_RANGE, B_OBJECT, B_FLOAT, B_NONETYPE
-        .byte B_BOOL, B_OBJECT, B_OBJECT, B_TEXTIOWRAPPER, B_MODULE, B_PROPERTY
+        .byte B_BOOL, B_SLICE, B_OBJECT, B_TEXTIOWRAPPER, B_MODULE, B_PROPERTY
         .byte B_GENERATOR, B_SET, B_FROZENSET
 
 ; put_str - print string A/X
@@ -1357,7 +1365,13 @@ bi_issubclass:
         jsr type_of
         cmp #T_CLASS
         beq +
-        #RAISE EXC_TYPE, "issubclass() arg 1 must be a class"
+        cmp #T_BUILTIN                  ; or a builtin type (int, str, ...)
+        bne _bad
+        ldz #5
+        lda [p0],z
+        and #BF_TYPE
+        bne +
+_bad:   #RAISE EXC_TYPE, "issubclass() arg 1 must be a class"
 +       inc ii_sub
         jsr bi_isinstance
         dec ii_sub

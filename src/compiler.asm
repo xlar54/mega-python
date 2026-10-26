@@ -4267,11 +4267,18 @@ _rhs:   lda tok
         pla
         bne +                           ; += uses the in-place add
         lda #OP_IADD
-        bra ++
-+       clc
+        bra _emit
++       cmp #BOP_SUB                    ; -= &= |= ^= change a set in place
+        beq _inpl
+        cmp #BOP_AND
+        bcs _inpl
+        clc
         adc #OP_ADD
-+       jsr emit
-        lda se_op
+_emit:  jsr emit
+        bra _store
+_inpl:  ldy #OP_INPLACE
+        jsr emit_op_byte
+_store: lda se_op
         jsr store_for_load
         jmp emit_store_op
 

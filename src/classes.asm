@@ -132,7 +132,10 @@ _name:  ; __name__ of functions (+8), builtins and builtin types (+6)
         lda r0
         ldx r0+1
         jsr type_of
-        ldy #9
+        cmp #T_SLICE                    ; a slice's start, stop, step
+        bne +
+        jmp slice_attr
++       ldy #9
         cmp #T_FUNC
         beq +
         ldy #7
@@ -493,24 +496,36 @@ _yes:   sec
 _no:    clc
         rts
 _builtin:
-        jsr builtin_type_of_r2          ; -> A/X = the builtin type object of r2
+        lda #B_OBJECT                   ; everything is an object
+        jsr _isr3
+        beq _yes
+        lda ii_sub                      ; issubclass(): r2 is the type itself
+        beq +
+        lda r2
+        ldx r2+1
+        bra ++
++       jsr builtin_type_of_r2          ; -> A/X = the builtin type object of r2
++       sta t4
+        stx t4+1
         cmp r3
         bne +
         cpx r3+1
         beq _yes
-+       ; bool is a subclass of int
-        lda r2
-        ldx r2+1
-        jsr type_of
-        cmp #T_BOOL
++       lda #B_BOOL                     ; bool is a subclass of int
+        jsr builtin_obj
+        cmp t4
+        bne _no
+        cpx t4+1
         bne _no
         lda #B_INT
-        jsr builtin_obj
-        cmp r3
-        bne _no
-        cpx r3+1
+        jsr _isr3
         beq _yes
         bra _no
+_isr3:  jsr builtin_obj                 ; Z set if builtin A is r3
+        cmp r3
+        bne +
+        cpx r3+1
++       rts
 _tuple: lda r3
         pha
         lda r3+1

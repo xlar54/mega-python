@@ -452,7 +452,26 @@ mt_addr_hi:     .byte >VSTACK, >$cff0, >$fef0
 py_reset:
         jsr files_reset                 ; (the KERNAL's files of the old heap's file objects)
         jsr h_reset                     ; the rest is in tail I
-        jmp builtins_init
+        jsr builtins_init
+        lda nsyms                       ; the globals as they are now: globals() leaves
+        sta nsyms_boot                  ; out the ones still unchanged
+        asl a
+        sta t0
+        lda nsyms+1
+        sta nsyms_boot+1
+        rol a
+        sta t0+1
+        ldx #3
+-       lda _val,x
+        sta fp0,x
+        lda _boot,x
+        sta fp1,x
+        dex
+        bpl -
+        jmp dma_copy
+_val:   .dword SYM_VAL
+_boot:  .dword SYM_BOOT
+nsyms_boot:     .word 0
 h_reset:        #TAILCALL TAIL_I, xh_reset
 h_disk_load:    #TAILCALL TAIL_H, disk_load
 h_disk_save:    #TAILCALL TAIL_H, disk_save

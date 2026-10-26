@@ -23,9 +23,22 @@ bi_set_discard: #TAILCALL TAIL_T, xt_set_discard
 bi_set_pop:     #TAILCALL TAIL_T, xt_set_pop
 bi_set_clear:   #TAILCALL TAIL_T, xt_set_clear
 set_method:     #TAILCALL TAIL_T, xt_set_method
+op_inplace:                             ; INPLACE b: a set in place, else the operator
+        jsr x_inplace
+        bcs +
+        jmp vm_loop
++       jmp op_binop_bop
+x_inplace:      #TAILCALL TAIL_T, xt_inplace
 sets_from_iter: #TAILCALL TAIL_T, set_from_iter
 list_setslice:  #TAILCALL TAIL_T, xt_setslice   ; (listslice.asm)
 list_delslice:  #TAILCALL TAIL_T, xt_delslice
+bi_slice:       #TAILCALL TAIL_T, xt_slice      ; (introsp.asm)
+slice_attr:     #TAILCALL TAIL_T, xt_slice_attr
+bi_delattr:     #TAILCALL TAIL_T, xt_delattr
+bi_globals:     #TAILCALL TAIL_T, xt_globals
+bi_vars:        #TAILCALL TAIL_T, xt_vars
+bi_dir:         #TAILCALL TAIL_T, xt_dir
+mod_names:      #TAILCALL TAIL_H, xh_mod_names  ; (tailh.asm)
 ; the methods with another iterable: A = the operation (sets.asm, xt_set_method)
 bi_set_union:           lda #0
                         bra set_method

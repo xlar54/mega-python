@@ -99,7 +99,8 @@ OP_YIELD_VALUE  = 93                    ; value -> sent value (gen.asm)
 OP_SEND         = 94                    ; w exit   it value -> it next | result (yield from)
 OP_UNPACK_EX    = 95                    ; b before, b after: a, *b, c = ... (then UNPACK)
 OP_IMPORT_STAR  = 96                    ; w target module sym (0 = main)   module ->
-OP_COUNT        = 97
+OP_INPLACE      = 97                    ; b binop: x -= & | ^ y (a set changes in place)
+OP_COUNT        = 98
 
 ; operand bytes per opcode, bit 7 = has a jump target (word at +1)
 op_len:
@@ -112,4 +113,4 @@ op_len:
         .byte 2, 2, 1, $82, 0, 0, 1, 0, 0, 3    ; 60-69
         .byte 2, 1, 1, 2, 0, 2, 1, 1, 1, 2      ; 70-79
         .byte 3, 2, 1, 0, 2, 2, 1, 0, 2, 0      ; 80-89
-        .byte 3, 1, 1, 0, $82, 2, 2             ; 90-96
+        .byte 3, 1, 1, 0, $82, 2, 2, 1          ; 90-97

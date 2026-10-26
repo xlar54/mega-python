@@ -938,14 +938,14 @@ xh_import_star:
         jsr type_of
         cmp #T_MODULE
         beq _mod
-        jsr _dict                       ; math, os: the keys of their dict
+        jsr is_dict                       ; math, os: the keys of their dict
         lda #IT_DICT
         jsr iter_alloc
         jsr list_from_iterable
         bra _have
-_mod:   jsr _modsym
-        lda #<_all
-        ldx #>_all
+_mod:   jsr is_modsym
+        lda #<is_all_name
+        ldx #>is_all_name
         jsr intern_cstr
         lda int_ref
         ldx int_ref+1
@@ -963,32 +963,7 @@ _mod:   jsr _modsym
 +       inc is_all                      ; __all__: a copy of it
         jsr list_from_iterable
         bra _have
-_scan:  lda #0                          ; else its bound hidden names
-        sta nitems
-        sta nitems+1
-        jsr list_new
-        #PUSH                           ; [module][names]
-        lda #1
-        sta is_s
-        lda #0
-        sta is_s+1
-_next:  lda is_s
-        cmp nsyms
-        lda is_s+1
-        sbc nsyms+1
-        bcs _scanned
-        jsr _public
-        bcs +
-        #PEEK 0
-        sta r0
-        stx r0+1
-        jsr list_append
-+       inc is_s
-        bne _next
-        inc is_s+1
-        bra _next
-_scanned:
-        #POP
+_scan:  jsr xh_mod_names                  ; else its bound hidden names
 _have:  #PUSH                           ; [module][names]
         lda #0
         sta is_i
@@ -1031,12 +1006,12 @@ _loop:  #PEEK 0
         bne +
         jsr module_getattr
         bra _store
-+       jsr _dict
++       jsr is_dict
         jsr dict_get
         bcs _skip
 _store: sta r2
         stx r2+1
-        jsr _bind
+        jsr is_bind
 _skip:  inc is_i
         bne _loop
         inc is_i+1
@@ -1044,8 +1019,39 @@ _skip:  inc is_i
 _done:  #DROP 2
         jmp clear_rregs
 
-; _dict - r0 = math / os -> r0 = its dict
-_dict:  lda r0
+; xh_mod_names - r0 = module -> A/X = a list of the names bound in it (dir(), vars())
+xh_mod_names:
+        jsr is_modsym
+        lda #0
+        sta nitems
+        sta nitems+1
+        jsr list_new
+        #PUSH                           ; [names]
+        lda #1
+        sta is_s
+        lda #0
+        sta is_s+1
+_next:  lda is_s
+        cmp nsyms
+        lda is_s+1
+        sbc nsyms+1
+        bcs _end
+        jsr is_public
+        bcs +
+        #PEEK 0
+        sta r0
+        stx r0+1
+        jsr list_append
++       inc is_s
+        bne _next
+        inc is_s+1
+        bra _next
+_end:   #POP
+        rts
+
+; is_dict - r0 = math / os -> r0 = its dict
+is_dict:
+        lda r0
         sta p0
         lda r0+1
         sta p0+1
@@ -1057,8 +1063,8 @@ _dict:  lda r0
         sta r0+1
         rts
 
-; _modsym - r0 = module -> ms_mod = its symbol, is_buf / is_ml = its name
-_modsym:
+; is_modsym - r0 = module -> ms_mod = its symbol, is_buf / is_ml = its name
+is_modsym:
         lda r0
         sta p0
         lda r0+1
@@ -1089,9 +1095,8 @@ _modsym:
 +       stz is_ml
         rts
 
-; _public - symbol is_s: "<module>.name", bound, name not starting with '_' -> C clear,
-; r1 = name (interned)
-_public:
+; is_public - symbol is_s: "<module>.name", bound -> C clear, r1 = name (interned)
+is_public:
         lda is_s
         ldx is_s+1
         jsr sym_val_addr
@@ -1124,9 +1129,6 @@ _public:
         cmp #'.'
         bne _no
         inz
-        lda [fp0],z
-        cmp #'_'
-        beq _no
         tza                             ; intern what follows the dot
         clc
         adc fp0
@@ -1158,8 +1160,9 @@ _public:
 _no:    sec
         rts
 
-; _bind - r1 = name, r2 = value: bound in the target
-_bind:  lda r1
+; is_bind - r1 = name, r2 = value: bound in the target
+is_bind:
+        lda r1
         ldx r1+1
         jsr str_info
         lda fp0
@@ -1192,4 +1195,4 @@ _bind:  lda r1
         lda r2+1
         sta [fp1],z
         rts
-_all:   .null "__all__"
+is_all_name:    .null "__all__"
