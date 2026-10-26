@@ -572,7 +572,9 @@ _merge: sta ex_kind                     ; (3: a call's **, 5: a display's)
         beq _notmap
         #RAISE EXC_TYPE, "argument after ** must be a dict"
 _notmap:
-        #RAISE EXC_TYPE, "object is not a mapping"
+        #PEEK 0
+        ldy #RT_MAP
+        jmp raise_typed
 +       lda #0
         sta ba_i
 -       #PEEK 0

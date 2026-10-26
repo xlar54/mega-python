@@ -732,7 +732,10 @@ _end:   lda #FR_SENDX                   ; its result: None
         lda #R_NONE
         ldx #0
         jmp gen_exit
-_bad:   #RAISE EXC_ATTR, "object has no attribute 'send'"
+_bad:
+        #PEEK 0
+        ldy #RT_SEND
+        jmp raise_typed
 _thrown:
         ldy #0
         sty send_throw

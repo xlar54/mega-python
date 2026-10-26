@@ -111,7 +111,11 @@ _inst:  lda #S_GETITEM
         jsr inst_binop
         bcs _bad
         rts
-_bad:   #RAISE EXC_TYPE, "object is not subscriptable"
+_bad:
+        lda r2
+        ldx r2+1
+        ldy #RT_SUBSCR
+        jmp raise_typed
 _seq:   ldz #4
         lda [p0],z
         sta t5
@@ -265,7 +269,11 @@ setitem:
         pla
         pla
         rts
-_bad:   #RAISE EXC_TYPE, "object does not support item assignment"
+_bad:
+        lda r0
+        ldx r0+1
+        ldy #RT_SETITEM
+        jmp raise_typed
 _list:  ldz #4
         lda [p0],z
         sta t5
@@ -323,7 +331,10 @@ inst_method2:
         stx r1+1
         jsr class_lookup
         bcc +
-        jmp setitem_bad
+        lda _self
+        ldx _self+1
+        ldy #RT_SETITEM
+        jmp raise_typed
 +       #PUSH
         lda _self
         ldx _self+1
@@ -340,8 +351,6 @@ inst_method2:
         sta argc
         jmp vm_call_nested
 _self:  .word 0
-setitem_bad:
-        #RAISE EXC_TYPE, "object does not support item assignment"
 
 op_delete_subscr:
         #PEEK 1
@@ -375,7 +384,11 @@ op_delete_subscr:
 _dict:  jsr dict_del
         bcc _done
         jmp raise_key
-_bad:   #RAISE EXC_TYPE, "object does not support item deletion"
+_bad:
+        lda r0
+        ldx r0+1
+        ldy #RT_DELITEM
+        jmp raise_typed
 _done:  #DROP 2
         jsr clear_rregs
         jmp vm_loop
@@ -627,7 +640,10 @@ getslice:
         beq +
         cmp #T_TUPLE
         beq +
-        #RAISE EXC_TYPE, "object is not sliceable"
+        lda r2
+        ldx r2+1
+        ldy #RT_SUBSCR
+        jmp raise_typed
 +       ldz #4
         lda [p0],z
         sta t5
@@ -906,7 +922,10 @@ get_iter:
         ldy #IT_FILE
         cmp #T_FILE
         beq _new
-        #RAISE EXC_TYPE, "object is not iterable"
+        lda r0
+        ldx r0+1
+        ldy #RT_ITER
+        jmp raise_typed
 _self:  lda r0
         ldx r0+1
         rts
@@ -949,7 +968,10 @@ _inst:  ; __iter__ returns the iterator; we drive it with __next__
         lda #S_ITER
         jsr inst_unary
         bcc +
-        #RAISE EXC_TYPE, "object is not iterable"
+        lda r0
+        ldx r0+1
+        ldy #RT_ITER
+        jmp raise_typed
 +       sta r0
         stx r0+1
         lda #IT_INST

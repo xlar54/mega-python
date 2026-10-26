@@ -430,7 +430,10 @@ obj_len:
         bcs _bad
         jsr int_val
         rts
-_bad:   #RAISE EXC_TYPE, "object has no len()"
+_bad:
+        #ARG 0
+        ldy #RT_LEN
+        jmp raise_typed
 _four:  ldz #4
         lda [p0],z
         sta acc
@@ -1517,7 +1520,9 @@ bi_next:
         beq +
         cmp #T_GEN
         beq +
-        #RAISE EXC_TYPE, "object is not an iterator"
+        #ARG 0
+        ldy #RT_NEXT
+        jmp raise_typed
 +       #ARG 0
 _next:  jsr iter_next
         bcs _end
@@ -2377,6 +2382,9 @@ _msg:   ; "Name: message", or just "Name" when str(exc) is empty
         lda #COL_NORMAL
         sta scr_color
         rts
+
+; raise_typed - A/X = an object, Y = RT_*: "'int' object is not subscriptable" (tail H)
+raise_typed:    #TAILCALL TAIL_H, xh_raise_typed
 
 ;---------------------------------------------------------------------------------------
 ; The levels of calls an exception left. throw records them when it is first raised

@@ -33,6 +33,16 @@ EXC_FILENOTFOUND = 27
 EXC_GENEXIT     = 28                    ; GeneratorExit (gen.asm: close())
 EXC_N           = 29
 
+; raise_typed's messages (tailh.asm): Y = one of these, A/X = the object
+RT_SUBSCR       = 0
+RT_SETITEM      = 1
+RT_DELITEM      = 2
+RT_ITER         = 3
+RT_NEXT         = 4
+RT_LEN          = 5
+RT_MAP          = 6
+RT_SEND         = 7
+
 exc_cls_lo:     .fill EXC_N
 exc_cls_hi:     .fill EXC_N
 mem_error:      .word 0                 ; preallocated MemoryError instance

@@ -1,6 +1,49 @@
 ;=======================================================================================
-; Tail H: help(), mem(), and the program load / save / directory of the REPL.
+; Tail H: help(), mem(), and the program load / save / directory of the REPL; error
+; messages that name a type.
 ;=======================================================================================
+; xh_raise_typed - (raise_typed) A/X = an object, Y = RT_*: raise the error about it as
+; CPython words it, with its type's name: "'int' object is not subscriptable"
+rt_obj:         .word 0
+rt_msg:         .byte 0
+xh_raise_typed:
+        sta rt_obj
+        stx rt_obj+1
+        sty rt_msg
+        jsr sb_mark_t5
+        lda rt_msg
+        cmp #RT_LEN
+        bne +
+        #SBPRINT "object of type "
++       lda #$27
+        jsr sb_putc
+        lda rt_obj
+        ldx rt_obj+1
+        jsr sb_type_name
+        lda #$27
+        jsr sb_putc
+        lda rt_msg
+        asl a
+        tay
+        lda rt_text,y
+        ldx rt_text+1,y
+        jsr sb_puts
+        lda #EXC_TYPE
+        ldy rt_msg
+        cpy #RT_SEND
+        bne +
+        lda #EXC_ATTR
++       jmp raise_sb
+rt_text:        .word _sub, _set, _del, _iter, _next, _len, _map, _send
+_sub:   .text " object is not subscriptable", 0
+_set:   .text " object does not support item assignment", 0
+_del:   .text " object doesn't support item deletion", 0
+_iter:  .text " object is not iterable", 0
+_next:  .text " object is not an iterator", 0
+_len:   .text " has no len()", 0
+_map:   .text " object is not a mapping", 0
+_send:  .text " object has no attribute 'send'", 0
+
 xh_help:
         jsr scr_fresh_line
         lda #COL_INFO
