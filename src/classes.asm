@@ -444,8 +444,17 @@ isinstance_r2_r3:
         ldx r2+1
         jsr type_of
         cmp #T_INST
+        beq _inst
+        cmp #T_CLASS                    ; issubclass(): the chain from the class itself
         bne _no
-        ldz #4
+        lda ii_sub
+        beq _no
+        lda p0
+        sta p1
+        lda p0+1
+        sta p1+1
+        bra _walk
+_inst:  ldz #4
         lda [p0],z
         sta p1
         inz

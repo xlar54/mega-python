@@ -1301,6 +1301,20 @@ bi_isinstance:
         rol
         jmp bool_from_a
 
+; issubclass(cls, classinfo): isinstance's walk, from the class itself
+ii_sub:         .byte 0
+bi_issubclass:
+        #NARGS 2, 2
+        #ARG 0
+        jsr type_of
+        cmp #T_CLASS
+        beq +
+        #RAISE EXC_TYPE, "issubclass() arg 1 must be a class"
++       inc ii_sub
+        jsr bi_isinstance
+        dec ii_sub
+        rts
+
 bi_hex:
         lda #16
         bra radix

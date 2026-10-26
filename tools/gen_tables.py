@@ -35,6 +35,7 @@ BUILTINS = [
     ("staticmethod", "staticmethod", "f"), ("classmethod", "classmethod", "f"),
     ("property", "property", "t"),
     ("bool", "bool", "t"), ("type", "type", "t"), ("isinstance", "isinstance", "f"),
+    ("issubclass", "issubclass", "f"),
     ("sorted", "sorted", "f"), ("enumerate", "enumerate", "f"), ("zip", "zip", "f"),
     ("hex", "hex", "f"), ("bin", "bin", "f"), ("oct", "oct", "f"),
     ("divmod", "divmod", "f"), ("pow", "pow", "f"), ("iter", "iter", "f"),

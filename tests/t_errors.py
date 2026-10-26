@@ -38,3 +38,24 @@ def yf():
 
 g = yf()
 next(g)
+
+
+# issubclass
+class SA:
+    pass
+
+
+class SB(SA):
+    pass
+
+
+class SC:
+    pass
+
+
+print(issubclass(SB, SA), issubclass(SA, SB), issubclass(SB, SB), issubclass(SB, (SC, SA)), issubclass(SC, (SA, SB)))
+print(issubclass(KeyError, LookupError), issubclass(GeneratorExit, Exception), issubclass(ValueError, BaseException))
+try:
+    issubclass(SB(), SA)
+except TypeError as e:
+    print('TypeError', e)
