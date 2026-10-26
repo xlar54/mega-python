@@ -35,6 +35,7 @@ FB_NDEF         = 16
 FB_PARAMS       = 18
 SC_WITH         = 20
 SC_WCOUNT       = 21
+SC_NPO          = 22                    ; functions: positional-only parameters (before '/')
 SC_GLOBALS      = 24
 SC_LOCALS       = 40
 SC_LOOPS        = 136
@@ -2685,7 +2686,24 @@ _param: ldy #SC_FLAGS
         jsr syntax_error
         .text "arguments cannot follow **kwargs", 0
 +       lda tok
-        cmp #TK_STAR
+        cmp #TK_SLASH                   ; '/': the parameters so far are positional-only
+        bne _nsl
+        ldy #SC_NPOS
+        lda (sc),y
+        bne _badsl
+        ldy #SC_NPO
+        lda (sc),y
+        bne _badsl
+        ldy #SC_NLOCALS
+        lda (sc),y
+        beq _badsl
+        ldy #SC_NPO
+        sta (sc),y
+        jsr lex
+        bra _next
+_badsl: jsr syntax_error
+        .text "/ must follow the positional parameters", 0
+_nsl:   cmp #TK_STAR
         bne _nstar
         jsr fb_posend                   ; '*' / '*name': the rest are keyword-only
         jsr lex
@@ -3225,8 +3243,30 @@ params_tuple:
         iny
         lda (sc),y
         tax
+        lda t3                          ; positional-only: a hidden name, which no
+        ldy #SC_NPO                     ; keyword argument can give
+        cmp (sc),y
         pla
-        jsr sym_name
+        bcs _plain
+        ldy t3
+        phy
+        ldy t5
+        phy
+        ldy t5+1
+        phy
+        ldy nitems
+        phy
+        ldy #1
+        jsr cm_hide
+        ply
+        sty nitems
+        ply
+        sty t5+1
+        ply
+        sty t5
+        ply
+        sty t3
+_plain: jsr sym_name
         pha
         lda t5
         sta p0

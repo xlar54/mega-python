@@ -71,3 +71,4 @@ bi_str_encode:  #TAILCALL TAIL_M, xy_encode
 bi_bytes_decode: #TAILCALL TAIL_M, xy_decode
 bi_bytes_hex:   #TAILCALL TAIL_M, xy_hex
 perm_settle:    #TAILCALL TAIL_M, xy_settle     ; A = generation, X = 1: release
+str_window:     #TAILCALL TAIL_O, xw_window     ; (bm_check) start / end positions

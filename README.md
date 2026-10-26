@@ -30,8 +30,8 @@ CPython" below):
   `%` formatting, `str.format`, slicing with steps, assigning to and deleting slices of
   lists (`a[1:3] = x`, `del a[::2]`), unpacking with `*` and `**` in calls
   and displays (`[*a, *b]`, `{**d, 'k': 1}`) and starred targets (`first, *rest = x`).
-* **Functions**: defaults, keyword arguments, `*args`, `**kwargs`, keyword-only
-  parameters, closures and `nonlocal`, decorators, generators (`send`, `throw`, `close`).
+* **Functions**: defaults, keyword arguments, `*args`, `**kwargs`, keyword-only and
+  positional-only (`/`) parameters, closures and `nonlocal`, decorators, generators (`send`, `throw`, `close`).
 * **Classes**: single and multiple inheritance (CPython's C3 method resolution order,
   `__mro__`, `__bases__`), `super()` (along the MRO), `staticmethod`, `classmethod`, `property`
   (with setters), the operator dunders (`__add__` ... `__radd__`, comparisons,
@@ -66,7 +66,7 @@ Not supported yet:
   `decimal`, `fractions`.
 * Subclassing builtin types (`class D(dict)`), metaclasses, `cls.mro()`,
   `__slots__`, `__getattr__`/`__setattr__` hooks, `property` deleters.
-* `match`, `async`/`await`, positional-only parameters (`/`), `yield` in a lambda,
+* `match`, `async`/`await`, `yield` in a lambda,
   `del` of a variable a nested function uses.
 * `locals`, `compile`; `eval`/`exec` with `globals`/`locals` dicts.
 * Attributes on functions (`f.cache = {}`), live `dict` views (`keys()` and friends
@@ -74,7 +74,7 @@ Not supported yet:
 * `str.encode`, `str.translate`, `str.format_map`; `float` methods.
 * Packages (`import a.b`), relative imports.
 * Most of the standard library; time zones in `datetime`; backreferences and lookbehind
-  in `re` patterns. String methods take no start/end positions (`s.find(x, 3)`). A `namedtuple` is a
+  in `re` patterns. A `namedtuple` is a
   class of its own, not a `tuple` subclass (`isinstance(p, tuple)` is `False`).
 * Traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in
   tracebacks, `StopIteration(v).value` for one raised by your own code.

@@ -136,6 +136,9 @@ BUILTINS += [("generator", "gentype", "T"),
              ("send", "gen_send", "m", "generator"), ("close", "gen_close", "m", "generator"),
              ("throw", "gen_throw", "m", "generator")]
 
+# str methods that take start / end positions (bm_check -> strpos.asm)
+POS_METHODS = {"str_find_m", "str_rfind", "str_index", "str_rindex", "str_count",
+               "str_startswith", "str_endswith"}
 OWNERS = ["list", "tuple", "str", "dict", "file", "set", "frozenset", "property",
           "generator", "bytes"]
 # other names the interpreter needs as symbols (modules and their constants)
@@ -213,6 +216,7 @@ def main():
                "file": "T_FILE", "set": "T_SET", "frozenset": "T_FSET",
                "property": "T_DESC", "generator": "T_GEN",
                "bytes": "OWN_BYTES"}         # (a T_STR with F_BYTES: bm_check)
+    out.append("BF_POS = 4                        ; (methods) start / end positions")
     out.append("builtin_flags:")
     for b in BUILTINS:
         f = "0"
@@ -224,6 +228,8 @@ def main():
             f = "2"
         elif b[2] == "m":
             f = "%s << 3" % owner_t[b[3]]
+            if b[1] in POS_METHODS:
+                f += " | BF_POS"
         out.append("        .byte %s" % f)
     out.append("")
     for owner in OWNERS:

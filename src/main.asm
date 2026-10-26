@@ -113,6 +113,12 @@ tail_n_start:
 tail_n_end:
         .cerror * > WINDOW + WINDOW_SIZE, "tail N is too big"
         .endv
+        .virtual TAIL
+tail_o_start:
+        .include "strpos.asm"
+tail_o_end:
+        .cerror * > WINDOW + WINDOW_SIZE, "tail O is too big"
+        .endv
         * = PART2_LOAD
         .logical PART2
 part2_start:
@@ -166,7 +172,7 @@ part2_start:
 part2_end:
         .cerror * > PART2_END, "resident part 2 overflows into the reserved 0.FF00 page"
         .endv
-        * = $1000
+        * = 0                           ; (pass 2's image: overlay C and 11 tails in 64 KB)
         .logical WINDOW
 ovl_c_start:
         .include "lexer.asm"
@@ -178,7 +184,7 @@ c_fbig  .block                          ; the lexer's copy of fbig.asm (tail A h
 ovl_c_end:
         .cerror * > WINDOW + WINDOW_SIZE, "overlay C is too big"
         .endlogical
-        * = $1000 + WINDOW_SIZE
+        * = WINDOW_SIZE
         .logical TAIL
 tail_b_start:
         .include "ftrans.asm"
@@ -186,43 +192,43 @@ tail_b_start:
         .include "gen/fconst.asm"
 tail_b_end:
         .endlogical
-        * = $1000 + WINDOW_SIZE + TAIL_SIZE
+        * = WINDOW_SIZE + TAIL_SIZE
         .logical TAIL
 tail_h_start:
         .include "tailh.asm"
 tail_h_end:
         .endlogical
-        * = $1000 + WINDOW_SIZE + 2 * TAIL_SIZE
+        * = WINDOW_SIZE + 2 * TAIL_SIZE
         .logical TAIL
 tail_f_start:
         .include "file.asm"
 tail_f_end:
         .endlogical
-        * = $1000 + WINDOW_SIZE + 3 * TAIL_SIZE
+        * = WINDOW_SIZE + 3 * TAIL_SIZE
         .logical TAIL
 tail_s_start:
         .include "strmeth.asm"
 tail_s_end:
         .endlogical
-        * = $1000 + WINDOW_SIZE + 4 * TAIL_SIZE
+        * = WINDOW_SIZE + 4 * TAIL_SIZE
         .logical TAIL
 tail_p_start:
         .include "fmtsort.asm"
 tail_p_end:
         .endlogical
-        * = $1000 + WINDOW_SIZE + 5 * TAIL_SIZE
+        * = WINDOW_SIZE + 5 * TAIL_SIZE
         .logical TAIL
 tail_i_start:
         .include "taili.asm"
 tail_i_end:
         .endlogical
-        * = $1000 + WINDOW_SIZE + 6 * TAIL_SIZE
+        * = WINDOW_SIZE + 6 * TAIL_SIZE
         .logical TAIL
 tail_x_start:
         .include "args.asm"
 tail_x_end:
         .endlogical
-        * = $1000 + WINDOW_SIZE + 7 * TAIL_SIZE
+        * = WINDOW_SIZE + 7 * TAIL_SIZE
         .logical TAIL
 tail_t_start:
         .include "sets.asm"
@@ -230,25 +236,31 @@ tail_t_start:
         .include "introsp.asm"
 tail_t_end:
         .endlogical
-        * = $1000 + WINDOW_SIZE + 8 * TAIL_SIZE
+        * = WINDOW_SIZE + 8 * TAIL_SIZE
         .logical TAIL
 tail_m_start:
         .include "classm.asm"
         .include "bytes.asm"
 tail_m_end:
         .endlogical
-        * = $1000 + WINDOW_SIZE + 9 * TAIL_SIZE
+        * = WINDOW_SIZE + 9 * TAIL_SIZE
         .logical TAIL
 tail_n_start:
         .include "bigint.asm"
 tail_n_end:
         .endlogical
-        .cerror TAILS_N != 10, "TAILS_N must count the tails written after overlay C"
+        * = WINDOW_SIZE + 10 * TAIL_SIZE   ; (the second file, mpy-ov2: split.py)
+        .logical TAIL
+tail_o_start:
+        .include "strpos.asm"
+tail_o_end:
+        .endlogical
+        .cerror TAILS_N != 11, "TAILS_N must count the tails written after overlay C"
         .endif
 
 part2_len = part2_end - part2_start
         .cerror PART2_LOAD + part2_len > $e000, "part 2's load image is too big"
 
         .if PASS == 1
-        .warn format("part 1 $%04x, overlay R $%04x + tail A $%04x / B $%04x / H $%04x / F $%04x / S $%04x / P $%04x / I $%04x / X $%04x / T $%04x / M $%04x / N $%04x, part 2 $%04x, overlay C $%04x bytes", part1_end - $2001, r_main_end - ovl_r_start, ovl_r_end - TAIL, tail_b_end - tail_b_start, tail_h_end - tail_h_start, tail_f_end - tail_f_start, tail_s_end - tail_s_start, tail_p_end - tail_p_start, tail_i_end - tail_i_start, tail_x_end - tail_x_start, tail_t_end - tail_t_start, tail_m_end - tail_m_start, tail_n_end - tail_n_start, part2_len, ovl_c_end - ovl_c_start)
+        .warn format("part 1 $%04x, overlay R $%04x + tail A $%04x / B $%04x / H $%04x / F $%04x / S $%04x / P $%04x / I $%04x / X $%04x / T $%04x / M $%04x / N $%04x / O $%04x, part 2 $%04x, overlay C $%04x bytes", part1_end - $2001, r_main_end - ovl_r_start, ovl_r_end - TAIL, tail_b_end - tail_b_start, tail_h_end - tail_h_start, tail_f_end - tail_f_start, tail_s_end - tail_s_start, tail_p_end - tail_p_start, tail_i_end - tail_i_start, tail_x_end - tail_x_start, tail_t_end - tail_t_start, tail_m_end - tail_m_start, tail_n_end - tail_n_start, tail_o_end - tail_o_start, part2_len, ovl_c_end - ovl_c_start)
         .endif
