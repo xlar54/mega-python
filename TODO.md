@@ -11,7 +11,9 @@ Language
 * Arbitrary-precision ints (now 32-bit with OverflowError).
 * Sets: methods with several other iterables (`a.union(b, c)`), `|=` and friends
   changing the set in place, CPython's hash order.
-* Lazy `map`/`filter` (now lists) and `dict` views.
+* Live `dict` views (`keys()`, `values()`, `items()` are list snapshots); iterator
+  types and reprs per kind (`map`, `filter`, `zip`, `list_iterator`: now `iterator`);
+  methods of builtin types as values (`str.upper`, `list.append`).
 * Generators: `yield from` passing `throw()` / `close()` on to the inner generator,
   PEP 479 (`StopIteration` inside a generator -> `RuntimeError`), `.value` of a
   `StopIteration` raised by Python code. `issubclass()` is missing.

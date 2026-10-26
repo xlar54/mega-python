@@ -14,6 +14,8 @@ IT_ZIP          = 7                     ; +6 tuple of iterators
 IT_REV          = 8                     ; +6 seq, +8 index (counts down)
 IT_INST         = 9                     ; +6 instance with __next__
 IT_FILE         = 10                    ; +6 file (its lines)
+IT_MAP          = 11                    ; +6 (f, iterator), +8 call style (builtins.asm)
+IT_FILTER       = 12                    ; (the same)
 
 ;---------------------------------------------------------------------------------------
 ; index helpers
@@ -990,7 +992,7 @@ iter_next:
         jmp (iter_tab,x)
 iter_tab:
         .word it_seq, it_str, it_dict, it_range, it_items, it_values, it_enum
-        .word it_zip, it_rev, it_inst, it_file
+        .word it_zip, it_rev, it_inst, it_file, it_mapfilter, it_mapfilter
 it_file:
         ldz #7
         lda [p2],z

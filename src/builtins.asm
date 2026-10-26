@@ -1847,72 +1847,114 @@ bi_setattr:
         ldx #0
         rts
 
-; map(f, iterable) and filter(f, iterable) build lists (Python 3 returns iterators)
-bi_map:
-        lda #0
-        bra mapfilter
-bi_filter:
-        lda #1
-mapfilter:
+; map(f, *iterables) and filter(f, iterable): lazy iterators, as in Python 3. IT_MAP /
+; IT_FILTER (seq.asm): +6 a tuple (f, the items' iterator: zip's for several
+; iterables), +8 1 = call f(x), 2 = f(*x)
+bi_map:         #TAILCALL TAIL_X, xb_map         ; (args.asm)
+bi_filter:      #TAILCALL TAIL_X, xb_filter
+
+; it_mapfilter - (iter_next, seq.asm) p2 = a map / filter iterator -> C clear and A/X =
+; its next item, or C set
+it_mapfilter:
+        ldz #4                          ; CPU: [kind][style]
+        lda [p2],z
         pha
-        #NARGS 2, 2
-        #ARG 0
-        #PUSH                           ; [f]
-        #ARG 1
-        jsr get_iter
-        #PUSH                           ; [f][it]
-        lda #0
-        sta nitems
-        sta nitems+1
-        jsr list_new
-        #PUSH                           ; [f][it][out]
-_loop:  #PEEK 1
+        ldz #8
+        lda [p2],z
+        pha
+        ldz #7
+        lda [p2],z
+        tax
+        dez
+        lda [p2],z
+        #PUSH                           ; [(f, it)]
+_next:  #PEEK 0                         ; x = next(it)
+        sta p3
+        stx p3+1
+        ldz #9
+        lda [p3],z
+        tax
+        dez
+        lda [p3],z
         jsr iter_next
-        bcs _done
-        #PUSH                           ; [f][it][out][x]
-        pla
-        pha
-        beq _call
-        #PEEK 3                         ; filter(None, ...)
+        bcs _end
+        #PUSH                           ; [(f, it)][x]
+        #PEEK 1
+        sta p3
+        stx p3+1
+        ldz #7                          ; f
+        lda [p3],z
+        tax
+        dez
+        lda [p3],z
         cpx #0
         bne _call
         cmp #R_NONE
         bne _call
-        #PEEK 0
+        #PEEK 0                         ; filter(None, ...): x is the test
         bra _test
-_call:  #PEEK 3
+_call:  #PUSH                           ; [(f, it)][x][f]
+        pla                             ; the call style
+        pha
+        cmp #1
+        beq _x
+        #PEEK 1                         ; f(*x): x's items
+        sta p3
+        stx p3+1
+        ldz #4
+        lda [p3],z
+        sta argc
+        sta t0
+        ldz #6
+_items: lda t0
+        beq _go
+        lda [p3],z
+        pha
+        inz
+        lda [p3],z
+        tax
+        pla
+        inz
+        phz
         #PUSH
+        plz
+        dec t0
+        bra _items
+_x:     sta argc                        ; f(x)
         #PEEK 1
         #PUSH
-        lda #1
-        sta argc
-        jsr vm_call_nested
-_test:  sta r1
-        stx r1+1
+_go:    jsr vm_call_nested              ; -> A/X; the stack is back at [(f, it)][x]
+_test:  sta t0
+        stx t0+1
         pla
+        tay
+        pla                             ; the kind
         pha
-        beq _add
-        lda r1
-        ldx r1+1
+        phy
+        cmp #IT_MAP
+        beq _ret                        ; map: f's result
+        lda t0
+        ldx t0+1
         jsr obj_truth
         beq _skip
-        #PEEK 0
-        sta r1
-        stx r1+1
-_add:   #PEEK 1
-        sta r0
-        stx r0+1
-        jsr list_append
-_skip:  #DROP 1
-        jsr clear_rregs
-        bra _loop
-_done:  pla
-        #POP
-        pha
-        phx
-        #DROP 2
-        plx
+        #PEEK 0                         ; filter: x
+        sta t0
+        stx t0+1
+_ret:   #DROP 2
         pla
+        pla
+        lda t0
+        ldx t0+1
+        clc
+        rts
+_skip:  #DROP 1
+        bra _next
+_end:   #DROP 1
+        pla
+        pla
+        lda #0
+        tax
+        sec
         rts
 
 bi_round:

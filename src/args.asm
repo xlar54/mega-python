@@ -1180,3 +1180,56 @@ _arg:   lda #EXC_STOPITER
         lda #0
         sta exc_ip_set
         jmp throw
+
+; map() / filter(): the iterator (builtins.asm has the rest)
+xb_map:
+        ldy #16
+        lda #IT_MAP
+        bra mapfilter
+xb_filter:
+        ldy #2
+        lda #IT_FILTER
+mapfilter:
+        pha
+        ldx #2
+        jsr check_nargs
+        #ARG 0
+        #PUSH                           ; [f]
+        lda npos
+        cmp #2
+        beq _one
+        ldx #0                          ; zip(*iterables): the arguments after f
+-       lda argv+2,x
+        sta argv,x
+        inx
+        cpx #30
+        bne -
+        dec nargc
+        jsr bi_zip
+        bra _it
+_one:   #ARG 1
+        jsr get_iter
+_it:    sta r3                          ; (f, it)
+        stx r3+1
+        #POP
+        sta r2
+        stx r2+1
+        jsr tuple2
+        sta r0
+        stx r0+1
+        pla
+        jsr iter_alloc
+        ldy #1                          ; f(x), or f(*x) for several iterables
+        lda npos
+        cmp #2
+        beq +
+        iny
++       tya
+        ldz #8
+        sta [p0],z
+        lda #0
+        sta r0
+        sta r0+1
+        lda p0
+        ldx p0+1
+        rts

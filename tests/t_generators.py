@@ -400,3 +400,42 @@ def gen_from_range():
 
 
 print(list(gen_from_range()))
+
+
+# map() and filter() are lazy iterators
+mlog = []
+
+
+def sq(x):
+    mlog.append(x)
+    return x * x
+
+
+m = map(sq, [1, 2, 3])
+print(mlog, next(m), mlog, list(m), list(m))
+print(list(map(lambda a, b: a + b, [1, 2, 3], [10, 20])), list(map(pow, [2, 3], [3, 2])))
+print(list(filter(lambda s: s.startswith('a'), ['apple', 'pear', 'avocado'])))
+print(list(filter(None, [0, 1, '', 'x', [], [0], None])), sum(map(len, ['ab', 'cde'])))
+
+
+def naturals2():
+    n = 0
+    while True:
+        yield n
+        n += 1
+
+
+evens = filter(lambda n: n % 2 == 0, naturals2())
+squares = map(lambda n: n * n, evens)
+print([next(squares) for _ in range(5)])
+print(sorted(map(lambda c: c.upper(), 'cab')), dict(map(lambda k: (k, len(k)), ['a', 'bb'])))
+print(max(map(abs, [-7, 3])), any(map(lambda x: x > 2, [1, 3])), ','.join(map(str, range(4))))
+words = map(lambda s: s.strip(), [' a ', 'b '])
+for w in words:
+    print(repr(w))
+print(list(zip(map(str, range(3)), filter(lambda c: c != 'b', 'abcd'))))
+try:
+    list(map(lambda x: 1 // x, [1, 0]))
+except ZeroDivisionError:
+    print('ZeroDivisionError')
+print(list(map(lambda *a: a, 'ab', 'cd', 'ef')))
