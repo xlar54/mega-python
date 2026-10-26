@@ -36,7 +36,7 @@ CPython" below):
   `__mro__`, `__bases__`), `super()` (along the MRO), `staticmethod`, `classmethod`, `property`
   (with setters), the operator dunders (`__add__` ... `__radd__`, comparisons,
   `__eq__`/`__hash__`, also against other types), `__str__`/`__repr__`, `__len__`,
-  `__bool__`, `__getitem__`/`__setitem__`/`__delitem__`, `__contains__`, `__iter__`/`__next__`, `__call__`,
+  `__bool__`, `__getitem__`/`__setitem__`/`__delitem__`, `__contains__`, `__iter__`/`__next__`, `__call__`, `__abs__`,
   `__enter__`/`__exit__`, class attributes, `__class__`, `__name__`.
 * **Exceptions**: the builtin hierarchy (`BaseException`, `Exception`, `ValueError`,
   `KeyError`, `StopIteration`, `GeneratorExit`, ...), your own exception classes,
@@ -57,7 +57,7 @@ CPython" below):
   readline readlines write close`). Methods also work taken from the type, as values:
   `str.upper`, `list.append`, `dict.get`.
 * **Modules**: `math`, `os`, `sys`, `time`, `random`, `json`, `string`, `bisect`, `heapq`,
-  `functools`, `copy`, `textwrap`, `statistics`, `itertools`, `collections` (`deque`,
+  `functools`, `copy`, `textwrap`, `statistics`, `itertools`, `datetime`, `collections` (`deque`,
   `Counter`, `defaultdict`, `namedtuple`, `OrderedDict`), your own modules from the disk, and the MEGA65 ones (see "Modules").
 
 Not supported yet:
@@ -73,7 +73,7 @@ Not supported yet:
   return lists).
 * `str.encode`, `str.translate`, `str.format_map`; `float` methods.
 * Packages (`import a.b`), relative imports.
-* The modules `re`, `datetime`, and most of the standard library. A `namedtuple` is a
+* The module `re`, and most of the standard library; time zones in `datetime`. A `namedtuple` is a
   class of its own, not a `tuple` subclass (`isinstance(p, tuple)` is `False`).
 * Traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in
   tracebacks, `StopIteration(v).value` for one raised by your own code.
@@ -230,6 +230,8 @@ These modules come with it, written in Python (the hardware ones with `peek`/`po
     `median_low`/`_high`, `mode`, `multimode`, `variance`, `pvariance`, `stdev`,
     `pstdev`);
   * `collections` (`deque`, `Counter`, `defaultdict`, `namedtuple`, `OrderedDict`);
+  * `datetime` (`date`, `time`, `datetime`, `timedelta`: arithmetic, comparisons,
+    `strftime`, ISO formats, ordinals, `isocalendar`; naive, `now()` from the RTC);
   * `itertools` (all of it: `count`, `chain`, `islice`, `product`, `permutations`,
     `combinations`, `groupby`, `tee`, `batched`, ...).
 
@@ -365,6 +367,7 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_eval` | `eval` and `exec`: expressions, statements, definitions that stay, loops of `eval` (its code is reclaimed), errors inside, nesting, an import inside |
 | `t_bytes` | `bytes`: literals, indexing and iteration as ints, slices, `+`, `*`, `==` (never equal to a `str`), repr, `bytes()`, `encode`/`decode`, `hex`, `str` methods giving `bytes`, dict keys |
 | `t_binfile` | binary files: all 256 byte values written and read back, lines of bytes, a `write()` of more than 255 bytes |
+| `t_datetime` | `datetime`: dates, times, datetimes and timedeltas, their arithmetic, `str`/`repr`, `strftime`, ISO formats and calendar, ordinals, errors |
 | `t_introsp` | `dir`, `vars`, `globals`, `delattr`, `slice` objects and their attributes, `ascii` |
 | `t_strmeth` | the newer `str` methods (`rfind`, `partition`, `rsplit`, `expandtabs`, ...) and methods of builtin types as values |
 | `t_errors` | error messages that name the type, `issubclass` (also of builtin types and `object`), `min`/`max` `default=`, `!r` with a format spec, `#` in format specs, annotated assignments |

@@ -22,7 +22,7 @@ SPECIAL = """__init__ __str__ __repr__ args __name__ __class__ __eq__ __lt__ __l
 __ge__ __ne__ __enter__ __exit__ __len__ __bool__ __getitem__ __setitem__ __delitem__ __iter__ __next__ __contains__
 __call__ __add__ __sub__ __mul__ __truediv__ __floordiv__ __mod__ __pow__ __lshift__
 __rshift__ __and__ __or__ __xor__ __iadd__ __radd__ __rsub__ __rmul__ __neg__ __pos__
-__invert__ __hash__ self super __main__ __dict__ sep end key reverse file flush""".split()
+__invert__ __abs__ __hash__ self super __main__ __dict__ sep end key reverse file flush""".split()
 
 # (python name, label, kind, owner type for methods)
 BUILTINS = [

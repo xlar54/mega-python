@@ -878,6 +878,15 @@ bi_abs:
 +       #ARG 0
         sta r2
         stx r2+1
+        jsr type_of                     ; an instance: its __abs__
+        cmp #T_INST
+        bne +
+        lda #S_ABS
+        jsr inst_unary
+        bcs +
+        rts
++       lda r2
+        ldx r2+1
         jsr is_big
         bcs _big
         jsr need_int
