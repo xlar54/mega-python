@@ -1,5 +1,5 @@
 ;=======================================================================================
-; Sets (overlay R). A set is a dict whose keys are the members (values None) with F_SET
+; Sets (tail T; setsr.asm in overlay R has BUILD_SET and the entry stubs). A set is a dict whose keys are the members (values None) with F_SET
 ; in its header flags; a frozenset also has F_FROZEN. type_of tells them apart (T_SET,
 ; T_FSET), while the code that reads the header itself (the GC, truth, len) sees a
 ; dict. Lookups are the dict's (linear, with ==). Members keep insertion order.
@@ -209,7 +209,7 @@ _done:  #POP
 ;---------------------------------------------------------------------------------------
 ; operators (from binop and compare, arith.asm): r2 is a set or frozenset
 ;---------------------------------------------------------------------------------------
-set_binop:
+xt_set_binop:
         lda bop_types+1
         cmp #T_SET
         bcc _no
@@ -230,8 +230,8 @@ _no:    jmp binop_inst                  ; (TypeError)
 _go:    txa
         jmp set_op
 
-; set_compare - bop 2 <, 3 >, 4 <=, 5 >=: subsets -> A = 1 / 0
-set_compare:
+; xt_set_compare - bop 2 <, 3 >, 4 <=, 5 >=: subsets -> A = 1 / 0
+xt_set_compare:
         lda r3
         ldx r3+1
         jsr type_of
@@ -286,7 +286,7 @@ _no:    lda #0
 ;---------------------------------------------------------------------------------------
 ; repr: {1, 2} / set() / frozenset({1, 2}) / frozenset()
 ;---------------------------------------------------------------------------------------
-repr_set:
+xt_repr_set:
         sta r2
         stx r2+1
         jsr type_of
@@ -324,25 +324,13 @@ _close: lda #')'
 +       rts
 
 ;---------------------------------------------------------------------------------------
-; BUILD_SET: the compiler builds {a, b} and {x for ...} as a list; make it a set
-;---------------------------------------------------------------------------------------
-set_build_op:
-        #FETCHW
-        #PEEK 0
-        ldy #F_SET
-        jsr set_from_iter
-        #POKE 0
-        jsr clear_rregs
-        jmp vm_loop
-
-;---------------------------------------------------------------------------------------
 ; set() / frozenset() and the methods
 ;---------------------------------------------------------------------------------------
-bi_set:
+xt_set:
         #NARGS 0, 1
         ldy #F_SET
         bra set_ctor
-bi_frozenset:
+xt_frozenset:
         #NARGS 0, 1
         ldy #F_SET | F_FROZEN
 set_ctor:
@@ -353,7 +341,7 @@ set_ctor:
 +       #ARG 0
         jmp set_from_iter
 
-bi_set_copy:
+xt_set_copy:
         #NARGS 1, 1
         #ARG 0
         jsr set_kind
@@ -372,22 +360,22 @@ set_self_arg:
         stx r1+1
         rts
 
-bi_set_add_m:
+xt_set_add_m:
         jsr set_self_arg
         jsr set_add
         #RET_NONE
-bi_set_remove:
+xt_set_remove:
         jsr set_self_arg
         jsr dict_del
         bcs +
         #RET_NONE
 +       jmp raise_key                   ; (KeyError(x): r1)
-bi_set_discard:
+xt_set_discard:
         jsr set_self_arg
         jsr dict_del
         #RET_NONE
 
-bi_set_pop:
+xt_set_pop:
         #NARGS 1, 1
         #ARG 0
         sta r0
@@ -412,35 +400,14 @@ bi_set_pop:
         ldx r1+1
         rts
 
-bi_set_clear:
+xt_set_clear:
         #NARGS 1, 1
         #ARG 0
         jmp dict_clear
 
 ; the methods with another iterable: A = op (set_op) | $20 (other op self) | $40
 ; (return whether the result is empty) | $80 (make self the result, return None)
-bi_set_union:           lda #0
-                        bra set_method
-bi_set_intersection:    lda #1
-                        bra set_method
-bi_set_difference:      lda #2
-                        bra set_method
-bi_set_symdiff:         lda #3
-                        bra set_method
-bi_set_update:          lda #$80
-                        bra set_method
-bi_set_inter_update:    lda #$81
-                        bra set_method
-bi_set_diff_update:     lda #$82
-                        bra set_method
-bi_set_symdiff_update:  lda #$83
-                        bra set_method
-bi_set_issubset:        lda #$42
-                        bra set_method
-bi_set_issuperset:      lda #$62
-                        bra set_method
-bi_set_isdisjoint:      lda #$41
-set_method:
+xt_set_method:
         pha
         #NARGS 2, 2
         #ARG 0
