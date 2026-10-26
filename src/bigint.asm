@@ -1339,33 +1339,6 @@ _ten:   cmp #10
         bra -
 +       rts
 
-; xn_hash - A/X = a big int -> A/X = a 16-bit hash of its bytes and sign
-xn_hash:
-        ldy #BG_R0
-        jsr bg_load
-        lda bg_neg+BG_R0
-        sta bg_r
-        lda bg_len+BG_R0
-        sta bg_x
-        ldz #0
--       lda [bnA],z
-        eor bg_r
-        sta bg_r
-        inz
-        cpz bg_len+BG_R0
-        beq +
-        lda [bnA],z
-        eor bg_x
-        sta bg_x
-        inz
-        cpz bg_len+BG_R0
-        bne -
-+       lda bg_r
-        ldx bg_x
-        rts
-
-;---------------------------------------------------------------------------------------
-; floats
 ;---------------------------------------------------------------------------------------
 ; xn_to_fa - A/X = a big int -> fa (rounded once, by f_pack later)
 xn_to_fa:

@@ -68,3 +68,15 @@ def d():
 
 
 print(a(), b(), c(), d())
+
+
+# the same name in nested comprehensions: each level keeps its own
+print([(x, [x for x in range(2)], x) for x in 'ab'])
+print({x: [x * 2 for x in range(x)] for x in range(3)})
+
+
+def nested():
+    return [[x, [x + 1 for x in range(2)], x] for x in (10, 20)]
+
+
+print(nested())

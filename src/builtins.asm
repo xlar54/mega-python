@@ -1550,8 +1550,16 @@ bi_divmod:
         sta r3
         stx r3+1
         jsr big_either                  ; a big int: // and % in tail N
+        bcs _big
+        #ARG 1
+        jsr need_int
+        ldq acc
+        stq acc2
+        #ARG 0
+        jsr need_int
+        jsr div_ovf                     ; (-2^31, -1: also there)
         bcc +
-        lda #BOP_FLOORDIV
+_big:   lda #BOP_FLOORDIV
         sta bop
         jsr big_binop
         #PUSH
@@ -1570,13 +1578,7 @@ bi_divmod:
         sta r2
         stx r2+1
         jmp tuple2
-+       #ARG 1
-        jsr need_int
-        ldq acc
-        stq acc2
-        #ARG 0
-        jsr need_int
-        jsr acc_divmod
++       jsr acc_divmod
         jsr int_new
         sta r2
         stx r2+1
@@ -1586,6 +1588,47 @@ bi_divmod:
         sta r3
         stx r3+1
         jmp tuple2
+
+; div_ovf - C set if acc / acc2 overflows 32 bits (-2^31 / -1; overlay R: iop_floordiv
+; runs only with it in)
+div_ovf:
+        lda acc2
+        and acc2+1
+        and acc2+2
+        and acc2+3
+        cmp #$ff
+        bne +
+        lda acc+3
+        cmp #$80
+        bne +
+        lda acc+2
+        ora acc+1
+        ora acc
+        bne +
+        sec
+        rts
++       clc
+        rts
+
+; ev_begin / ev_end - (eval, exec) the constants their compile makes are tagged with a
+; generation (1-3, the F_GEN bits; deeper evals: plain perm). At the end they lose the
+; tag, and also F_PERM if the code was dropped (X = 1), so the GC can free them.
+ev_gen:         .byte 0
+ev_begin:
+        inc ev_gen
+        lda ev_gen
+        cmp #4
+        bcs +
+        asl a
+        ora #F_PERM
+        sta cs_perm
++       rts
+ev_end: lda ev_gen
+        dec ev_gen
+        cmp #4
+        bcs +
+        jmp perm_settle
++       rts
 
 bi_pow:         #TAILCALL TAIL_B, xb_bi_pow         ; (floatb.asm)
 pm_mod:         .dword 0
@@ -1722,8 +1765,12 @@ bi_hash:
         #ARG 0
         sta r2
         stx r2+1
-        jsr is_big                      ; (a big int: obj_hash's 16 bits)
-        bcs _obj
+        jsr is_big                      ; a big int: as its float (= an equal float's)
+        bcc +
+        jsr big_float
+        jmp float_hash
++       lda r2
+        ldx r2+1
         jsr int_val
         bcs +
         lda acc                         ; -1 hashes as -2

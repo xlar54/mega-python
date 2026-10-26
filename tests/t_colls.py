@@ -85,3 +85,4 @@ dd = defaultdict(list)
 dd['k'].append(1)
 del dd['k']
 print(len(dd))
+print(p == None, None in [p], p == (1, 2), p == [1, 2], p != 5, p == P(1, 2), [p].count(None))

@@ -31,3 +31,10 @@ print(exec('pass'), eval('x if x > 5 else 0'))
 code = 'import math\nr = math.sqrt(16)'
 exec(code)
 print(r)
+s = 'end'
+for i in range(3000):                   # each eval's constants go with its code
+    r = eval("'" + 'q' * 60 + "' + s")
+print(len(r), r[-3:])
+for i in range(300):
+    r = eval("eval(\"'" + 'w' * 40 + "'\") + 'x'")
+print(len(r))

@@ -317,6 +317,8 @@ iop_truediv:
         #RAISE EXC_ZERODIV, "division by zero"
 +       jmp float_binop
 iop_floordiv:
+        jsr div_ovf                     ; (-2^31 // -1 is 2^31: a big int)
+        bcs int_overflow
         jsr acc_divmod
         bra iop_done
 iop_mod:
@@ -403,6 +405,7 @@ _sq:    lsr acc2+3
 
 int_overflow:                           ; (beyond 32 bits: the big int code, again)
         jmp big_binop
+
 
 iop_lshift:
         jsr shift_count

@@ -30,3 +30,4 @@ for bad in ['(', 'a**', '[a']:
         re.compile(bad)
     except re.error:
         print('error', bad)
+print(re.search(r'a(?=(\d))', 'a1').groups(), re.search(r'(?=(\w+))', ' hi').group(1), re.search(r'x(?!(y))', 'xz').groups())

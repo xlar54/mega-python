@@ -22,3 +22,5 @@ try:
     bytes('x')
 except TypeError as e:
     print('TypeError', e)
+cat = b'ab' b'cd'
+print(cat, type(cat), cat == b'abcd')
