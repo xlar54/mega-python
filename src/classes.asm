@@ -117,7 +117,18 @@ get_method:
         bcs +
         sec
         rts
-+       ; __name__ of functions (+8), builtins and builtin types (+6)
++       lda r0                          ; a builtin type's method: str.upper (unbound)
+        ldx r0+1
+        jsr type_of
+        cmp #T_BUILTIN
+        bne _name
+        jsr type_made
+        bcs _name
+        jsr builtin_method_a
+        bcs _name
+        clc
+        rts
+_name:  ; __name__ of functions (+8), builtins and builtin types (+6)
         lda r0
         ldx r0+1
         jsr type_of

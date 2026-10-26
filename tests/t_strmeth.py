@@ -19,3 +19,19 @@ try:
     'a'.rsplit('', 1)
 except ValueError as e:
     print('ValueError', e)
+
+# methods taken from builtin types as values; their self is checked
+print(list(map(str.upper, ['ab', 'cd'])), sorted(['b', 'A', 'c'], key=str.lower))
+print(str.join('-', 'abc'), list.count([1, 2, 1], 1), dict.get({'a': 1}, 'a'), str.strip('  x '))
+words = ['apple', 'Bob', 'cat']
+print(list(filter(str.istitle if False else str.isupper, ['A', 'b'])), [str.title(w) for w in words])
+f = str.replace
+print(f('aXbX', 'X', '-'), callable(str.upper))
+for bad in (lambda: str.upper(5), lambda: list.append('abc', 1), lambda: str.upper()):
+    try:
+        bad()
+    except TypeError:
+        print('TypeError')
+s = set()
+set.add(s, 3)
+print(s, frozenset.union(frozenset({1}), {2}), 'abc'.upper(), [1].copy())

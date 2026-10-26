@@ -119,11 +119,50 @@ builtin_obj:
         pla
         rts
 
-; builtin_method - r0 = object, r1 = name ref -> C clear, A/X = method if found
+; bm_check - (call_native) A = builtin X's flags, a method's: its self (argv 0) must be
+; of the type in bits 3-7 (str.upper(5) or list.append() raise TypeError); keeps X
+bm_check:
+        lsr a
+        lsr a
+        lsr a
+        ldy nargc
+        beq _bad
+        phx
+        pha
+        lda argv
+        ldx argv+1
+        jsr type_of
+        sta t0
+        pla
+        plx
+        cmp t0
+        bne _bad
+        rts
+_bad:   #RAISE EXC_TYPE, "method called on an object of another type"
+
+; type_made - p0 = a builtin -> C clear and A = the type it makes (str -> T_STR), C set
+; if it makes none of those with methods
+type_made:
+        ldz #4
+        lda [p0],z
+        ldx #T_NTYPES - 1
+-       cmp type_builtin,x
+        beq +
+        dex
+        bpl -
+        sec
+        rts
++       txa
+        clc
+        rts
+
+; builtin_method - r0 = object, r1 = name ref -> C clear, A/X = method if found.
+; builtin_method_a: A = the type whose table to search.
 builtin_method:
         lda r0
         ldx r0+1
         jsr type_of
+builtin_method_a:
         ldx #<meth_list
         ldy #>meth_list
         cmp #T_LIST

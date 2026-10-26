@@ -202,16 +202,23 @@ def main():
         out.append("builtin_name_%s:" % half)
         for b in BUILTINS:
             out.append("        .byte %s%s" % (op, used[b[0]]))
+    # flags: BF_TYPE, BF_GLOBAL; a method's owner type in bits 3-7 (call_native checks
+    # its self: str.upper(5) is a TypeError)
+    owner_t = {"list": "T_LIST", "tuple": "T_TUPLE", "str": "T_STR", "dict": "T_DICT",
+               "file": "T_FILE", "set": "T_SET", "frozenset": "T_FSET",
+               "property": "T_DESC", "generator": "T_GEN"}
     out.append("builtin_flags:")
     for b in BUILTINS:
-        f = 0
+        f = "0"
         if b[2] == "t":
-            f = 3
+            f = "3"
         elif b[2] == "T":
-            f = 1
+            f = "1"
         elif b[2] == "f":
-            f = 2
-        out.append("        .byte %d" % f)
+            f = "2"
+        elif b[2] == "m":
+            f = "%s << 3" % owner_t[b[3]]
+        out.append("        .byte %s" % f)
     out.append("")
     for owner in OWNERS:
         out.append("meth_%s:" % owner)

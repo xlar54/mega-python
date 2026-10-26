@@ -813,7 +813,11 @@ _call:  lda argc
         ldz #4
         lda [p0],z
         tax
-        lda c_flags
+        lda builtin_flags,x             ; a method checks its self (str.upper(5))
+        cmp #8
+        bcc +
+        jsr bm_check                    ; (builtins.asm; keeps X)
++       lda c_flags
         pha
         lda c_slot
         pha
