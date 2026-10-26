@@ -80,3 +80,4 @@ class Pt:
 
 
 print(y, ah(), Pt.x, 'z' in globals() if False else 'ok')
+print('%#x %#o %x' % (255, 8, 255), '{:#x}'.format(255), '{:x}'.format(255), f'{255:x}')

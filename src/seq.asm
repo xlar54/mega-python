@@ -683,7 +683,9 @@ _sl:    jsr slice_more
 _sdone: plx
         pla
         jmp sb_take
-_list:  lda #0
+_list:  lda t6                           ; (the type: allocating clobbers t6)
+        pha
+        lda #0
         sta nitems
         sta nitems+1
         jsr list_new
@@ -705,7 +707,7 @@ _ll:    jsr slice_more
         jsr list_append
         jsr slice_step
         bra _ll
-_ldone: lda t6
+_ldone: pla
         cmp #T_TUPLE
         bne +
         lda r0

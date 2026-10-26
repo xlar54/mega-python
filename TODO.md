@@ -14,14 +14,14 @@ Language
 * Live `dict` views (`keys()`, `values()`, `items()` are list snapshots); iterator
   types and reprs per kind (`map`, `filter`, `zip`, `list_iterator`: now `iterator`);
   methods of builtin types as values (`str.upper`, `list.append`).
-* `.value` of a `StopIteration` raised by Python code; `issubclass()`; traceback
-  objects (`with`'s `__exit__` gets `None`).
-* Error messages that name the type: "object of type 'int' has no len()", "'int'
-  object is not subscriptable" (now "object has no len()", "object is not
-  subscriptable").
+* `.value` of a `StopIteration` raised by Python code; `issubclass()` of builtin types;
+  traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in
+  tracebacks.
+* Multiple inheritance, subclassing builtin types, `__getattr__`/`__setattr__` hooks,
+  `match`, `eval`/`exec`, `dir`/`vars`/`globals`/`locals`, `bytes`.
 * Closures: `del` of a captured variable; the free variable's name in the
   "cannot access free variable" NameError.
-* Unpacking in displays (`[*a, *b]`, `{**d, 'k': 1}`), positional-only parameters
+* Positional-only parameters
   (`/`); `property` deleters, `functools.wraps`; the names in argument errors
   ("f() got an unexpected keyword argument 'x'").
 * Files: `seek`/`tell`, binary mode (`bytes`), more of `os` (`getcwd`, `stat`,
@@ -39,8 +39,8 @@ Language
   (some need generators first).
 * Dicts: keep each key's hash next to it, so growing and deleting do not hash the
   keys again; deletes are O(n) (the pairs move down and the index is rebuilt).
-* `str` methods still missing: `partition`, `rsplit`, `swapcase`, `expandtabs`, ...
-* Tracebacks with the call chain (the frames hold the return ips).
+* `str` methods still missing: `partition`, `rsplit`, `rfind`, `swapcase`, `expandtabs`,
+  `encode`, `removeprefix`, ...; `#` with `0` padding (`{255:#06x}`) puts the zeros first.
 * Iterate lazily where a list is built first today: `min`/`max`, `x in it` for
   non-sequences (`x in range(10**6)` should be arithmetic, as CPython), `str.join`,
   `set()`/`tuple()` of an iterator. Big ranges give `MemoryError` there (`sum` is lazy).
@@ -58,8 +58,9 @@ Environment
 Memory
 ------
 
-* Code space (see the sizes `build.bat` prints): part 1 and part 2 have only about
-  50 bytes left, overlay R about 1 KB (sets moved to tail T); new code should go in a
+* Code space (see the sizes `build.bat` prints): part 1 is full, overlay R has about
+  70 bytes and part 2 about 200; the next feature should first move cold code out (as
+  sets went to tail T and fbig.asm to tail A); new code should go in a
   tail or overlay C; each tail has room left, and more tails can be
   added (`docs/INTERNALS.md`, "Tails"). More code should go into tails (only code that never
   runs Python code; see `docs/INTERNALS.md`) or overlay C (compile time).

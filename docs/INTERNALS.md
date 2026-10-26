@@ -424,6 +424,28 @@ a comprehension in it makes all its parameters cells.
 Type numbers: sets and frozensets (`T_SET`, `T_FSET`, which only `type_of` returns) must
 stay the last types, because code tests `>= T_SET` for "a set or frozenset".
 
+## Unpacking in displays and starred targets
+
+A display with `*x` (or `**m` in a dict) compiles its items plainly up to the first
+starred one, then `PACK_ARGS k` turns them into the `[list][dict]` pair a call with
+`*args` uses, and each later item goes in with `EX_ARG` (kinds 0 append, 1 extend, 4
+dict item, 5 a mapping's items); the last `EX_ARG` (6-9) leaves the list, a tuple, a
+set or the dict (`ds_rest` / `dd_rest`, `args.asm` `ex_display`). A starred target
+(`a, *b, c = x`, `for a, *b in ...`) gives its target group a star position (`+7` of
+the group's first target entry), and the group's `UNPACK n` is preceded by `UNPACK_EX
+before, after`, which regroups the value: its first items, a list of the middle ones,
+its last items. In an element list a `*` is a target only if an `=` follows (`ux_scan`).
+
+## Tracebacks and error messages
+
+`throw` records the levels of calls when an exception is first raised (`tb_capture`,
+`builtins.asm`, only while overlay R is in): each frame's return ip and the name of
+the function it called (a generator frame's function), innermost first, 12 at most.
+`print_tb` prints them outermost first, then the line where it was raised.
+
+Errors about an object's type ("'int' object is not subscriptable") go through
+`raise_typed` (tail H): the object and a message number (`RT_*`).
+
 ## Sets
 
 A set is a `T_DICT` object (members are the keys, values `None`) with `F_SET` in its

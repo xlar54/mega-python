@@ -8,11 +8,73 @@ boots to a `>>>` prompt, has a full-screen program editor, and loads and saves `
 files on the disk. Like CPython, it compiles each piece of source to bytecode in memory
 and runs that on a bytecode VM.
 
-It implements a large subset of Python 3: ints, floats, strings, lists, tuples, dicts,
-functions, lambdas, classes with inheritance and `super()`, exceptions, comprehensions,
-f-strings, `with`, most everyday builtins, files (`open()`) and the `math` and `os`
-modules. The
-test programs in `tests/` print exactly what CPython prints for them. See "Differences from CPython" below for what is missing.
+It implements a large subset of Python 3 (see "Python support" below). The test
+programs in `tests/` print exactly what CPython prints for them.
+
+Python support
+--------------
+
+What works (each item as in CPython, apart from the notes in "Differences from
+CPython" below):
+
+* **Types**: `int` (32-bit), `float` (IEEE double), `bool`, `None`, `str`, `list`,
+  `tuple`, `dict`, `set`, `frozenset`, `range`, slices, files, generators.
+* **Statements**: `if`/`elif`/`else`, `while` and `for` (with `else`), `break`,
+  `continue`, `pass`, `def`, `class`, `return`, `del`, `global`, `nonlocal`, `assert`,
+  `import`, `from ... import`, `try`/`except`/`else`/`finally`, `raise` (also `raise
+  ... from`), `with` (several managers), `yield`, `yield from`, annotated assignments
+  (`x: int = 5`).
+* **Expressions**: arithmetic, bitwise and comparison operators (chained: `a < b < c`),
+  `and`/`or`/`not`, `in`, `is`, conditional expressions, `lambda`, `:=`, list / dict /
+  set comprehensions, generator expressions (lazy), f-strings (format specs, `!r`, `!s`),
+  `%` formatting, `str.format`, slicing with steps, unpacking with `*` and `**` in calls
+  and displays (`[*a, *b]`, `{**d, 'k': 1}`) and starred targets (`first, *rest = x`).
+* **Functions**: defaults, keyword arguments, `*args`, `**kwargs`, keyword-only
+  parameters, closures and `nonlocal`, decorators, generators (`send`, `throw`, `close`).
+* **Classes**: single inheritance, `super()`, `staticmethod`, `classmethod`, `property`
+  (with setters), the operator dunders (`__add__` ... `__radd__`, comparisons,
+  `__eq__`/`__hash__`), `__str__`/`__repr__`, `__len__`, `__bool__`, `__getitem__`/
+  `__setitem__`, `__contains__`, `__iter__`/`__next__`, `__call__`,
+  `__enter__`/`__exit__`, class attributes, `__class__`, `__name__`.
+* **Exceptions**: the builtin hierarchy (`BaseException`, `Exception`, `ValueError`,
+  `KeyError`, `StopIteration`, `GeneratorExit`, ...), your own exception classes,
+  tracebacks with the chain of calls.
+* **Builtins**: `abs all any bin bool callable chr classmethod dict divmod enumerate exit
+  filter float format frozenset getattr hasattr hash hex id input int isinstance
+  issubclass iter len list map max min next object oct open ord pow print property quit
+  range repr reversed round set setattr sorted staticmethod str sum super tuple type
+  zip`, and for the MEGA65 `run edit new load save files cls peek poke mem help gc`.
+* **Methods**: `str` (`upper lower split join strip lstrip rstrip find replace
+  startswith endswith isdigit isalpha isalnum isspace isupper islower count index format
+  center ljust rjust zfill title capitalize splitlines`), `list` (`append pop insert
+  remove index count extend reverse sort copy clear`), `dict` (`keys values items get
+  pop setdefault update clear copy`), `set`/`frozenset` (all of them), files (`read
+  readline readlines write close`).
+* **Modules**: `math`, `os`, `sys`, `time`, `random`, `json`, `string`, `bisect`, `heapq`,
+  `functools`, `copy`, `textwrap`, `statistics`, `collections` (`deque`, `Counter`,
+  `defaultdict`), your own modules from the disk, and the MEGA65 ones (see "Modules").
+
+Not supported yet:
+
+* Integers beyond 32 bits, `complex`, `bytes`/`bytearray` (`b'...'` is a `str`),
+  `decimal`, `fractions`.
+* Multiple inheritance, subclassing builtin types (`class D(dict)`), metaclasses,
+  `__slots__`, `__getattr__`/`__setattr__` hooks, `property` deleters.
+* `match`, `async`/`await`, positional-only parameters (`/`), `yield` in a lambda,
+  `del` of a variable a nested function uses.
+* `eval`, `exec`, `dir`, `vars`, `globals`, `locals`, `delattr`, `ascii`, `slice`,
+  `issubclass` of builtin types (`issubclass(bool, int)`).
+* Methods taken from a builtin type as values (`str.upper`, `list.append`: use a
+  lambda), attributes on functions (`f.cache = {}`), live `dict` views (`keys()` and
+  friends return lists).
+* `str` methods: `partition`, `rpartition`, `rsplit`, `rfind`, `rindex`, `swapcase`,
+  `casefold`, `expandtabs`, `encode`, `translate`, `removeprefix`/`removesuffix`, ...;
+  `float` methods; set methods with several other iterables (`a.union(b, c)`).
+* `from module import *`, packages (`import a.b`), relative imports.
+* The modules `itertools`, `re`, `datetime`, `collections.namedtuple`/`OrderedDict`,
+  and most of the standard library.
+* Traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in
+  tracebacks, `StopIteration(v).value` for one raised by your own code.
 
 Build
 -----
@@ -285,6 +347,8 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_generators` | `yield`, `yield from` (also recursive), `send`, `close`, `try`/`finally` across a `yield`, exceptions leaving a generator, a running generator re-entered, generators in closures and methods, driven by `for`, `next`, `zip`, `sorted`, `sum`, `in`, `join`, and leaving a loop then going on; generator expressions (lazy, the first iterable taken at once, in functions, lambdas and class bodies, chained, infinite); `close()` running `finally`/`with` exits, `throw()`; `yield from` with `send()` and return values, `StopIteration.value`; lazy `map()`/`filter()` |
 | `t_edges` | edge cases: deep recursion through a closure, many parameters and locals, changing a dict or set while iterating it (`RuntimeError`: "changed size", and CPython's "keys changed" when keys are deleted and added), imports inside functions, `RecursionError` and recovering from it, lazy `sum` of a big range |
 | `t_blocks` | `finally` on `break`/`continue`/`return` (nested, mixed with `with`, `return` and `break` inside `finally`), `with` passing the exception to `__exit__` and swallowing it, several managers in one `with` |
+| `t_unpack` | `*` and `**` in list / tuple / set / dict displays, starred assignment and `for` targets |
+| `t_errors` | error messages that name the type, `issubclass`, `min`/`max` `default=`, `!r` with a format spec, `#` in format specs, annotated assignments |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
 Other tools: `tools\xemu_run.py` (boot, type, read the screen or transcript, screenshot),
@@ -428,22 +492,17 @@ Differences from CPython
   `yield from` waits on, and a `StopIteration` leaving a generator becomes
   `RuntimeError` (PEP 479). Differences: `raise StopIteration(v)` in your own code
   gives no `.value` (only `.args`), and `yield` cannot be used in a lambda.
-* Not supported yet: unpacking in displays (`[*a, *b]`,
-  `{**d}`), multiple inheritance, `from module import *`, packages (`import a.b`), the
-  `bytes` type, attributes on functions (`f.cache = {}`; use a closure or a class).
 * **Modules**: a module's code and name are kept until `run()` or `new()`; a name a
   module does not define falls back to the main program's global of that name (CPython
   would raise `NameError`). Module names are up to 13 characters (`name.py`), or 9 for
   `lib-name.py` (longer library names have a short disk name: `statistics` and
   `collections`).
-* `dict.keys()`, `values()` and `items()` return lists (snapshots, not live views).
-  `map()` (also over several iterables) and `filter()` are lazy, as in CPython, but
-  their objects, like the other builtin iterators, print as `<iterator>` and their
-  type is `iterator` (CPython: `<map object at ...>`, `map`). Methods taken from a
-  builtin type (`str.upper`, `list.append`) are not supported; use a lambda.
+* `map()`, `filter()`, `zip()` and the other builtin iterators print as `<iterator>`
+  and their type is `iterator` (CPython: `<map object at ...>`, `map`).
 * A program's globals stay after `run()`, so a program that defines `load`, `save`,
   `run`, ... replaces those REPL commands until `new()`.
-* Error messages and tracebacks are shorter: `Traceback: line N` and the exception.
+* Tracebacks show each level as `  line N, in name` (no file name or source line), the
+  innermost 12 levels at most.
 * Memory: Python objects share a 64 KB heap (see "Memory" above).
 
 Note: this is a 45GS02 target. `STZ` stores the Z register, not zero; use

@@ -545,9 +545,15 @@ _conv:  inw pc_pos
         lda #0
         sta fs_width
         sta fs_width+1
+        sta fs_alt
 _flags: jsr pc_get
         bcs _bad
-        cmp #'-'
+        cmp #'#'                        ; %#x: 0x...
+        bne +
+        sta fs_alt
+        inw pc_pos
+        bra _flags
++       cmp #'-'
         bne +
         lda #'<'
         sta fs_align
