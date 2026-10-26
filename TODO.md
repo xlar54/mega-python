@@ -18,7 +18,7 @@ Language
 * `.value` of a `StopIteration` raised by Python code; traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in
   tracebacks.
 * `cls.mro()`, subclassing builtin types, `__getattr__`/`__setattr__` hooks,
-  `match`, `eval`/`exec` with a function's locals or given dicts, `locals()`, `bytes`; `globals()` of a module's code (it gives
+  `match`, `eval`/`exec` with a function's locals or given dicts, `locals()`; `globals()` of a module's code (it gives
   the main program's), a live `globals()` dict.
 * Closures: `del` of a captured variable; the free variable's name in the
   "cannot access free variable" NameError.
@@ -43,7 +43,7 @@ Language
   types can be subclassed.
 * Dicts: keep each key's hash next to it, so growing and deleting do not hash the
   keys again; deletes are O(n) (the pairs move down and the index is rebuilt).
-* `str` methods still missing: `encode`, `translate`, `format_map`; `#` with `0` padding (`{255:#06x}`) puts the zeros first.
+* `str` methods still missing: `translate`, `format_map`; `#` with `0` padding (`{255:#06x}`) puts the zeros first.
 * Iterate lazily where a list is built first today: `min`/`max`, `x in it` for
   non-sequences (`x in range(10**6)` should be arithmetic, as CPython), `str.join`,
   `set()`/`tuple()` of an iterator. Big ranges give `MemoryError` there (`sum` is lazy).
@@ -61,9 +61,9 @@ Environment
 Memory
 ------
 
-* Code space (see the sizes `build.bat` prints): part 1 has about 70 bytes free, overlay R
-  about 150 (both nearly full: new code must go to tails), part 2 about 120, tail B about 150, tail X about 190, tail H about 300, tail T
-  about 360, tail P about 430, tail N about 650, tail M about 2.8 KB (one more tail fits
+* Code space (see the sizes `build.bat` prints): part 1 has about 45 bytes free, overlay R
+  about 50 (both full: new code must go to tails), part 2 about 70, tail S about 40, tail B about 150, tail X about 190, tail H about 300, tail T
+  about 360, tail P about 430, tail N about 700, tail M about 1.8 KB (one more tail fits
   in mpy-ovl's 64 KB before the boot loader must change);
   move cold code out before it fills up again (as sets went to tail T, fbig.asm to tail A,
   tracebacks / keyword binding / class creation to tails H and X); new code should go in a
