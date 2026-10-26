@@ -117,11 +117,25 @@ get_method:
         bcs +
         sec
         rts
-+       ; __name__ of functions (+8), builtins and builtin types (+6)
++       lda r0                          ; a builtin type's method: str.upper (unbound)
+        ldx r0+1
+        jsr type_of
+        cmp #T_BUILTIN
+        bne _name
+        jsr type_made
+        bcs _name
+        jsr builtin_method_a
+        bcs _name
+        clc
+        rts
+_name:  ; __name__ of functions (+8), builtins and builtin types (+6)
         lda r0
         ldx r0+1
         jsr type_of
-        ldy #9
+        cmp #T_SLICE                    ; a slice's start, stop, step
+        bne +
+        jmp slice_attr
++       ldy #9
         cmp #T_FUNC
         beq +
         ldy #7
@@ -482,24 +496,36 @@ _yes:   sec
 _no:    clc
         rts
 _builtin:
-        jsr builtin_type_of_r2          ; -> A/X = the builtin type object of r2
+        lda #B_OBJECT                   ; everything is an object
+        jsr _isr3
+        beq _yes
+        lda ii_sub                      ; issubclass(): r2 is the type itself
+        beq +
+        lda r2
+        ldx r2+1
+        bra ++
++       jsr builtin_type_of_r2          ; -> A/X = the builtin type object of r2
++       sta t4
+        stx t4+1
         cmp r3
         bne +
         cpx r3+1
         beq _yes
-+       ; bool is a subclass of int
-        lda r2
-        ldx r2+1
-        jsr type_of
-        cmp #T_BOOL
++       lda #B_BOOL                     ; bool is a subclass of int
+        jsr builtin_obj
+        cmp t4
+        bne _no
+        cpx t4+1
         bne _no
         lda #B_INT
-        jsr builtin_obj
-        cmp r3
-        bne _no
-        cpx r3+1
+        jsr _isr3
         beq _yes
         bra _no
+_isr3:  jsr builtin_obj                 ; Z set if builtin A is r3
+        cmp r3
+        bne +
+        cpx r3+1
++       rts
 _tuple: lda r3
         pha
         lda r3+1
@@ -736,12 +762,26 @@ ir_a:   .byte 0
 ir_x:   .byte 0
 ir_p:   .byte 0
 
-; inst_eq - r2 == r3 for instances: __eq__, else identity (already false) -> C
+; inst_eq - r2 == r3, one of them an instance: r2's __eq__, else r3's (reflected), else
+; identity (already false) -> C
 inst_eq:
+        lda r2
+        ldx r2+1
+        jsr type_of
+        cmp #T_INST
+        bne _refl
         lda #S_EQ
         jsr inst_binop
+        bcc _got
+_refl:  lda r3
+        ldx r3+1
+        jsr type_of
+        cmp #T_INST
+        bne _no
+        lda #S_EQ
+        jsr inst_rbinop
         bcs _no
-        jmp obj_truth_c
+_got:   jmp obj_truth_c
 _no:    clc
         rts
 

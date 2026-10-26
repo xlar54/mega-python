@@ -9,16 +9,18 @@ Language
   CPython's `hash()` for non-integral floats, faster `sin`/`cos`/`exp`/`log` (they sum
   ~15 series terms of 64-bit multiplies).
 * Arbitrary-precision ints (now 32-bit with OverflowError).
-* Sets: methods with several other iterables (`a.union(b, c)`), `|=` and friends
-  changing the set in place, CPython's hash order.
+* Sets: CPython's hash order.
+* Comprehensions in a scope of their own (now their loop variables leak into the code
+  around them; at the top level they replace a global of that name). Generator
+  expressions already have one: compiling list / dict / set comprehensions the same way
+  costs a generator per comprehension, so a cheaper scheme (hidden local slots) is better.
 * Live `dict` views (`keys()`, `values()`, `items()` are list snapshots); iterator
-  types and reprs per kind (`map`, `filter`, `zip`, `list_iterator`: now `iterator`);
-  methods of builtin types as values (`str.upper`, `list.append`).
-* `.value` of a `StopIteration` raised by Python code; `issubclass()` of builtin types;
-  traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in
+  types and reprs per kind (`map`, `filter`, `zip`, `list_iterator`: now `iterator`).
+* `.value` of a `StopIteration` raised by Python code; traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in
   tracebacks.
 * Multiple inheritance, subclassing builtin types, `__getattr__`/`__setattr__` hooks,
-  `match`, `eval`/`exec`, `dir`/`vars`/`globals`/`locals`, `bytes`.
+  `match`, `eval`/`exec`, `locals()`, `bytes`; `globals()` of a module's code (it gives
+  the main program's), a live `globals()` dict.
 * Closures: `del` of a captured variable; the free variable's name in the
   "cannot access free variable" NameError.
 * Positional-only parameters
@@ -35,12 +37,11 @@ Language
   unsigned 32-bit arithmetic: bigger ints).
 * `os.sys()` for code outside bank 0 (it would need a MAP of the target). (`math` is a class object; a real
   module type would print as `<module 'math'>`.)
-* Libraries: `collections.namedtuple`/`OrderedDict`, `itertools`, `re`, `datetime`
-  (some need generators first).
+* Libraries: `re`, `datetime`. `namedtuple` classes could subclass `tuple` once builtin
+  types can be subclassed.
 * Dicts: keep each key's hash next to it, so growing and deleting do not hash the
   keys again; deletes are O(n) (the pairs move down and the index is rebuilt).
-* `str` methods still missing: `partition`, `rsplit`, `rfind`, `swapcase`, `expandtabs`,
-  `encode`, `removeprefix`, ...; `#` with `0` padding (`{255:#06x}`) puts the zeros first.
+* `str` methods still missing: `encode`, `translate`, `format_map`; `#` with `0` padding (`{255:#06x}`) puts the zeros first.
 * Iterate lazily where a list is built first today: `min`/`max`, `x in it` for
   non-sequences (`x in range(10**6)` should be arithmetic, as CPython), `str.join`,
   `set()`/`tuple()` of an iterator. Big ranges give `MemoryError` there (`sum` is lazy).
@@ -58,9 +59,10 @@ Environment
 Memory
 ------
 
-* Code space (see the sizes `build.bat` prints): part 1 is full, overlay R has about
-  70 bytes and part 2 about 200; the next feature should first move cold code out (as
-  sets went to tail T and fbig.asm to tail A); new code should go in a
+* Code space (see the sizes `build.bat` prints): part 1 has about 730 bytes free, overlay R
+  about 860, part 2 about 120, tail X about 110, tail H about 300, tail T about 450;
+  move cold code out before it fills up again (as sets went to tail T, fbig.asm to tail A,
+  tracebacks / keyword binding / class creation to tails H and X); new code should go in a
   tail or overlay C; each tail has room left, and more tails can be
   added (`docs/INTERNALS.md`, "Tails"). More code should go into tails (only code that never
   runs Python code; see `docs/INTERNALS.md`) or overlay C (compile time).

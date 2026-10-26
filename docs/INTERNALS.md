@@ -26,10 +26,12 @@
 | `fmath.asm`, `float.asm` | float arithmetic (+ - * / divmod fmod sqrt floor); operators, conversions, tail entry stubs |
 | `fdtoa.asm`, `floata.asm` | tail A: double -> decimal digits and the repr/format layouts; `float()`, `round()`, `hash()`, `divmod()` |
 | `ftrans.asm`, `floatb.asm` | tail B: exp, log, sin, cos, atan, pow; the `math` module |
-| `tailh.asm` | tail H: `help()`, `mem()`, program load/save/directory |
+| `tailh.asm` | tail H: `help()`, `mem()`, program load/save/directory; tracebacks and type-named errors, `UNPACK_EX`, `IMPORT_STAR` |
 | `taili.asm` | tail I: `py_reset` (heap, symbol table, exception classes; the fixed symbols' names) |
 | `file.asm` | tail F: Python files (`open()` and the file methods), the `os` module, loading a module's file |
 | `sets.asm`, `setsr.asm` | tail T: sets and frozensets (operators, methods, `set()`, repr); overlay R: `BUILD_SET` and the stubs |
+| `introsp.asm` | tail T: `dir`, `vars`, `globals`, `delattr`, `slice()` and a slice's attributes |
+| `listslice.asm` | tail T: assigning to and deleting list slices (`a[i:j] = x` rebuilds the list in place; an extended slice stores or deletes item by item) |
 | `env.asm` | closures (overlay R): the environment opcodes |
 | `desc.asm` | `staticmethod`, `classmethod`, `property` (overlay R), `LOAD_CLASSNAME` |
 | `args.asm` | tail X: binding `*args`/`**kwargs`/keyword-only parameters, `f(*a, **k)` calls; making a generator, its saved exception handlers, `send()`, `throw()`, `close()`, `StopIteration(value)` |
@@ -82,6 +84,7 @@ program may be showing the graphics screen.
 | `$8140000-$816FFFF` | sort scratch |
 | `$8170010` | compiler cut stack |
 | `$8113000` | the hidden symbols of modules -> their plain symbols (`SYM_BASE`) |
+| `$8114000` | `SYM_VAL` as `py_reset` left it (`SYM_BOOT`): `globals()` leaves out the symbols still holding their boot value (the builtins) |
 | `$8180000` / `$8190000` | overlay R / overlay C images (tail A, the end of R, holds `fbig.asm`; C has its own copy, `c_fbig`, for the lexer's float literals) |
 | `$81C0000` | the source of a module being imported |
 | `$81A0000-$81A7FFF` | tail B, H, F, S, P, I, X, T images, 4 KB each (tail A is the end of R's image) |
@@ -273,6 +276,14 @@ While a module is compiled (`c_mod` set), every global name compiles to a hidden
 unbound hidden symbol tries the plain one: that is how a module reaches the builtins.
 A module's attributes read and write its hidden symbols.
 
+`from m import *` (module level only) compiles to `IMPORT m` then `IMPORT_STAR target`,
+the target being the importing module's symbol (`c_mod`, 0 for the main program). Its
+handler (`xh_import_star`, tail H) collects the names: the keys of the dict of `math` /
+`os`, a disk module's `__all__` if it has one, else every bound symbol `"m.x"` with `x`
+not starting with `_` (a scan of the symbol table). Each value is bound in the target
+through `gsym` with `c_mod` set to the target for the moment, so a module importing `*`
+gets hidden names like the ones its own code compiled to.
+
 `py_reset` (boot, `run()`, `new()`) is in tail I with the exception setup; only its
 call of `builtins_init` stays outside (that brings in tail B for `math`).
 
@@ -460,6 +471,10 @@ top of the stack into a set. The operations (`set_op`: union, intersection, diff
 symmetric difference) build a new set from lists of members on the value stack; a
 member's `__eq__` may run Python code at any point. The in-place methods
 (`update`, ...) compute the result and let `self` take over its count and pair array.
+The methods with other iterables push all their arguments first, convert each to a set
+in its slot, and fold `set_op` over them. `x -= y`, `&=`, `|=`, `^=` compile to
+`INPLACE b` (b = the binop): a set (not a frozenset) with a set on the right takes the
+result over the same way; anything else goes on to `op_binop` with that operator.
 
 ## with
 

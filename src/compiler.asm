@@ -4019,7 +4019,7 @@ _more:  lda tok
         beq -
         rts
 
-; from m import a [as b], c   |   from m import *
+; from m import a [as b], c   |   from m import (a, b,)   |   from m import *
 st_from:
         jsr lex
         lda tok
@@ -4035,9 +4035,21 @@ st_from:
         jsr expect
         lda tok
         cmp #TK_STAR
-        bne _names
+        bne _paren
+        jsr scope_kind
+        beq +
         jsr syntax_error
-        .text "'from module import *' is not supported yet", 0
+        .text "import * only allowed at module level", 0
++       jsr lex
+        ldy #OP_IMPORT_STAR             ; (the names bound in this module)
+        lda c_mod
+        ldx c_mod+1
+        jmp emit_op_word
+_paren: lda #TK_LPAREN
+        jsr accept
+        lda #0
+        rol a
+        pha                             ; CPU: in parentheses
 _names: lda #OP_DUP
         jsr emit
         lda tok
@@ -4066,8 +4078,18 @@ _names: lda #OP_DUP
         jsr emit_store_sym
         lda #TK_COMMA
         jsr accept
-        bcs _names
-        lda #OP_POP
+        bcc _end
+        pla
+        pha
+        beq _names
+        lda tok                         ; (a trailing comma in parentheses)
+        cmp #TK_RPAREN
+        bne _names
+_end:   pla
+        beq +
+        lda #TK_RPAREN
+        jsr expect
++       lda #OP_POP
         jmp emit
 
 ;---------------------------------------------------------------------------------------
@@ -4245,11 +4267,18 @@ _rhs:   lda tok
         pla
         bne +                           ; += uses the in-place add
         lda #OP_IADD
-        bra ++
-+       clc
+        bra _emit
++       cmp #BOP_SUB                    ; -= &= |= ^= change a set in place
+        beq _inpl
+        cmp #BOP_AND
+        bcs _inpl
+        clc
         adc #OP_ADD
-+       jsr emit
-        lda se_op
+_emit:  jsr emit
+        bra _store
+_inpl:  ldy #OP_INPLACE
+        jsr emit_op_byte
+_store: lda se_op
         jsr store_for_load
         jmp emit_store_op
 

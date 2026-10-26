@@ -1,6 +1,7 @@
-# collections: deque, Counter and defaultdict, as in Python's collections module (on
-# the disk as lib-colls.py: 'import collections' finds it). namedtuple and
-# OrderedDict are not here yet (dicts keep their order anyway).
+# collections: deque, Counter, defaultdict, namedtuple and OrderedDict, as in Python's
+# collections module (on the disk as lib-colls.py: 'import collections' finds it).
+# They are classes of their own, not subclasses of dict / tuple: isinstance(p, tuple)
+# is False for a namedtuple.
 
 
 class _Iter:
@@ -89,6 +90,9 @@ class deque:
     def __setitem__(self, i, x):
         self._items[i] = x
 
+    def __delitem__(self, i):
+        del self._items[i]
+
     def __contains__(self, x):
         return x in self._items
 
@@ -160,6 +164,10 @@ class Counter:
     def __setitem__(self, k, v):
         self._d[k] = v
 
+    def __delitem__(self, k):
+        if k in self._d:
+            del self._d[k]
+
     def __contains__(self, k):
         return k in self._d
 
@@ -196,6 +204,9 @@ class defaultdict:
     def __setitem__(self, k, v):
         self._d[k] = v
 
+    def __delitem__(self, k):
+        del self._d[k]
+
     def __contains__(self, k):
         return k in self._d
 
@@ -222,3 +233,181 @@ class defaultdict:
 
     def __repr__(self):
         return 'defaultdict(%r, %r)' % (self.default_factory, self._d)
+
+
+def namedtuple(typename, field_names, defaults=None):
+    """A class of tuples whose items also have names: Point = namedtuple('Point', 'x y')."""
+    if isinstance(field_names, str):
+        field_names = field_names.replace(',', ' ').split()
+    fields = tuple(field_names)
+    nf = len(fields)
+    dflt = {}
+    if defaults:
+        defaults = tuple(defaults)
+        for name, value in zip(fields[nf - len(defaults):], defaults):
+            dflt[name] = value
+
+    class _NT:
+        _fields = fields
+        _field_defaults = dflt
+
+        def __init__(self, *args, **kw):
+            if len(args) > nf:
+                raise TypeError('%s() takes %d arguments' % (typename, nf))
+            vals = list(args)
+            for name in fields[len(vals):]:
+                if name in kw:
+                    vals.append(kw.pop(name))
+                elif name in dflt:
+                    vals.append(dflt[name])
+                else:
+                    raise TypeError("%s() missing argument '%s'" % (typename, name))
+            if kw:
+                raise TypeError('%s() got an unexpected keyword argument' % typename)
+            self._v = tuple(vals)
+            for i in range(nf):
+                setattr(self, fields[i], vals[i])
+
+        @classmethod
+        def _make(cls, iterable):
+            return cls(*iterable)
+
+        def _asdict(self):
+            return dict(zip(fields, self._v))
+
+        def _replace(self, **kw):
+            return _NT(*[kw.pop(f, v) for f, v in zip(fields, self._v)])
+
+        def __getitem__(self, i):
+            return self._v[i]
+
+        def __iter__(self):
+            return iter(self._v)
+
+        def __len__(self):
+            return nf
+
+        def __contains__(self, x):
+            return x in self._v
+
+        def __eq__(self, other):
+            return self._v == tuple(other)
+
+        def __ne__(self, other):
+            return self._v != tuple(other)
+
+        def __lt__(self, other):
+            return self._v < tuple(other)
+
+        def __le__(self, other):
+            return self._v <= tuple(other)
+
+        def __gt__(self, other):
+            return self._v > tuple(other)
+
+        def __ge__(self, other):
+            return self._v >= tuple(other)
+
+        def __hash__(self):
+            return hash(self._v)
+
+        def __add__(self, other):
+            return self._v + tuple(other)
+
+        def count(self, x):
+            return self._v.count(x)
+
+        def index(self, x):
+            return self._v.index(x)
+
+        def __repr__(self):
+            return typename + '(' + ', '.join(
+                '%s=%r' % (f, v) for f, v in zip(fields, self._v)) + ')'
+
+    return _NT
+
+
+class OrderedDict:
+    """A dict that also moves keys to either end (move_to_end) and pops from either end
+    (popitem(last=False))."""
+
+    def __init__(self, items=None, **kw):
+        self._d = {}
+        self.update(items, **kw)
+
+    def update(self, items=None, **kw):
+        if isinstance(items, (dict, OrderedDict)):
+            for k in items.keys():
+                self._d[k] = items[k]
+        elif items is not None:
+            for k, v in items:
+                self._d[k] = v
+        for k in kw:
+            self._d[k] = kw[k]
+
+    def move_to_end(self, key, last=True):
+        v = self._d.pop(key)
+        if last:
+            self._d[key] = v
+        else:
+            d = {key: v}
+            d.update(self._d)
+            self._d = d
+
+    def popitem(self, last=True):
+        if not self._d:
+            raise KeyError('dictionary is empty')
+        k = list(self._d)[-1 if last else 0]
+        return k, self._d.pop(k)
+
+    def pop(self, k, *default):
+        return self._d.pop(k, *default)
+
+    def setdefault(self, k, default=None):
+        return self._d.setdefault(k, default)
+
+    def get(self, k, default=None):
+        return self._d.get(k, default)
+
+    def keys(self):
+        return self._d.keys()
+
+    def values(self):
+        return self._d.values()
+
+    def items(self):
+        return self._d.items()
+
+    def clear(self):
+        self._d.clear()
+
+    def copy(self):
+        return OrderedDict(self._d)
+
+    def __getitem__(self, k):
+        return self._d[k]
+
+    def __setitem__(self, k, v):
+        self._d[k] = v
+
+    def __delitem__(self, k):
+        del self._d[k]
+
+    def __contains__(self, k):
+        return k in self._d
+
+    def __len__(self):
+        return len(self._d)
+
+    def __iter__(self):
+        return _Iter(list(self._d.keys()))
+
+    def __eq__(self, other):
+        if isinstance(other, OrderedDict):
+            return list(self._d.items()) == list(other._d.items())
+        return self._d == other
+
+    def __repr__(self):
+        if not self._d:
+            return 'OrderedDict()'
+        return 'OrderedDict(%r)' % self._d

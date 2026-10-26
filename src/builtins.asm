@@ -119,11 +119,82 @@ builtin_obj:
         pla
         rts
 
-; builtin_method - r0 = object, r1 = name ref -> C clear, A/X = method if found
+; bm_check - (call_native) A = builtin X's flags, a method's: its self (argv 0) must be
+; of the type in bits 3-7 (str.upper(5) or list.append() raise TypeError); keeps X
+bm_check:
+        lsr a
+        lsr a
+        lsr a
+        ldy nargc
+        beq _bad
+        phx
+        pha
+        lda argv
+        ldx argv+1
+        jsr type_of
+        sta t0
+        pla
+        plx
+        cmp t0
+        bne _bad
+        rts
+_bad:   #RAISE EXC_TYPE, "method called on an object of another type"
+
+; type_made - p0 = a builtin -> C clear and A = the type it makes (str -> T_STR), C set
+; if it makes none of those with methods
+type_made:
+        ldz #4
+        lda [p0],z
+        ldx #T_NTYPES - 1
+-       cmp type_builtin,x
+        beq +
+        dex
+        bpl -
+        sec
+        rts
++       txa
+        clc
+        rts
+
+; builtin_method - r0 = object, r1 = name ref -> C clear, A/X = method if found.
+; builtin_method_a: A = the type whose table to search.
 builtin_method:
         lda r0
         ldx r0+1
         jsr type_of
+builtin_method_a:
+        jsr meth_table
+        bcs _miss
+_next:  ldy #1
+        lda (t6),y
+        cmp #$ff
+        beq _miss
+        tax
+        dey
+        lda (t6),y
+        jsr sym_name
+        cmp r1
+        bne _skip
+        cpx r1+1
+        bne _skip
+        ldy #2
+        lda (t6),y
+        jsr builtin_obj
+        clc
+        rts
+_skip:  clc
+        lda t6
+        adc #4
+        sta t6
+        bcc _next
+        inc t6+1
+        bra _next
+_miss:  sec
+        rts
+
+; meth_table - A = type -> C clear, t6 = its method table (meth_*: symbol, builtin id
+; words, $ffff at the end); C set if the type has none
+meth_table:
         ldx #<meth_list
         ldy #>meth_list
         cmp #T_LIST
@@ -165,31 +236,7 @@ builtin_method:
 _search:
         stx t6
         sty t6+1
-_next:  ldy #1
-        lda (t6),y
-        cmp #$ff
-        beq _miss
-        tax
-        dey
-        lda (t6),y
-        jsr sym_name
-        cmp r1
-        bne _skip
-        cpx r1+1
-        bne _skip
-        ldy #2
-        lda (t6),y
-        jsr builtin_obj
         clc
-        rts
-_skip:  clc
-        lda t6
-        adc #4
-        sta t6
-        bcc _next
-        inc t6+1
-        bra _next
-_miss:  sec
         rts
 
 ; kw_get - A/X = symbol: is it among the keyword arguments? -> C clear, A/X = value
@@ -259,7 +306,7 @@ builtin_type_of_r2:
 type_builtin:
         .byte B_NONETYPE, B_INT, B_STR, B_LIST, B_TUPLE, B_DICT, B_NONETYPE, B_FUNCTION
         .byte B_FUNCTION, B_FUNCTION, B_TYPE, $ff, B_RANGE, B_OBJECT, B_FLOAT, B_NONETYPE
-        .byte B_BOOL, B_OBJECT, B_OBJECT, B_TEXTIOWRAPPER, B_MODULE, B_PROPERTY
+        .byte B_BOOL, B_SLICE, B_OBJECT, B_TEXTIOWRAPPER, B_MODULE, B_PROPERTY
         .byte B_GENERATOR, B_SET, B_FROZENSET
 
 ; put_str - print string A/X
@@ -1318,7 +1365,13 @@ bi_issubclass:
         jsr type_of
         cmp #T_CLASS
         beq +
-        #RAISE EXC_TYPE, "issubclass() arg 1 must be a class"
+        cmp #T_BUILTIN                  ; or a builtin type (int, str, ...)
+        bne _bad
+        ldz #5
+        lda [p0],z
+        and #BF_TYPE
+        bne +
+_bad:   #RAISE EXC_TYPE, "issubclass() arg 1 must be a class"
 +       inc ii_sub
         jsr bi_isinstance
         dec ii_sub
@@ -1429,89 +1482,7 @@ bi_divmod:
         stx r3+1
         jmp tuple2
 
-bi_pow:
-        #NARGS 2, 3
-        lda npos
-        cmp #3
-        beq _mod
-        #ARG 0
-        sta r2
-        stx r2+1
-        #ARG 1
-        sta r3
-        stx r3+1
-        lda #BOP_POW
-        sta bop
-        jmp binop
-_mod:   ; (base ** exp) % mod by square-and-multiply, reducing each step
-        #ARG 2
-        jsr need_int
-        ldq acc
-        stq pm_mod
-        #ARG 1
-        jsr need_int
-        ldq acc
-        stq pm_exp
-        bit acc+3
-        bpl +
-        #RAISE EXC_VALUE, "pow() negative exponent with a modulus"
-+       #ARG 0
-        jsr need_int
-        ldq pm_mod
-        stq acc2
-        jsr acc_divmod
-        ldq acc3
-        stq pm_base
-        lda #1
-        sta pm_res
-        lda #0
-        sta pm_res+1
-        sta pm_res+2
-        sta pm_res+3
-_loop:  lda pm_exp
-        ora pm_exp+1
-        ora pm_exp+2
-        ora pm_exp+3
-        beq _done
-        lda pm_exp
-        and #1
-        beq +
-        ldq pm_res
-        stq acc
-        ldq pm_base
-        stq acc2
-        jsr _mulmod
-        ldq acc
-        stq pm_res
-+       lsr pm_exp+3
-        ror pm_exp+2
-        ror pm_exp+1
-        ror pm_exp
-        ldq pm_base
-        stq acc
-        stq acc2
-        jsr _mulmod
-        ldq acc
-        stq pm_base
-        bra _loop
-_done:  ldq pm_res
-        stq acc
-        ldq pm_mod
-        stq acc2
-        jsr acc_divmod
-        ldq acc3
-        stq acc
-        jmp int_new
-_mulmod:
-        jsr acc_mul
-        bcc +
-        jmp int_overflow
-+       ldq pm_mod
-        stq acc2
-        jsr acc_divmod
-        ldq acc3
-        stq acc
-        rts
+bi_pow:         #TAILCALL TAIL_B, xb_bi_pow         ; (floatb.asm)
 pm_mod:         .dword 0
 pm_exp:         .dword 0
 pm_base:        .dword 0
@@ -2346,65 +2317,8 @@ bi_zip:
 ;---------------------------------------------------------------------------------------
 ; tracebacks (in overlay R: the REPL brings R in before it reports an error)
 ;---------------------------------------------------------------------------------------
-print_exception:
-        jsr scr_fresh_line
-        lda #COL_ERROR
-        sta scr_color
-        lda cur_exc
-        ldx cur_exc+1
-        sta r2
-        stx r2+1
-        ; syntax errors carry their own line; others: the levels of calls
-        lda #EXC_SYNTAX
-        jsr exc_is
-        bcs _msg
-        jsr print_tb
-_msg:   ; "Name: message", or just "Name" when str(exc) is empty
-        lda sbp
-        pha
-        lda sbp+1
-        pha
-        lda cur_exc
-        ldx cur_exc+1
-        jsr sb_type_name
-        lda sbp
-        pha
-        lda sbp+1
-        pha
-        #SBPRINT ": "
-        lda sbp
-        pha
-        lda sbp+1
-        pha
-        lda cur_exc
-        ldx cur_exc+1
-        jsr obj_str
-        pla
-        sta t1+1
-        pla
-        sta t1
-        pla
-        sta t2+1
-        pla
-        sta t2
-        lda sbp
-        cmp t1
-        bne +
-        lda sbp+1
-        cmp t1+1
-        bne +
-        lda t2                          ; empty message: drop the ": "
-        sta sbp
-        lda t2+1
-        sta sbp+1
-+       plx
-        pla
-        jsr sb_flush
-        lda #10
-        jsr putc
-        lda #COL_NORMAL
-        sta scr_color
-        rts
+print_exception: #TAILCALL TAIL_H, xh_print_exception  ; (tailh.asm)
+
 
 raise_subclass:                         ; (MAKE_CLASS with a builtin type as the base)
         #RAISE EXC_TYPE, "subclassing builtin types is not supported"
@@ -2425,237 +2339,8 @@ tb_more:        .byte 0                 ; there were more frames (the outer ones
 tb_ip:          .fill 2 * TB_N
 tb_name:        .fill 2 * TB_N          ; a perm name string, or 0
 
-tb_capture:
-        lda cur_exc
-        sta tb_exc
-        lda cur_exc+1
-        sta tb_exc+1
-        lda #0
-        sta tb_more
-        lda frp
-        sta fp1
-        lda frp+1
-        sta fp1+1
-        lda #<(FSTACK >> 16)
-        sta fp1+2
-        lda #0
-        sta fp1+3
-        ldy #0                          ; Y = 2 * entries
-_loop:  lda fp1
-        cmp #<FSTACK
-        bne +
-        lda fp1+1
-        cmp #>FSTACK
-        beq _done
-+       cpy #2 * TB_N
-        bcc +
-        inc tb_more
-        bra _done
-+       sec
-        lda fp1
-        sbc #8
-        sta fp1
-        bcs +
-        dec fp1+1
-+       ldz #0                          ; the return ip
-        lda [fp1],z
-        sta tb_ip,y
-        inz
-        lda [fp1],z
-        sta tb_ip+1,y
-        ldz #4                          ; the callee: in the result slot, or a
-        lda [fp1],z                     ; generator's function
-        sta t0
-        inz
-        lda [fp1],z
-        sta t0+1
-        phy
-        ldz #6
-        lda [fp1],z
-        and #FR_GEN
-        beq _slot
-        ldy #2
-        lda (t0),y
-        sta p0
-        iny
-        lda (t0),y
-        sta p0+1
-        ldz #4
-        lda [p0],z
-        pha
-        inz
-        lda [p0],z
-        tax
-        pla
-        bra _f
-_slot:  ldy #1
-        lda (t0),y
-        tax
-        dey
-        lda (t0),y
-_f:     sta p0
-        stx p0+1
-        jsr type_of
-        cmp #T_FUNC
-        beq +
-        lda #0
-        tax
-        bra _put
-+       ldz #9                          ; its name
-        lda [p0],z
-        tax
-        dez
-        lda [p0],z
-_put:   ply
-        sta tb_name,y
-        txa
-        sta tb_name+1,y
-        iny
-        iny
-        bra _loop
-_done:  tya
-        lsr a
-        sta tb_n
-        rts
+tb_capture:     #TAILCALL TAIL_H, xh_tb_capture      ; (tailh.asm)
 
-print_tb:
-        lda tb_exc                      ; (recorded for this exception?)
-        cmp cur_exc
-        bne _rts
-        lda tb_exc+1
-        cmp cur_exc+1
-        bne _rts
-        #PRINT "Traceback (most recent call last):"
-        lda #10
-        jsr putc
-        lda tb_more
-        beq +
-        #PRINT "  ..."
-        lda #10
-        jsr putc
-+       ldx tb_n
-_lvl:   dex                             ; frame X: its return ip, and the function
-        bmi _last                       ; of the frame outside it (X + 1)
-        phx
-        txa
-        asl a
-        tay
-        lda tb_ip,y
-        ldx tb_ip+1,y
-        jsr _line
-        plx
-        phx
-        inx
-        cpx tb_n
-        bcc _named
-        lda tb_more
-        bne _eol
-        jsr _module
-        bra _eol
-_named: txa
-        asl a
-        tay
-        lda tb_name,y
-        ldx tb_name+1,y
-        jsr _in
-_eol:   lda #10
-        jsr putc
-        plx
-        bra _lvl
-_last:  lda exc_ip                      ; where it was raised
-        ldx exc_ip+1
-        jsr _line
-        lda tb_n
-        beq _mod
-        lda tb_name
-        ldx tb_name+1
-        jsr _in
-        bra +
-_mod:   jsr _module
-+       lda #10
-        jmp putc
-_rts:   rts
-_line:  jsr line_of_ip                  ; "  line N"
-        bcc +
-        #PRINT "  ?"
-        rts
-+       pha
-        phx
-        #PRINT "  line "
-        plx
-        pla
-        sta acc
-        stx acc+1
-        lda #0
-        sta acc+2
-        sta acc+3
-        jsr sb_mark_t5
-        jsr sb_int
-        lda t5
-        ldx t5+1
-        jmp sb_flush
-_in:    cpx #0                          ; ", in name"
-        beq _rts
-        pha
-        phx
-        #PRINT ", in "
-        plx
-        pla
-        jmp put_str
-_module:
-        #PRINT ", in <module>"
-        rts
 
 ; line_of_ip - code offset A/X -> A/X = line (C clear), C set if unknown.
 ; The line table holds (offset, line) pairs in code order; take the last offset < ip.
-line_of_ip:
-        sta t0
-        stx t0+1
-        lda #<LINETAB
-        sta fp0
-        lda #>LINETAB
-        sta fp0+1
-        lda #<(LINETAB >> 16)
-        sta fp0+2
-        lda #>(LINETAB >> 16)
-        sta fp0+3
-        lda #0
-        sta t1                          ; best line
-        sta t1+1
-        lda #1
-        sta t2                          ; none found yet
-_loop:  lda fp0
-        cmp linetab_end
-        bne +
-        lda fp0+1
-        cmp linetab_end+1
-        beq _done
-+       ldz #1
-        lda [fp0],z
-        cmp t0+1
-        bcc _take
-        bne _skip
-        dez
-        lda [fp0],z
-        cmp t0
-        bcs _skip
-_take:  ldz #2
-        lda [fp0],z
-        sta t1
-        inz
-        lda [fp0],z
-        sta t1+1
-        lda #0
-        sta t2
-_skip:  clc
-        lda fp0
-        adc #4
-        sta fp0
-        bcc _loop
-        inc fp0+1
-        bra _loop
-_done:  lda t2
-        lsr
-        lda t1
-        ldx t1+1
-        rts

@@ -96,6 +96,7 @@ op_binop:
         sec
         sbc #OP_ADD
         sta bop
+op_binop_bop:                           ; (INPLACE comes here with bop set)
         #PEEK 1
         sta r2
         stx r2+1

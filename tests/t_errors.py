@@ -81,3 +81,14 @@ class Pt:
 
 print(y, ah(), Pt.x, 'z' in globals() if False else 'ok')
 print('%#x %#o %x' % (255, 8, 255), '{:#x}'.format(255), '{:x}'.format(255), f'{255:x}')
+
+# issubclass / isinstance with builtin types and object
+print(isinstance(True, int), issubclass(bool, int), issubclass(int, object), issubclass(bool, (str, int)))
+print(issubclass(int, int), issubclass(str, int), issubclass(ValueError, Exception))
+
+
+class C:
+    pass
+
+
+print(issubclass(C, object), isinstance(C(), object), isinstance(5, object))

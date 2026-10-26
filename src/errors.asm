@@ -368,68 +368,15 @@ indent_error:
         lda t6
         jmp raise_sb
 
-; sb_type_name - append the type name of A/X
+; sb_type_name - append the type name of A/X (tail H; with overlay C in: 'object')
 sb_type_name:
-        sta t0
-        stx t0+1
-        jsr type_of
-        cmp #T_INST
+        ldy ovl_cur
         bne +
-        ldz #4                          ; the class name
-        lda [p0],z
-        sta p1
-        inz
-        lda [p0],z
-        sta p1+1
-        ldz #5
-        lda [p1],z
-        tax
-        dez
-        lda [p1],z
-        jmp sb_put_str
-+       cmp #T_CLASS
-        bne +
-        #SBPRINT "type"
+        jmp x_type_name
++       #SBPRINT "object"
         rts
-+       asl
-        tax
-        lda type_names,x
-        pha
-        lda type_names+1,x
-        tax
-        pla
-        jmp sb_puts
+x_type_name:    #TAILCALL TAIL_H, xh_type_name
 
-type_names:
-        .word tn_null, tn_int, tn_str, tn_list, tn_tuple, tn_dict, tn_arr, tn_func
-        .word tn_builtin, tn_method, tn_type, tn_object, tn_range, tn_iter, tn_float
-        .word tn_none, tn_bool, tn_slice, tn_super, tn_file, tn_module, tn_desc, tn_gen
-        .word tn_set, tn_fset
-tn_gen:         .text "generator", 0
-tn_desc:        .text "property", 0     ; (or staticmethod / classmethod)
-tn_file:        .text "TextIOWrapper", 0
-tn_module:      .text "module", 0
-tn_set:         .text "set", 0
-tn_fset:        .text "frozenset", 0
-tn_null:        .text "NULL", 0
-tn_int:         .text "int", 0
-tn_str:         .text "str", 0
-tn_list:        .text "list", 0
-tn_tuple:       .text "tuple", 0
-tn_dict:        .text "dict", 0
-tn_arr:         .text "array", 0
-tn_func:        .text "function", 0
-tn_builtin:     .text "builtin_function_or_method", 0
-tn_method:      .text "method", 0
-tn_type:        .text "type", 0
-tn_object:      .text "object", 0
-tn_range:       .text "range", 0
-tn_iter:        .text "iterator", 0
-tn_float:       .text "float", 0
-tn_none:        .text "NoneType", 0
-tn_bool:        .text "bool", 0
-tn_slice:       .text "slice", 0
-tn_super:       .text "super", 0
 
 ;---------------------------------------------------------------------------------------
 ; make_exception - raise X: X may be a class (instantiate it) or an instance

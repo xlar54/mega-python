@@ -83,3 +83,46 @@ try:
 except TypeError:
     print('operand TypeError')
 print(repr({'a'}), str(frozenset({'b'})), [{1}, {2: 3}])
+
+# methods with several iterables, in-place operators
+a = {1, 2}
+print(a.union({3}, [4], (5,)), a.intersection({1, 2, 3}, [2]), a.difference([1], [9]))
+a |= {7}
+print(a)
+a &= {1, 7, 8}
+print(a)
+a -= {1}
+print(a)
+a ^= {7, 9}
+print(a)
+b = {1, 2, 3}
+b.update([4], (5,))
+print(b)
+b.intersection_update([1, 2, 3, 4], {2, 3, 4})
+print(b)
+b.difference_update([2], [3])
+print(b)
+print({1, 2}.issubset([1, 2, 3]), {1, 2}.isdisjoint([3]), {1}.symmetric_difference([1, 2]))
+
+# in-place operators change a set (a frozenset is rebound)
+a = {1, 2}
+b = a
+a |= {3}
+a -= {1}
+a &= {2, 3, 9}
+a ^= frozenset({4, 2})
+print(a, b, a is b)
+f = frozenset({1})
+g = f
+f |= {2}
+print(f, g, f is g)
+n = 6
+n |= 1
+n &= 5
+n ^= 1
+n -= 1
+print(n)
+try:
+    a |= [5]
+except TypeError:
+    print('TypeError')

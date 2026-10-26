@@ -169,6 +169,7 @@ SYM_NAME                = $8110000      ; ref of each symbol's interned name
 SYM_NEXT                = $8111000      ; hash chain (+1 = sym id, 0 = end)
 SYM_HASH                = $8112000      ; 256 bucket heads
 SYM_BASE                = $8113000      ; a module's hidden symbol -> its plain one
+SYM_BOOT                = $8114000      ; SYM_VAL as py_reset left it (globals())
 MODSRC                  = $81C0000      ; the source of a module being imported (64 KB)
 MAXSYMS                 = 2048
 LINETAB                 = $8120000      ; (code offset, line) pairs

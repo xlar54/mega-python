@@ -28,3 +28,15 @@ def f():
 
 
 print(f())
+
+from modtest import (counter,
+                     NAME as N2,)
+print(counter(), N2)
+from modstar import *                   # its __all__: '_' names too, not the others
+print(shown, _kept, nine())
+try:
+    hidden
+except NameError:
+    print('NameError')
+from math import *
+print(floor(2.5), sqrt(16), pi > 3)

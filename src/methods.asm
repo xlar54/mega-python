@@ -85,6 +85,17 @@ bi_str_rjust:             #TAILS xs_str_rjust
 bi_str_zfill:             #TAILS xs_str_zfill
 bi_str_title:             #TAILS xs_str_title
 bi_str_capitalize:        #TAILS xs_str_capitalize
+bi_str_swapcase:          #TAILS xs_str_swapcase
+bi_str_casefold:          #TAILS xs_str_casefold
+bi_str_isascii:           #TAILS xs_str_isascii
+bi_str_rfind:             #TAILS xs_str_rfind
+bi_str_rindex:            #TAILS xs_str_rindex
+bi_str_partition:         #TAILS xs_str_partition
+bi_str_rpartition:        #TAILS xs_str_rpartition
+bi_str_removeprefix:      #TAILS xs_str_removeprefix
+bi_str_removesuffix:      #TAILS xs_str_removesuffix
+bi_str_expandtabs:        #TAILS xs_str_expandtabs
+bi_str_rsplit:            #TAILS xs_str_rsplit
 
 ;---------------------------------------------------------------------------------------
 ; str_find - r3 = haystack, r2 = needle -> C clear and acc = index if found
@@ -871,116 +882,14 @@ _walk:  lda frp                         ; the frames it leaves: frp down to t0
         #RAISE EXC_RUNTIME, "generator raised StopIteration"
 _no:    rts
 
-;---------------------------------------------------------------------------------------
-; UNPACK_EX b, a - value -> a list of b + 1 + a items: its first b items, a list of
-; the ones between, its last a items (an UNPACK of that follows): a, *b, c = value
-;---------------------------------------------------------------------------------------
-ux_b:           .byte 0
-ux_a:           .byte 0
-ux_n:           .word 0
-ux_i:           .word 0
 op_unpack_ex:
-        #FETCHB
-        sta ux_b
-        #FETCHB
-        sta ux_a
-        #PEEK 0
-        jsr list_from_iterable          ; (a copy: may run Python code)
-        #POKE 0                         ; [items]
-        jsr seq_len
-        lda t0
-        sta ux_n
-        lda t0+1
-        sta ux_n+1
-        clc
-        lda ux_b
-        adc ux_a
-        sta nitems
-        lda ux_n+1
-        bne +
-        lda ux_n
-        cmp nitems
-        bcs +
-        #RAISE EXC_VALUE, "not enough values to unpack"
-+       inc nitems                      ; the result
-        lda #0
-        sta nitems+1
-        sta ux_i
-        sta ux_i+1
-        jsr list_new
-        #PUSH                           ; [items][result]
--       lda ux_i                        ; the first b
-        cmp ux_b
-        bcs +
-        ldy #1
-        jsr _take
-        bra -
-+       lda #0                          ; the ones between
-        sta nitems
-        sta nitems+1
-        jsr list_new
-        #PUSH                           ; [items][result][middle]
--       sec
-        lda ux_n
-        sbc ux_a
-        sta t1
-        lda ux_n+1
-        sbc #0
-        sta t1+1
-        lda ux_i
-        cmp t1
-        lda ux_i+1
-        sbc t1+1
-        bcs +
-        ldy #2
-        jsr _take
-        bra -
-+       #POP
-        sta r1
-        stx r1+1
-        #PEEK 0
-        sta r0
-        stx r0+1
-        jsr list_append                 ; [items][result]
--       lda ux_i                        ; the last a
-        cmp ux_n
-        lda ux_i+1
-        sbc ux_n+1
-        bcs +
-        ldy #1
-        jsr _take
-        bra -
-+       #POP
-        #POKE 0
-        jsr clear_rregs
+        jsr x_unpack_ex
         jmp vm_loop
-; _take - append items[ux_i] (Y = its depth on the stack) to the list on top
-_take:  phy
-        lda ux_i
-        sta t2
-        lda ux_i+1
-        sta t2+1
-        ply
-        tya                             ; (the slot at depth Y: 2Y, 2Y + 1)
-        asl a
-        tay
-        lda (vsp),y
-        pha
-        iny
-        lda (vsp),y
-        tax
-        pla
-        jsr seq_get_t2
-        sta r1
-        stx r1+1
-        #PEEK 0
-        sta r0
-        stx r0+1
-        jsr list_append
-        inc ux_i
-        bne +
-        inc ux_i+1
-+       rts
+x_unpack_ex:    #TAILCALL TAIL_H, xh_unpack_ex   ; (tailh.asm)
+op_import_star:
+        jsr x_import_star
+        jmp vm_loop
+x_import_star:  #TAILCALL TAIL_H, xh_import_star
 
 ; gen_stop - raise StopIteration for a generator that returned A/X (stop_value)
 gen_stop:       #TAILCALL TAIL_X, xg_stop

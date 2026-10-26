@@ -1044,8 +1044,12 @@ obj_eq:
         ldx r3+1
         jsr type_of
         sta t2+1
-        ; numbers (int, bool) compare by value
+        cmp #T_INST                     ; an instance on either side: its __eq__
+        beq _inst
         lda t2
+        cmp #T_INST
+        beq _inst
+        ; numbers (int, bool) compare by value
         cmp #T_FLOAT
         beq _flt
         jsr is_inttype
@@ -1087,10 +1091,9 @@ _notnum:
         beq _seq
         cmp #T_DICT
         beq _dict
-        cmp #T_INST
-        bne _ne
-        jmp inst_eq
 _ne:    clc
+        rts
+_inst:  jmp inst_eq
         rts
 _flt:   jmp float_eq
 _dict:  jmp dict_eq
@@ -2075,6 +2078,38 @@ repr_iter:
         SBPRINT "<iterator>"
         rts
 
-repr_slice:
-        SBPRINT "<slice>"
+repr_slice:                             ; slice(start, stop, step)
+        ldy #4
+_loop:  pha                             ; CPU: [slice][field offset]
+        phx
+        phy
+        cpy #4
+        bne _sep
+        SBPRINT "slice("
+        bra _field
+_sep:   SBPRINT ", "
+_field: ply
+        plx
+        pla
+        pha
+        phx
+        phy
+        sta p0
+        stx p0+1
+        tya
+        taz
+        inz
+        lda [p0],z
+        tax
+        dez
+        lda [p0],z
+        jsr obj_repr
+        ply
+        plx
+        pla
+        iny
+        iny
+        cpy #10
+        bne _loop
+        SBPRINT ")"
         rts

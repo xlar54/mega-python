@@ -55,3 +55,35 @@ g = [4, 1, 3]
 g.sort(key=lambda v: v % 3)
 print(g)
 print(any([0, 0, 1]), all([1, 1, 0]), any([]), all([]))
+
+# slice assignment and deletion
+a = list(range(10))
+a[2:5] = ['x', 'y']
+print(a)
+a[:0] = (7, 8)
+print(a)
+a[len(a):] = 'pq'
+print(a)
+a[1:3] = []
+print(a)
+a[::2] = range(len(a[::2]))
+print(a)
+a[::-3] = 'ABCD'[:len(a[::-3])]
+print(a)
+del a[::2]
+print(a)
+del a[1:3]
+print(a)
+del a[::-2]
+print(a)
+b = [1, 2, 3]
+b[:] = b + b
+print(b)
+b[5:1] = [0]
+print(b)
+try:
+    b[::2] = [1]
+except ValueError:
+    print('ValueError')
+del b[:]
+print(b)

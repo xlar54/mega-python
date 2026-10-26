@@ -405,24 +405,75 @@ xt_set_clear:
         #ARG 0
         jmp dict_clear
 
-; the methods with another iterable: A = op (set_op) | $20 (other op self) | $40
-; (return whether the result is empty) | $80 (make self the result, return None)
+; the methods with other iterables: A = op (set_op) | $20 (other op self) | $40
+; (return whether the result is empty) | $80 (make self the result, return None).
+; union, intersection, difference and their updates take any number of others (folded
+; left to right; none: a copy); the rest exactly one.
+sm_op:          .byte 0
+sm_k:           .byte 0                 ; the number of others
+sm_d:           .byte 0
+
 xt_set_method:
+        sta sm_op
+        and #$63
+        cmp #3
+        bcs _one
+        #NARGS 1, 64
+        bra +
+_one:   #NARGS 2, 2
++       ldy #0                          ; push self and the others first (converting one
+        lda npos                        ; may run Python code)
+        sta sm_k
+-       lda argv+1,y
+        tax
+        lda argv,y
+        phy
+        #PUSH
+        ply
+        iny
+        iny
+        dec sm_k
+        bne -
+        ldx npos                        ; [self][other 1]...[other k]
+        dex
+        stx sm_k
+        lda #0                          ; each other as a set, in its slot
+        sta sm_d
+-       lda sm_d
+        cmp sm_k
+        bcs _fold
+        jsr _slot
+        jsr other_set
         pha
-        #NARGS 2, 2
-        #ARG 0
-        #PUSH                           ; [self]
-        #ARG 1
-        jsr other_set                   ; (may run Python code: argv is not used after)
-        #PUSH                           ; [self][other]
-        #PEEK 1
+        jsr _ptr
+        pla
+        sta (vsp),y
+        iny
+        txa
+        sta (vsp),y
+        inc sm_d
+        bra -
+_fold:  lda sm_k                        ; none: a copy of self
+        bne _step
+        jsr _slot
         sta r2
         stx r2+1
-        #PEEK 0
         sta r3
         stx r3+1
-        pla
-        pha
+        lda #0
+        jsr set_op
+        bra _res
+_step:  dec sm_d                        ; the result so far (slot d + 1, self first)
+        lda sm_d                        ; with slot d, the result into slot d
+        inc a
+        jsr _slot_a
+        sta r2
+        stx r2+1
+        lda sm_d
+        jsr _slot_a
+        sta r3
+        stx r3+1
+        lda sm_op
         and #$20
         beq +
         lda r2
@@ -433,21 +484,33 @@ xt_set_method:
         ldx r3+1
         sta r3+1
         stx r2+1
-+       pla
-        pha
++       lda sm_op
         and #3
         jsr set_op
-        #PUSH                           ; [self][other][result]
+        pha
+        jsr _ptr
         pla
+        sta (vsp),y
+        iny
+        txa
+        sta (vsp),y
+        lda sm_d
+        bne _step
+        #PEEK 0
+_res:   sta r2                          ; r2 = the result
+        stx r2+1
+        lda sm_op
         bmi _update
         and #$40
         bne _empty
-        #POP
-        #DROP 2
+        jsr _drop
+        lda r2
+        ldx r2+1
         rts
-_empty: #POP
+_empty: lda r2
+        ldx r2+1
         jsr seq_len
-        #DROP 2
+        jsr _drop
         lda t0
         ora t0+1
         beq +
@@ -458,10 +521,12 @@ _empty: #POP
         ldx #0
         rts
 _update:                                ; self takes the result's members and index
-        #PEEK 0                         ; (+4..+11)
+        lda r2                          ; (+4..+11)
         sta p1
-        stx p1+1
-        #PEEK 2
+        lda r2+1
+        sta p1+1
+        lda sm_k
+        jsr _slot_a
         sta p0
         stx p0+1
         ldz #4
@@ -470,5 +535,75 @@ _update:                                ; self takes the result's members and in
         inz
         cpz #12
         bne -
-        #DROP 3
+        jsr _drop
         #RET_NONE
+_slot:  lda sm_d                        ; A/X = slot sm_d (_slot_a: slot A)
+_slot_a:
+        asl a
+        tay
+        iny
+        lda (vsp),y
+        tax
+        dey
+        lda (vsp),y
+        rts
+_ptr:   lda sm_d                        ; Y = slot sm_d's offset
+        asl a
+        tay
+        rts
+_drop:  lda sm_k                        ; drop self and the others
+        inc a
+        asl a
+        clc
+        adc vsp
+        sta vsp
+        bcc +
+        inc vsp+1
++       rts
+
+; xt_inplace - INPLACE b: x op= y for - & | ^ (b = the binop). A set (not a frozenset)
+; with a set or frozenset on the right changes in place (C clear); anything else -> C
+; set, bop = b, for the plain operator
+xt_inplace:
+        #FETCHB
+        sta bop
+        #PEEK 1
+        jsr type_of
+        cmp #T_SET
+        bne _no
+        #PEEK 0
+        jsr type_of
+        cmp #T_SET
+        bcc _no
+        #PEEK 1
+        sta r2
+        stx r2+1
+        #PEEK 0
+        sta r3
+        stx r3+1
+        ldx #3                          ; the set operation of the binop
+-       lda _bops,x
+        cmp bop
+        beq +
+        dex
+        bne -
++       txa
+        jsr set_op
+        sta p1                          ; x takes the result's members and index
+        stx p1+1
+        #PEEK 1
+        sta p0
+        stx p0+1
+        ldz #4
+-       lda [p1],z
+        sta [p0],z
+        inz
+        cpz #12
+        bne -
+        #DROP 1
+        jsr clear_rregs
+        clc
+        rts
+_no:    sec
+        rts
+_bops:  .byte BOP_OR, BOP_AND, BOP_SUB, BOP_XOR  ; (set_op's order)
