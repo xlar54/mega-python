@@ -35,3 +35,5 @@ for bad in (lambda: str.upper(5), lambda: list.append('abc', 1), lambda: str.upp
 s = set()
 set.add(s, 3)
 print(s, frozenset.union(frozenset({1}), {2}), 'abc'.upper(), [1].copy())
+big = ('a,' * 300).rsplit(',', 400)
+print(len(big), big[:3], big[-2:], 'a b c d'.rsplit(None, 2), 'x-y-z'.rsplit('-', 1))

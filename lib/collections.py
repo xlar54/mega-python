@@ -235,6 +235,10 @@ class defaultdict:
         return 'defaultdict(%r, %r)' % (self.default_factory, self._d)
 
 
+def _tuple(x):
+    return x._v if hasattr(x, '_fields') and hasattr(x, '_v') else x
+
+
 def namedtuple(typename, field_names, defaults=None):
     """A class of tuples whose items also have names: Point = namedtuple('Point', 'x y')."""
     if isinstance(field_names, str):
@@ -290,23 +294,25 @@ def namedtuple(typename, field_names, defaults=None):
         def __contains__(self, x):
             return x in self._v
 
-        def __eq__(self, other):
-            return self._v == tuple(other)
+        def __eq__(self, other):                # (equal to a tuple of its values)
+            if isinstance(other, _NT):
+                other = other._v
+            return isinstance(other, tuple) and self._v == other
 
         def __ne__(self, other):
-            return self._v != tuple(other)
+            return not self == other
 
         def __lt__(self, other):
-            return self._v < tuple(other)
+            return self._v < _tuple(other)
 
         def __le__(self, other):
-            return self._v <= tuple(other)
+            return self._v <= _tuple(other)
 
         def __gt__(self, other):
-            return self._v > tuple(other)
+            return self._v > _tuple(other)
 
         def __ge__(self, other):
-            return self._v >= tuple(other)
+            return self._v >= _tuple(other)
 
         def __hash__(self):
             return hash(self._v)

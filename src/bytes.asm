@@ -366,3 +366,54 @@ _lo:    dec yb_i
 +       lda yb_mark
         ldx yb_mark+1
         jmp sb_take
+
+;---------------------------------------------------------------------------------------
+; xy_settle - A = an eval's generation (1-3), X = 1 if its code was dropped: the heap
+; objects tagged with it lose the tag, and then also F_PERM (the GC may free them)
+;---------------------------------------------------------------------------------------
+yb_gen:         .byte 0
+yb_rel:         .byte 0
+xy_settle:
+        asl a
+        sta yb_gen
+        stx yb_rel
+        lda #<HEAP_START
+        sta t4
+        lda #>HEAP_START
+        sta t4+1
+_loop:  lda t4+1
+        cmp heap_top+1
+        bcc +
+        bne _end
+        lda t4
+        cmp heap_top
+        bcs _end
++       lda t4
+        sta p2
+        lda t4+1
+        sta p2+1
+        ldz #0
+        lda [p2],z
+        beq _adv                        ; (free)
+        inz
+        lda [p2],z
+        and #F_GEN
+        cmp yb_gen
+        bne _adv
+        lda [p2],z
+        and #$ff - F_GEN
+        ldx yb_rel
+        beq +
+        and #$ff - F_PERM
++       sta [p2],z
+_adv:   ldz #2
+        clc
+        lda [p2],z
+        adc t4
+        sta t4
+        inz
+        lda [p2],z
+        adc t4+1
+        sta t4+1
+        bra _loop
+_end:   rts

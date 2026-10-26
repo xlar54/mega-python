@@ -110,3 +110,5 @@ try:
     print(max(big, 2**100))
 except Exception as e:
     print(type(e).__name__)
+print((-2 ** 31) // -1, divmod(-2 ** 31, -1), -2 ** 31 % -1)
+print({2 ** 40: 'a'}[2.0 ** 40], 2.0 ** 40 in {2 ** 40}, hash(2 ** 40) == hash(2.0 ** 40), {2 ** 70: 1}.get(2.0 ** 70))

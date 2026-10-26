@@ -307,8 +307,12 @@ big_binop:      #TAILCALL TAIL_N, xn_binop      ; r2 <bop> r3 -> A/X
 big_unary:      #TAILCALL TAIL_N, xn_unary      ; A = op, r2 -> A/X
 big_cmp:        #TAILCALL TAIL_N, xn_cmp        ; r2 vs r3 -> A = $ff / 0 / 1
 big_repr:       #TAILCALL TAIL_N, xn_repr       ; A/X -> the string builder
-big_hash:       #TAILCALL TAIL_N, xn_hash       ; A/X -> A/X
 big_to_fa:      #TAILCALL TAIL_N, xn_to_fa      ; A/X -> fa
+; big_float - A/X = a big int -> A/X = it as a float (hash() and dicts hash it so: an
+; equal integral float has the same hash)
+big_float:
+        jsr big_to_fa
+        jmp float_new
 big_from_fa:    #TAILCALL TAIL_N, xn_from_fa    ; fa -> A/X
 big_parse:      #TAILCALL TAIL_N, xn_parse      ; r2 = str, t6 = base -> A/X (C: invalid)
 big_digits:     #TAILCALL TAIL_N, xn_digits     ; A/X, t6 = base -> the string builder

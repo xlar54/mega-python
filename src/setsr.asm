@@ -70,3 +70,4 @@ bi_bytes:       #TAILCALL TAIL_M, xy_bytes
 bi_str_encode:  #TAILCALL TAIL_M, xy_encode
 bi_bytes_decode: #TAILCALL TAIL_M, xy_decode
 bi_bytes_hex:   #TAILCALL TAIL_M, xy_hex
+perm_settle:    #TAILCALL TAIL_M, xy_settle     ; A = generation, X = 1: release

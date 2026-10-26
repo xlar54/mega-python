@@ -294,7 +294,10 @@ alike. `import` and `eval()` / `exec()` use it. `eval` and `exec` copy their str
 `MODSRC` (leading blanks dropped, a newline added); `eval` compiles with `c_repl` = 2,
 where a top-level expression statement stores its value in the hidden global `" eval"`.
 Like the REPL, they reclaim their code (`cp`, `linetab_end`) unless it made a function or
-class or imported a module (`c_made_func`). They must be resident: compiling swaps
+class or imported a module (`c_made_func`). The constants an eval's compile makes are
+tagged with a generation (`F_GEN`, set through `cs_perm`; one per eval nesting level, up
+to 3): when its code is dropped, `perm_settle` (tail M) takes F_PERM off them, so the GC
+can free them; otherwise it only clears the tag. They must be resident: compiling swaps
 overlay R out.
 
 `py_reset` (boot, `run()`, `new()`) is in tail I with the exception setup; only its

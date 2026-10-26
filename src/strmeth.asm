@@ -360,11 +360,11 @@ _done:  plx
         jmp sb_take
 
 ; rsplit(sep=None, maxsplit=-1): as split, but the splits are counted from the right.
-; Without maxsplit it is split. The pieces go on the value stack right to left.
+; Without maxsplit it is split. The pieces are appended right to left to a list on the
+; value stack, which is reversed at the end.
 rs_e:           .word 0                 ; the end of the piece being found
 rs_s:           .word 0
 rs_n:           .word 0                 ; splits left
-rs_cnt:         .byte 0                 ; pieces on the stack
 xs_str_rsplit:
         #NARGS 1, 3
         lda npos
@@ -380,7 +380,10 @@ xs_str_rsplit:
         lda acc+1
         sta rs_n+1
         lda #0
-        sta rs_cnt
+        sta nitems
+        sta nitems+1
+        jsr list_new
+        #PUSH                           ; [pieces]
         jsr self_str
         lda str_len
         sta rs_e
@@ -460,33 +463,68 @@ _rest:  lda #0                          ; self[:e]
         sta rs_s
         sta rs_s+1
         jsr _piece
-_list:  lda rs_cnt                      ; the list, left to right: the leftmost piece
-        sta nitems                      ; is on top
-        lda #0
-        sta nitems+1
-        sta rs_i
-        jsr list_new
+_list:  #POP                            ; the pieces, right to left: reversed in place
         sta r0
         stx r0+1
-_add:   lda rs_i
-        cmp rs_cnt
-        bcs _drop
-        asl a
-        tay
-        lda (vsp),y
-        sta r1
-        iny
-        lda (vsp),y
-        sta r1+1
-        jsr list_append
-        inc rs_i
-        bra _add
-_drop:  ldx rs_cnt                      ; the pieces go
--       beq +
-        #DROP 1
-        dex
-        bra -
-+       lda #0
+        jsr seq_len
+        lda #0                          ; i = 0, j = len - 1 (there is a piece at least)
+        sta rs_s
+        sta rs_s+1
+        sec
+        lda t0
+        sbc #1
+        sta rs_e
+        lda t0+1
+        sbc #0
+        sta rs_e+1
+_rev:   lda rs_s
+        cmp rs_e
+        lda rs_s+1
+        sbc rs_e+1
+        bcs _done
+        lda r0
+        sta p0
+        lda r0+1
+        sta p0+1
+        lda rs_s
+        sta t0
+        lda rs_s+1
+        sta t0+1
+        jsr list_item_ptr               ; p2 -> items[i], t2 = it
+        lda p1
+        sta p2
+        lda p1+1
+        sta p2+1
+        ldz #0
+        lda [p2],z
+        sta t2
+        inz
+        lda [p2],z
+        sta t2+1
+        lda rs_e
+        sta t0
+        lda rs_e+1
+        sta t0+1
+        jsr list_item_ptr               ; p1 -> items[j]
+        ldz #0
+        lda [p1],z
+        sta [p2],z
+        lda t2
+        sta [p1],z
+        inz
+        lda [p1],z
+        sta [p2],z
+        lda t2+1
+        sta [p1],z
+        inc rs_s
+        bne +
+        inc rs_s+1
++       lda rs_e
+        bne +
+        dec rs_e+1
++       dec rs_e
+        bra _rev
+_done:  lda #0
         sta r1
         sta r1+1
         lda r0
@@ -513,8 +551,12 @@ _piece: lda rs_s
         sbc rs_s+1
         sta ss_len+1
         jsr ss_sub
-        #PUSH
-        inc rs_cnt
+        sta r1
+        stx r1+1
+        #PEEK 0
+        sta r0
+        stx r0+1
+        jsr list_append
         lda rs_s
         sta rs_e
         lda rs_s+1
@@ -598,7 +640,6 @@ _match: jsr self_str
 _no:    sec
         rts
 rs_sl:          .word 0
-rs_i:           .byte 0
 
 ; is* predicates: every char passes (and at least one char)
 xs_str_isdigit:

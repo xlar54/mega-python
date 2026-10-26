@@ -42,6 +42,7 @@ F_PROPS         = $10                   ; (classes) it or a base holds a propert
 F_FROZEN        = $08                   ; (sets) a frozenset
 F_BIG           = $10                   ; (ints) a big int (bigint.asm)
 F_BYTES         = $10                   ; (strings) a bytes object (bytes.asm)
+F_GEN           = $06                   ; an eval's compile-time constants (ev_begin)
 OWN_BYTES       = 31                    ; a bytes method's owner (bm_check)
 
 R_NULL          = 0

@@ -395,8 +395,13 @@ def _run(prog, s, start, end, flags, nslots, seen, anchored):
                         continue
                     break
                 if op == _LOOK:
-                    r = _run(a, s, i, end, flags, 2, set(), True)
+                    r = _run(a, s, i, end, flags, nslots, set(), True)
                     if (r is None) == b:
+                        if r is not None:               # its groups count (undone too)
+                            for k in range(2, nslots):
+                                if r[k] >= 0 and r[k] != slots[k]:
+                                    stack.append((0, 0, k, slots[k]))
+                                    slots[k] = r[k]
                         pc += 1
                         continue
                     break

@@ -1041,7 +1041,7 @@ cut_release:
 ; -> A/X = code offset of the start. c_repl selects printing expression statements.
 ;---------------------------------------------------------------------------------------
 compile_source:
-        lda #F_PERM
+        lda cs_perm                     ; (F_PERM, with a generation for eval)
         sta al_perm
         lda #0
         sta scope_depth
@@ -3797,6 +3797,7 @@ ps_local:
         ldy ps_infor
         cpy #2
         bne +
+        ldy #1
         jsr cm_hide                     ; a comprehension's: its hidden name
 +       jmp local_add
 
@@ -6155,6 +6156,7 @@ at_string:
 +       plx
         pla
         jsr sb_take
+        jsr str_like_r2                 ; (b'a' b'b': bytes)
         sta r2
         stx r2+1
 _done:  lda r2
@@ -6453,6 +6455,7 @@ cm_state:       .byte 0
 cm_ge:          .byte 0
 cg_sym:         .word 0
 cg_i:           .byte 0
+cg_n:           .byte 0                 ; spaces in front of a hidden name
 cm_buf:         .fill 66
 
 ; cmap_enter - (at the token after a '[' or '{') a new level, with the targets of the
@@ -6485,10 +6488,12 @@ _tok:   lda cm_state
         jsr cmap_add
         plx
         bra _adv
-_norm:  lda tok
-        cmp #KW_FOR
+_norm:  cpx #0
         bne _depth
-        cpx #0
+        lda tok
+        cmp #TK_COMMA                   ; (a comma first: a plain display, done)
+        beq _end
+        cmp #KW_FOR
         bne _depth
         inc cm_state
         bra _adv
@@ -6526,6 +6531,22 @@ cmap_add:
         cmp tok_sym+1
         bne -
         rts                             ; (already there)
++       lda #1                          ; the spaces: one more for each enclosing
+        sta cg_n                        ; level that renames this name too
+        ldy cmap_n
+-       dey
+        bmi +
+        tya
+        asl a
+        tax
+        lda cmap_sym,x
+        cmp tok_sym
+        bne -
+        lda cmap_sym+1,x
+        cmp tok_sym+1
+        bne -
+        inc cg_n
+        bra -
 +       ldy cmap_n
         cpy #CMAP_N
         bcs _full
@@ -6545,6 +6566,7 @@ cmap_add:
         phx
         lda tok_sym
         ldx tok_sym+1
+        ldy cg_n
         jsr cm_hide
         ply
         sta cmap_hid,y
@@ -6553,29 +6575,32 @@ cmap_add:
         inc cmap_n
 _full:  rts                             ; (too many: that name leaks, as it used to)
 
-; cm_hide - A/X = a symbol -> A/X = its hidden symbol (" name", SYM_BASE = the name)
+; cm_hide - A/X = a symbol, Y = spaces (1, more for nested levels) -> A/X = its hidden
+; symbol (" name", SYM_BASE = the name)
 cm_hide:
         sta cg_sym
         stx cg_sym+1
+        sty cg_n
         jsr sym_name
         jsr str_info
+        ldx #0
         lda #' '
-        sta cm_buf
+-       sta cm_buf,x
+        inx
+        cpx cg_n
+        bne -
         ldz #0
 -       cpz str_len
         beq +
-        cpz #64
+        cpz #60
         beq +
-        tza
-        tax
         lda [fp0],z
-        sta cm_buf+1,x
+        sta cm_buf,x
+        inx
         inz
         bra -
-+       tza
-        tax
-        lda #0
-        sta cm_buf+1,x
++       lda #0
+        sta cm_buf,x
         lda #<cm_buf
         ldx #>cm_buf
         jsr intern_cstr

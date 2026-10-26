@@ -191,6 +191,7 @@ ms_key:         .word 0
 ;---------------------------------------------------------------------------------------
 cr_mod:         .word 0
 cr_mode:        .byte 0
+cs_perm:        .byte F_PERM            ; the flags of compile-time objects (al_perm)
 compile_run:
         lda vsp+1
         cmp #>(COMPILER_END + $ff)
@@ -231,6 +232,8 @@ compile_run:
         jsr compile
         sta t0
         stx t0+1
+        lda #F_PERM                     ; (an eval's tag is for its own compile only)
+        sta cs_perm
         jsr _restore
         lda ip                          ; run its top level
         pha
@@ -379,6 +382,7 @@ _blank: inw fp0
         lda #0
         sta cr_mod
         sta cr_mod+1
+        jsr ev_begin
         jsr compile_run
         lda #0
         rol a
@@ -391,7 +395,8 @@ _blank: inw fp0
         sta ev_cp+1
         pla
         sta ev_cp
-        lda c_made_func                 ; nothing made: its code goes
+        ldx #0
+        lda c_made_func                 ; nothing made: its code goes (its constants too)
         bne +
         lda ev_cp
         sta cp
@@ -401,7 +406,9 @@ _blank: inw fp0
         sta linetab_end
         lda ev_lt+1
         sta linetab_end+1
-+       pla
+        inx
++       jsr ev_end
+        pla
         ora c_made_func
         sta c_made_func
         pla                             ; the mode
