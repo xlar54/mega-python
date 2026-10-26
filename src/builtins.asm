@@ -2326,31 +2326,11 @@ print_exception:
         ldx cur_exc+1
         sta r2
         stx r2+1
-        ; syntax errors carry their own line; others: look the ip up
+        ; syntax errors carry their own line; others: the levels of calls
         lda #EXC_SYNTAX
         jsr exc_is
         bcs _msg
-        lda exc_ip
-        ldx exc_ip+1
-        jsr line_of_ip
-        bcs _msg
-        pha
-        phx
-        #PRINT "Traceback: line "
-        plx
-        pla
-        sta acc
-        stx acc+1
-        lda #0
-        sta acc+2
-        sta acc+3
-        jsr sb_mark_t5
-        jsr sb_int
-        lda t5
-        ldx t5+1
-        jsr sb_flush
-        lda #10
-        jsr putc
+        jsr print_tb
 _msg:   ; "Name: message", or just "Name" when str(exc) is empty
         lda sbp
         pha
@@ -2396,6 +2376,200 @@ _msg:   ; "Name: message", or just "Name" when str(exc) is empty
         jsr putc
         lda #COL_NORMAL
         sta scr_color
+        rts
+
+;---------------------------------------------------------------------------------------
+; The levels of calls an exception left. throw records them when it is first raised
+; (tb_capture, while overlay R is in): each frame's return ip (a line of its caller) and
+; the name of the function it called, innermost first. print_tb prints them outermost
+; first, as CPython does ("  line 3, in f"), the last one at exc_ip.
+;---------------------------------------------------------------------------------------
+TB_N            = 12
+tb_exc:         .word 0                 ; the exception they belong to
+tb_n:           .byte 0
+tb_more:        .byte 0                 ; there were more frames (the outer ones)
+tb_ip:          .fill 2 * TB_N
+tb_name:        .fill 2 * TB_N          ; a perm name string, or 0
+
+tb_capture:
+        lda cur_exc
+        sta tb_exc
+        lda cur_exc+1
+        sta tb_exc+1
+        lda #0
+        sta tb_more
+        lda frp
+        sta fp1
+        lda frp+1
+        sta fp1+1
+        lda #<(FSTACK >> 16)
+        sta fp1+2
+        lda #0
+        sta fp1+3
+        ldy #0                          ; Y = 2 * entries
+_loop:  lda fp1
+        cmp #<FSTACK
+        bne +
+        lda fp1+1
+        cmp #>FSTACK
+        beq _done
++       cpy #2 * TB_N
+        bcc +
+        inc tb_more
+        bra _done
++       sec
+        lda fp1
+        sbc #8
+        sta fp1
+        bcs +
+        dec fp1+1
++       ldz #0                          ; the return ip
+        lda [fp1],z
+        sta tb_ip,y
+        inz
+        lda [fp1],z
+        sta tb_ip+1,y
+        ldz #4                          ; the callee: in the result slot, or a
+        lda [fp1],z                     ; generator's function
+        sta t0
+        inz
+        lda [fp1],z
+        sta t0+1
+        phy
+        ldz #6
+        lda [fp1],z
+        and #FR_GEN
+        beq _slot
+        ldy #2
+        lda (t0),y
+        sta p0
+        iny
+        lda (t0),y
+        sta p0+1
+        ldz #4
+        lda [p0],z
+        pha
+        inz
+        lda [p0],z
+        tax
+        pla
+        bra _f
+_slot:  ldy #1
+        lda (t0),y
+        tax
+        dey
+        lda (t0),y
+_f:     sta p0
+        stx p0+1
+        jsr type_of
+        cmp #T_FUNC
+        beq +
+        lda #0
+        tax
+        bra _put
++       ldz #9                          ; its name
+        lda [p0],z
+        tax
+        dez
+        lda [p0],z
+_put:   ply
+        sta tb_name,y
+        txa
+        sta tb_name+1,y
+        iny
+        iny
+        bra _loop
+_done:  tya
+        lsr a
+        sta tb_n
+        rts
+
+print_tb:
+        lda tb_exc                      ; (recorded for this exception?)
+        cmp cur_exc
+        bne _rts
+        lda tb_exc+1
+        cmp cur_exc+1
+        bne _rts
+        #PRINT "Traceback (most recent call last):"
+        lda #10
+        jsr putc
+        lda tb_more
+        beq +
+        #PRINT "  ..."
+        lda #10
+        jsr putc
++       ldx tb_n
+_lvl:   dex                             ; frame X: its return ip, and the function
+        bmi _last                       ; of the frame outside it (X + 1)
+        phx
+        txa
+        asl a
+        tay
+        lda tb_ip,y
+        ldx tb_ip+1,y
+        jsr _line
+        plx
+        phx
+        inx
+        cpx tb_n
+        bcc _named
+        lda tb_more
+        bne _eol
+        jsr _module
+        bra _eol
+_named: txa
+        asl a
+        tay
+        lda tb_name,y
+        ldx tb_name+1,y
+        jsr _in
+_eol:   lda #10
+        jsr putc
+        plx
+        bra _lvl
+_last:  lda exc_ip                      ; where it was raised
+        ldx exc_ip+1
+        jsr _line
+        lda tb_n
+        beq _mod
+        lda tb_name
+        ldx tb_name+1
+        jsr _in
+        bra +
+_mod:   jsr _module
++       lda #10
+        jmp putc
+_rts:   rts
+_line:  jsr line_of_ip                  ; "  line N"
+        bcc +
+        #PRINT "  ?"
+        rts
++       pha
+        phx
+        #PRINT "  line "
+        plx
+        pla
+        sta acc
+        stx acc+1
+        lda #0
+        sta acc+2
+        sta acc+3
+        jsr sb_mark_t5
+        jsr sb_int
+        lda t5
+        ldx t5+1
+        jmp sb_flush
+_in:    cpx #0                          ; ", in name"
+        beq _rts
+        pha
+        phx
+        #PRINT ", in "
+        plx
+        pla
+        jmp put_str
+_module:
+        #PRINT ", in <module>"
         rts
 
 ; line_of_ip - code offset A/X -> A/X = line (C clear), C set if unknown.

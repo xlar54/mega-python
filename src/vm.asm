@@ -212,6 +212,9 @@ throw:
         lda ip+1
         sta exc_ip+1
         inc exc_ip_set
+        lda ovl_cur                     ; the levels of calls (overlay R: builtins.asm)
+        bne +
+        jsr tb_capture
 +       ldx err_sp
         ldy err_sp+1
         tys
