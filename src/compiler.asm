@@ -1043,6 +1043,8 @@ compile_source:
         sta lx_savesp
         lda #0
         sta w_sp
+        sta xb_n
+        sta fin_n
         lda #<CUTBUF
         sta cut_top
         lda #>CUTBUF
@@ -1309,19 +1311,10 @@ loop_push:
         iny
         sta (sc),y
         iny
-        phy
-        ldy #SC_TRY
-        lda (sc),y
-        ply
+        lda xb_n                        ; the blocks open outside it (loop_exits)
         sta (sc),y
         iny
         lda t1
-        sta (sc),y
-        iny
-        phy
-        ldy #SC_WITH
-        lda (sc),y
-        ply
         sta (sc),y
         rts
 
@@ -1367,35 +1360,13 @@ loop_pop:
         sta (sc),y
         rts
 
-; pop the try blocks opened inside the current loop
-pop_loop_trys:
-        jsr loop_top
-        tya
-        clc
-        adc #4
-        tay
-        lda (sc),y
-        sta t0
-        ldy #SC_TRY
-        lda (sc),y
-        sec
-        sbc t0
-        beq +
-        tax
--       lda #OP_POP_BLOCK
-        jsr emit
-        dex
-        bne -
-+       rts
-
 st_break:
         jsr lex
         jsr loop_top
         bcc +
         jsr syntax_error
         .text "'break' outside loop", 0
-+       jsr pop_loop_trys
-        jsr loop_withs
++       jsr loop_exits                  ; (finally blocks, __exit__ calls)
         jsr loop_top
         tya
         clc
@@ -1435,8 +1406,7 @@ st_continue:
         bcc +
         jsr syntax_error
         .text "'continue' not properly in loop", 0
-+       jsr pop_loop_trys
-        jsr loop_withs
++       jsr loop_exits
         jsr loop_top
         lda (sc),y
         pha
@@ -1542,7 +1512,8 @@ st_for:
 ; with m [as x]: body
 ;   m; STORE w; LOAD w; LOAD_METHOD __enter__; CALL_METHOD 0; STORE x (or POP)
 ;   SETUP_EXCEPT f; body; POP_BLOCK; <w.__exit__(None, None, None)>; JUMP done
-;   f: POP; <w.__exit__(None, None, None)>; RAISE 0; done:
+;   f: <w.__exit__(type(e), e, None)>; JUMP_IF_FALSE r; POP; POP_EXCEPT; JUMP done
+;   r: RAISE 0; done:
 ; w is a hidden variable (" w<n>", a local in functions: see prescan). break, continue
 ; and return call the __exit__ of the with blocks they leave.
 ;---------------------------------------------------------------------------------------
@@ -1571,6 +1542,8 @@ with_sym:
 
 st_with:
         jsr lex
+; with_item - one manager (tok at its expression); 'with a, b:' is 'with a: with b:'
+with_item:
         jsr expr                        ; the context manager
         ldy #SC_WCOUNT
         lda (sc),y
@@ -1619,23 +1592,17 @@ _noas:  lda #OP_POP
         jsr emit_jump
         pha                             ; CPU: [handler]
         phx
-        ldy #SC_TRY
-        lda (sc),y
-        inc a
-        sta (sc),y
-        ldy #SC_WITH
-        lda (sc),y
-        inc a
-        sta (sc),y
-        jsr block
-        ldy #SC_TRY
-        lda (sc),y
-        dec a
-        sta (sc),y
-        ldy #SC_WITH
-        lda (sc),y
-        dec a
-        sta (sc),y
+        lda #XB_WITH                    ; (an exit from the block: POP_BLOCK, __exit__)
+        ldx #1
+        ldy w_sp
+        jsr xb_push
+        lda #TK_COMMA                   ; another manager: the rest is inside this one
+        jsr accept
+        bcc +
+        jsr with_item
+        bra ++
++       jsr block
++       dec xb_n
         lda #OP_POP_BLOCK
         jsr emit
         lda #1
@@ -1651,13 +1618,54 @@ _noas:  lda #OP_POP
         pha
         lda t2+1
         pha
-        lda #OP_POP                     ; the exception value
+        ; [exc]: w.__exit__(type(exc), exc, None); a true result swallows it
+        lda #OP_DUP
         jsr emit
-        lda #1
-        jsr w_exits
+        ldy w_sp
+        jsr w_load
+        lda #<S_EXIT
+        ldx #>S_EXIT
+        jsr sym_name
+        ldy #OP_LOAD_METHOD
+        jsr emit_op_word                ; [exc][exc][m][self]
+        lda #OP_LIFT3
+        jsr emit                        ; [exc][m][self][exc]
+        lda #OP_DUP
+        jsr emit
+        lda #<S_CLASS
+        ldx #>S_CLASS
+        jsr sym_name
+        ldy #OP_LOAD_ATTR
+        jsr emit_op_word
+        lda #OP_ROT2
+        jsr emit                        ; [exc][m][self][type][exc]
+        lda #R_NONE
+        ldx #0
+        jsr emit_const
+        ldy #OP_CALL_METHOD
+        lda #3
+        jsr emit_op_byte
+        ldy #OP_JUMP_IF_FALSE
+        jsr emit_jump
+        pha                             ; CPU: [done][reraise]
+        phx
+        lda #OP_POP                     ; swallowed
+        jsr emit
+        lda #OP_POP_EXCEPT
+        jsr emit
+        ldy #OP_JUMP
+        jsr emit_jump
+        sta t2
+        stx t2+1
+        plx
+        pla
+        jsr patch_here
         ldy #OP_RAISE
         lda #0
         jsr emit_op_byte
+        lda t2
+        ldx t2+1
+        jsr patch_here
         plx
         pla
         jsr patch_here
@@ -1688,6 +1696,16 @@ w_exits:
         ldy w_sp
 _loop:  pha
         phy
+        jsr w_exit_y
+        ply
+        dey
+        dey
+        pla
+        dec a
+        bne _loop
+_done:  rts
+; w_exit_y - emit the __exit__ call of the with block w_stk[Y-2]
+w_exit_y:
         jsr w_load
         lda #<S_EXIT
         ldx #>S_EXIT
@@ -1707,29 +1725,229 @@ _loop:  pha
         lda #3
         jsr emit_op_byte
         lda #OP_POP
+        jmp emit
+
+;---------------------------------------------------------------------------------------
+; Leaving blocks early (break, continue, return). The open try / with blocks are on the
+; exit stack, innermost last, each with the handlers it holds now (POP_BLOCKs) and its
+; exit code: a with's __exit__ call, or a try's finally body, compiled again in place
+; (fin_lx holds the lexer state at its ':', found when the try started: try_scan).
+;---------------------------------------------------------------------------------------
+XB_N            = 16
+XB_TRY          = 0                     ; handlers only
+XB_WITH         = 1                     ; aux = its w_sp
+XB_FIN          = 2                     ; aux = its finally record
+xb_n:           .byte 0
+xb_kind:        .fill XB_N
+xb_pops:        .fill XB_N
+xb_aux:         .fill XB_N
+xb_scope:       .fill XB_N              ; the scope_depth it belongs to
+xb_lim:         .byte 0
+FIN_N           = 8
+fin_n:          .byte 0
+fin_lx:         .fill FIN_N * LX_STATE_SIZE
+
+; xb_push - A = kind, X = handlers, Y = aux
+xb_push:
+        phy
+        ldy xb_n
+        cpy #XB_N
+        bcc +
+        jsr syntax_error
+        .text "blocks nested too deeply", 0
++       sta xb_kind,y
+        txa
+        sta xb_pops,y
+        pla
+        sta xb_aux,y
+        lda scope_depth
+        sta xb_scope,y
+        inc xb_n
+        rts
+
+; xb_exits - leave the current scope's blocks above A (an xb_n to keep): their exit
+; code, innermost first. The stack is as it was afterwards (the code jumps away).
+xb_exits:
+        sta xb_lim
+        lda xb_n
+        pha
+_next:  ldx xb_n
+        cpx xb_lim
+        beq _done
+        bcc _done
+        dex
+        lda xb_scope,x
+        cmp scope_depth
+        bne _done
+        stx xb_n                        ; (its finally code sees the blocks outside)
+        lda xb_pops,x
+        beq _code
+-       pha
+        lda #OP_POP_BLOCK
         jsr emit
-        ply
-        dey
-        dey
         pla
         dec a
-        bne _loop
+        bne -
+_code:  ldx xb_n
+        lda xb_kind,x
+        cmp #XB_WITH
+        bne +
+        ldy xb_aux,x
+        jsr w_exit_y
+        bra _next
++       cmp #XB_FIN
+        bne _next
+        lda xb_lim                      ; (a break in it leaves blocks of its own)
+        pha
+        lda xb_aux,x
+        jsr fin_inline
+        pla
+        sta xb_lim
+        bra _next
+_done:  pla
+        sta xb_n
+        rts
+
+; fin_inline - A = a finally record: compile its body here (the lexer comes back)
+fin_inline:
+        pha
+        jsr lx_push
+        pla
+        jsr fin_lexer
+        jsr block
+        jmp lx_pop
+
+; fin_lexer - A = a finally record -> the lexer state at its ':'
+fin_lexer:
+        jsr fin_addr                    ; t0 -> the record
+        ldy #0
+-       lda (t0),y
+        sta lx_ptr,y
+        iny
+        cpy #LX_STATE_SIZE
+        bne -
+        lda #0
+        sta lx_scan
+        rts
+; fin_addr - A = a finally record -> t0 = its address
+fin_addr:
+        tax
+        lda #<fin_lx
+        sta t0
+        lda #>fin_lx
+        sta t0+1
+_loop:  cpx #0
+        beq _done
+        clc
+        lda t0
+        adc #LX_STATE_SIZE
+        sta t0
+        bcc +
+        inc t0+1
++       dex
+        bra _loop
 _done:  rts
 
-; loop_withs - break / continue: the __exit__ calls of the with blocks inside the loop
-loop_withs:
-        jsr loop_top
-        tya
+; try_scan - (tok = the ':' after 'try') does a finally clause follow? -> C set and
+; A = a new finally record with the lexer state at its ':'; the lexer comes back
+try_scan:
+        jsr lx_push
+        lda #1
+        sta lx_scan
+        jsr skip_block                  ; the try body
+-       lda tok
+        cmp #KW_EXCEPT
+        beq +
+        cmp #KW_ELSE
+        bne ++
++       jsr skip_header                 ; 'except ...:' / 'else:'
+        jsr skip_block
+        bra -
++       cmp #KW_FINALLY
         clc
-        adc #6
-        tay
-        lda (sc),y
-        sta t0
-        ldy #SC_WITH
-        lda (sc),y
+        bne _out
+        jsr lex                         ; its ':'
+        lda fin_n
+        cmp #FIN_N
+        bcc +
+        jsr syntax_error
+        .text "try statements nested too deeply", 0
++       inc fin_n
+        pha
+        jsr fin_addr
+        ldy #0
+-       lda lx_ptr,y
+        sta (t0),y
+        iny
+        cpy #LX_STATE_SIZE
+        bne -
+        pla
         sec
-        sbc t0
-        jmp w_exits
+_out:   php
+        pha
+        jsr lx_pop
+        pla
+        plp
+        rts
+
+; skip_header - lex to the ':' that ends a clause header (outside brackets)
+skip_header:
+        ldx #0
+-       lda tok
+        cmp #TK_COLON
+        bne +
+        cpx #0
+        beq _done
++       cmp #TK_EOF
+        beq _done
+        jsr ge_depth
+        phx
+        jsr lex
+        plx
+        bra -
+_done:  rts
+
+; skip_block - (tok = ':') lex past a block: an indented suite or the rest of the line
+skip_block:
+        jsr lex
+        lda tok
+        cmp #TK_NEWLINE
+        beq _suite
+-       lda tok                         ; simple statements on this line
+        cmp #TK_EOF
+        beq _done
+        cmp #TK_NEWLINE
+        beq _last
+        jsr lex
+        bra -
+_suite: jsr lex                         ; INDENT
+        ldx #0
+-       lda tok
+        cmp #TK_EOF
+        beq _done
+        cmp #TK_INDENT
+        bne +
+        inx
++       cmp #TK_DEDENT
+        bne +
+        dex
+        beq _last
++       phx
+        jsr lex
+        plx
+        bra -
+_last:  jmp lex
+_done:  rts
+
+; loop_exits - break / continue: leave the blocks opened inside the current loop
+loop_exits:
+        jsr loop_top
+        iny
+        iny
+        iny
+        iny
+        lda (sc),y
+        jmp xb_exits
 
 ;---------------------------------------------------------------------------------------
 ; try / except / else / finally
@@ -1740,7 +1958,17 @@ st_try:
         ; ok: else block
         ; end:  with finally, the NOPs become SETUP_EXCEPT f, and then
         ;       POP_BLOCK; <finally>; JUMP done; f: POP; <finally>; RAISE 0; done:
+        ; Its exit stack entry: the body holds 1 handler (2 with finally: the outer one
+        ; too); the except / else clauses of a try with finally hold the outer one.
         jsr lex
+        jsr try_scan                    ; a finally clause? (A = its record)
+        tay
+        lda #XB_TRY
+        ldx #1
+        bcc +
+        lda #XB_FIN
+        inx
++       jsr xb_push
         jsr c_here                      ; the placeholder for an outer handler
         pha
         phx
@@ -1756,16 +1984,17 @@ st_try:
         lda #0
         tax
         jsr emit_word
-        ldy #SC_TRY
-        lda (sc),y
-        inc a
-        sta (sc),y
         jsr block
-        ldy #SC_TRY
-        lda (sc),y
-        dec a
-        sta (sc),y
-        lda #OP_POP_BLOCK
+        ldx xb_n                        ; past the body: a finally's outer handler only
+        dex
+        lda xb_kind,x
+        cmp #XB_FIN
+        beq +
+        stx xb_n
+        bra ++
++       lda #1
+        sta xb_pops,x
++       lda #OP_POP_BLOCK
         jsr emit
         ldy #OP_JUMP                    ; to else/end
         jsr emit_jump
@@ -1858,6 +2087,7 @@ _noexc: ldy #OP_RAISE                   ; no clause matched (or none): re-raise
         beq _finally
         rts
 _finally:
+        dec xb_n                        ; (its body runs outside the try)
         sta t2
         stx t2+1
         lda #OP_POP_BLOCK               ; normal exit: leave the outer block
@@ -1901,6 +2131,7 @@ _finally:
         ldy #OP_RAISE
         lda #0
         jsr emit_op_byte
+        dec fin_n                       ; (try_scan's record)
         plx
         pla
         jmp patch_here
@@ -3293,10 +3524,8 @@ _notname:
         jmp _as
 +       cmp #KW_WITH
         bne +
-        lda ps_wcount
-        inc ps_wcount
-        jsr with_sym
-        jsr local_add
+        jsr ps_wvar
+        jsr ps_wcommas                  ; 'with a, b:': one for each
         jmp _next
 +       cmp #TK_AUG
         bcc _other
@@ -3506,6 +3735,40 @@ ps_local:
         ldx tok_sym+1
         jmp local_add
 
+; ps_wvar - a with block's hidden variable is a local
+ps_wvar:
+        lda ps_wcount
+        inc ps_wcount
+        jsr with_sym
+        jmp local_add
+; ps_wcommas - (at 'with') a hidden variable for each further manager: the commas up
+; to the ':', outside brackets (the lexer comes back)
+ps_wcommas:
+        jsr lx_push
+        ldx #0
+_lex:   phx
+        jsr lex
+        plx
+        lda tok
+        cmp #TK_EOF
+        beq _done
+        cmp #TK_NEWLINE
+        beq _done
+        cpx #0
+        bne _depth
+        cmp #TK_COLON
+        beq _done
+        cmp #TK_COMMA
+        bne _depth
+        phx
+        jsr ps_wvar
+        plx
+        bra _lex
+_depth: lda tok
+        jsr ge_depth
+        bra _lex
+_done:  jmp lx_pop
+
 ; ps_note - (inside a nested def/class) note the token if it is a name -> A = tok;
 ; keeps X
 ps_note:
@@ -3559,9 +3822,8 @@ st_return:
 _none:  lda #R_NONE
         ldx #0
         jsr emit_const
-+       ldy #SC_WITH                    ; close this function's with blocks
-        lda (sc),y
-        jsr w_exits
++       lda #0                          ; leave this function's blocks (finally,
+        jsr xb_exits                    ; __exit__), the value on the stack
         lda #OP_RETURN
         jmp emit
 
