@@ -37,7 +37,9 @@ Language
   unsigned 32-bit arithmetic: bigger ints).
 * `os.sys()` for code outside bank 0 (it would need a MAP of the target). (`math` is a class object; a real
   module type would print as `<module 'math'>`.)
-* Libraries: `re`; time zones (`tzinfo`) and `strptime` in `datetime`. `namedtuple` classes could subclass `tuple` once builtin
+* Libraries: time zones (`tzinfo`) and `strptime` in `datetime`; `re`: backreferences,
+  lookbehind, VERBOSE, a faster engine (native).
+* String methods with start/end positions (`find`, `index`, `count`, `startswith`, ...). `namedtuple` classes could subclass `tuple` once builtin
   types can be subclassed.
 * Dicts: keep each key's hash next to it, so growing and deleting do not hash the
   keys again; deletes are O(n) (the pairs move down and the index is rebuilt).
