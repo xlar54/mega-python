@@ -445,3 +445,471 @@ _many:  lda #255
 _none:  lda #0
         rts
 dir_end:        .word 0
+
+; xh_type_name - (sb_type_name) append the type name of A/X
+xh_type_name:
+        sta t0
+        stx t0+1
+        jsr type_of
+        cmp #T_INST
+        bne +
+        ldz #4                          ; the class name
+        lda [p0],z
+        sta p1
+        inz
+        lda [p0],z
+        sta p1+1
+        ldz #5
+        lda [p1],z
+        tax
+        dez
+        lda [p1],z
+        jmp sb_put_str
++       cmp #T_CLASS
+        bne +
+        #SBPRINT "type"
+        rts
++       asl
+        tax
+        lda type_names,x
+        pha
+        lda type_names+1,x
+        tax
+        pla
+        jmp sb_puts
+
+type_names:
+        .word tn_null, tn_int, tn_str, tn_list, tn_tuple, tn_dict, tn_arr, tn_func
+        .word tn_builtin, tn_method, tn_type, tn_object, tn_range, tn_iter, tn_float
+        .word tn_none, tn_bool, tn_slice, tn_super, tn_file, tn_module, tn_desc, tn_gen
+        .word tn_set, tn_fset
+tn_gen:         .text "generator", 0
+tn_desc:        .text "property", 0     ; (or staticmethod / classmethod)
+tn_file:        .text "TextIOWrapper", 0
+tn_module:      .text "module", 0
+tn_set:         .text "set", 0
+tn_fset:        .text "frozenset", 0
+tn_null:        .text "NULL", 0
+tn_int:         .text "int", 0
+tn_str:         .text "str", 0
+tn_list:        .text "list", 0
+tn_tuple:       .text "tuple", 0
+tn_dict:        .text "dict", 0
+tn_arr:         .text "array", 0
+tn_func:        .text "function", 0
+tn_builtin:     .text "builtin_function_or_method", 0
+tn_method:      .text "method", 0
+tn_type:        .text "type", 0
+tn_object:      .text "object", 0
+tn_range:       .text "range", 0
+tn_iter:        .text "iterator", 0
+tn_float:       .text "float", 0
+tn_none:        .text "NoneType", 0
+tn_bool:        .text "bool", 0
+tn_slice:       .text "slice", 0
+tn_super:       .text "super", 0
+
+;---------------------------------------------------------------------------------------
+; tracebacks (builtins.asm keeps their record: tb_*)
+;---------------------------------------------------------------------------------------
+xh_print_exception:
+        jsr scr_fresh_line
+        lda #COL_ERROR
+        sta scr_color
+        lda cur_exc
+        ldx cur_exc+1
+        sta r2
+        stx r2+1
+        ; syntax errors carry their own line; others: the levels of calls
+        lda #EXC_SYNTAX
+        jsr exc_is
+        bcs _msg
+        jsr print_tb
+_msg:   ; "Name: message", or just "Name" when str(exc) is empty
+        lda sbp
+        pha
+        lda sbp+1
+        pha
+        lda cur_exc
+        ldx cur_exc+1
+        jsr sb_type_name
+        lda sbp
+        pha
+        lda sbp+1
+        pha
+        #SBPRINT ": "
+        lda sbp
+        pha
+        lda sbp+1
+        pha
+        lda cur_exc
+        ldx cur_exc+1
+        jsr obj_str
+        pla
+        sta t1+1
+        pla
+        sta t1
+        pla
+        sta t2+1
+        pla
+        sta t2
+        lda sbp
+        cmp t1
+        bne +
+        lda sbp+1
+        cmp t1+1
+        bne +
+        lda t2                          ; empty message: drop the ": "
+        sta sbp
+        lda t2+1
+        sta sbp+1
++       plx
+        pla
+        jsr sb_flush
+        lda #10
+        jsr putc
+        lda #COL_NORMAL
+        sta scr_color
+        rts
+xh_tb_capture:
+        lda cur_exc
+        sta tb_exc
+        lda cur_exc+1
+        sta tb_exc+1
+        lda #0
+        sta tb_more
+        lda frp
+        sta fp1
+        lda frp+1
+        sta fp1+1
+        lda #<(FSTACK >> 16)
+        sta fp1+2
+        lda #0
+        sta fp1+3
+        ldy #0                          ; Y = 2 * entries
+_loop:  lda fp1
+        cmp #<FSTACK
+        bne +
+        lda fp1+1
+        cmp #>FSTACK
+        beq _done
++       cpy #2 * TB_N
+        bcc +
+        inc tb_more
+        bra _done
++       sec
+        lda fp1
+        sbc #8
+        sta fp1
+        bcs +
+        dec fp1+1
++       ldz #0                          ; the return ip
+        lda [fp1],z
+        sta tb_ip,y
+        inz
+        lda [fp1],z
+        sta tb_ip+1,y
+        ldz #4                          ; the callee: in the result slot, or a
+        lda [fp1],z                     ; generator's function
+        sta t0
+        inz
+        lda [fp1],z
+        sta t0+1
+        phy
+        ldz #6
+        lda [fp1],z
+        and #FR_GEN
+        beq _slot
+        ldy #2
+        lda (t0),y
+        sta p0
+        iny
+        lda (t0),y
+        sta p0+1
+        ldz #4
+        lda [p0],z
+        pha
+        inz
+        lda [p0],z
+        tax
+        pla
+        bra _f
+_slot:  ldy #1
+        lda (t0),y
+        tax
+        dey
+        lda (t0),y
+_f:     sta p0
+        stx p0+1
+        jsr type_of
+        cmp #T_FUNC
+        beq +
+        lda #0
+        tax
+        bra _put
++       ldz #9                          ; its name
+        lda [p0],z
+        tax
+        dez
+        lda [p0],z
+_put:   ply
+        sta tb_name,y
+        txa
+        sta tb_name+1,y
+        iny
+        iny
+        bra _loop
+_done:  tya
+        lsr a
+        sta tb_n
+        rts
+
+print_tb:
+        lda tb_exc                      ; (recorded for this exception?)
+        cmp cur_exc
+        bne _rts
+        lda tb_exc+1
+        cmp cur_exc+1
+        bne _rts
+        #PRINT "Traceback (most recent call last):"
+        lda #10
+        jsr putc
+        lda tb_more
+        beq +
+        #PRINT "  ..."
+        lda #10
+        jsr putc
++       ldx tb_n
+_lvl:   dex                             ; frame X: its return ip, and the function
+        bmi _last                       ; of the frame outside it (X + 1)
+        phx
+        txa
+        asl a
+        tay
+        lda tb_ip,y
+        ldx tb_ip+1,y
+        jsr _line
+        plx
+        phx
+        inx
+        cpx tb_n
+        bcc _named
+        lda tb_more
+        bne _eol
+        jsr _module
+        bra _eol
+_named: txa
+        asl a
+        tay
+        lda tb_name,y
+        ldx tb_name+1,y
+        jsr _in
+_eol:   lda #10
+        jsr putc
+        plx
+        bra _lvl
+_last:  lda exc_ip                      ; where it was raised
+        ldx exc_ip+1
+        jsr _line
+        lda tb_n
+        beq _mod
+        lda tb_name
+        ldx tb_name+1
+        jsr _in
+        bra +
+_mod:   jsr _module
++       lda #10
+        jmp putc
+_rts:   rts
+_line:  jsr line_of_ip                  ; "  line N"
+        bcc +
+        #PRINT "  ?"
+        rts
++       pha
+        phx
+        #PRINT "  line "
+        plx
+        pla
+        sta acc
+        stx acc+1
+        lda #0
+        sta acc+2
+        sta acc+3
+        jsr sb_mark_t5
+        jsr sb_int
+        lda t5
+        ldx t5+1
+        jmp sb_flush
+_in:    cpx #0                          ; ", in name"
+        beq _rts
+        pha
+        phx
+        #PRINT ", in "
+        plx
+        pla
+        jmp put_str
+_module:
+        #PRINT ", in <module>"
+        rts
+line_of_ip:
+        sta t0
+        stx t0+1
+        lda #<LINETAB
+        sta fp0
+        lda #>LINETAB
+        sta fp0+1
+        lda #<(LINETAB >> 16)
+        sta fp0+2
+        lda #>(LINETAB >> 16)
+        sta fp0+3
+        lda #0
+        sta t1                          ; best line
+        sta t1+1
+        lda #1
+        sta t2                          ; none found yet
+_loop:  lda fp0
+        cmp linetab_end
+        bne +
+        lda fp0+1
+        cmp linetab_end+1
+        beq _done
++       ldz #1
+        lda [fp0],z
+        cmp t0+1
+        bcc _take
+        bne _skip
+        dez
+        lda [fp0],z
+        cmp t0
+        bcs _skip
+_take:  ldz #2
+        lda [fp0],z
+        sta t1
+        inz
+        lda [fp0],z
+        sta t1+1
+        lda #0
+        sta t2
+_skip:  clc
+        lda fp0
+        adc #4
+        sta fp0
+        bcc _loop
+        inc fp0+1
+        bra _loop
+_done:  lda t2
+        lsr
+        lda t1
+        ldx t1+1
+        rts
+
+;---------------------------------------------------------------------------------------
+; UNPACK_EX b, a - value -> a list of b + 1 + a items: its first b items, a list of
+; the ones between, its last a items (an UNPACK of that follows): a, *b, c = value
+;---------------------------------------------------------------------------------------
+ux_b:           .byte 0
+ux_a:           .byte 0
+ux_n:           .word 0
+ux_i:           .word 0
+xh_unpack_ex:
+        #FETCHB
+        sta ux_b
+        #FETCHB
+        sta ux_a
+        #PEEK 0
+        jsr list_from_iterable          ; (a copy: may run Python code)
+        #POKE 0                         ; [items]
+        jsr seq_len
+        lda t0
+        sta ux_n
+        lda t0+1
+        sta ux_n+1
+        clc
+        lda ux_b
+        adc ux_a
+        sta nitems
+        lda ux_n+1
+        bne +
+        lda ux_n
+        cmp nitems
+        bcs +
+        #RAISE EXC_VALUE, "not enough values to unpack"
++       inc nitems                      ; the result
+        lda #0
+        sta nitems+1
+        sta ux_i
+        sta ux_i+1
+        jsr list_new
+        #PUSH                           ; [items][result]
+-       lda ux_i                        ; the first b
+        cmp ux_b
+        bcs +
+        ldy #1
+        jsr _take
+        bra -
++       lda #0                          ; the ones between
+        sta nitems
+        sta nitems+1
+        jsr list_new
+        #PUSH                           ; [items][result][middle]
+-       sec
+        lda ux_n
+        sbc ux_a
+        sta t1
+        lda ux_n+1
+        sbc #0
+        sta t1+1
+        lda ux_i
+        cmp t1
+        lda ux_i+1
+        sbc t1+1
+        bcs +
+        ldy #2
+        jsr _take
+        bra -
++       #POP
+        sta r1
+        stx r1+1
+        #PEEK 0
+        sta r0
+        stx r0+1
+        jsr list_append                 ; [items][result]
+-       lda ux_i                        ; the last a
+        cmp ux_n
+        lda ux_i+1
+        sbc ux_n+1
+        bcs +
+        ldy #1
+        jsr _take
+        bra -
++       #POP
+        #POKE 0
+        jsr clear_rregs
+        rts
+; _take - append items[ux_i] (Y = its depth on the stack) to the list on top
+_take:  phy
+        lda ux_i
+        sta t2
+        lda ux_i+1
+        sta t2+1
+        ply
+        tya                             ; (the slot at depth Y: 2Y, 2Y + 1)
+        asl a
+        tay
+        lda (vsp),y
+        pha
+        iny
+        lda (vsp),y
+        tax
+        pla
+        jsr seq_get_t2
+        sta r1
+        stx r1+1
+        #PEEK 0
+        sta r0
+        stx r0+1
+        jsr list_append
+        inc ux_i
+        bne +
+        inc ux_i+1
++       rts

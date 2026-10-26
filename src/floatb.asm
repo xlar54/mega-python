@@ -352,4 +352,89 @@ f_double_fb:
         ldy #FA
         jmp f_mov
 
-
+;---------------------------------------------------------------------------------------
+; pow(base, exp[, mod]) (builtins.asm)
+;---------------------------------------------------------------------------------------
+xb_bi_pow:
+        #NARGS 2, 3
+        lda npos
+        cmp #3
+        beq _mod
+        #ARG 0
+        sta r2
+        stx r2+1
+        #ARG 1
+        sta r3
+        stx r3+1
+        lda #BOP_POW
+        sta bop
+        jmp binop
+_mod:   ; (base ** exp) % mod by square-and-multiply, reducing each step
+        #ARG 2
+        jsr need_int
+        ldq acc
+        stq pm_mod
+        #ARG 1
+        jsr need_int
+        ldq acc
+        stq pm_exp
+        bit acc+3
+        bpl +
+        #RAISE EXC_VALUE, "pow() negative exponent with a modulus"
++       #ARG 0
+        jsr need_int
+        ldq pm_mod
+        stq acc2
+        jsr acc_divmod
+        ldq acc3
+        stq pm_base
+        lda #1
+        sta pm_res
+        lda #0
+        sta pm_res+1
+        sta pm_res+2
+        sta pm_res+3
+_loop:  lda pm_exp
+        ora pm_exp+1
+        ora pm_exp+2
+        ora pm_exp+3
+        beq _done
+        lda pm_exp
+        and #1
+        beq +
+        ldq pm_res
+        stq acc
+        ldq pm_base
+        stq acc2
+        jsr _mulmod
+        ldq acc
+        stq pm_res
++       lsr pm_exp+3
+        ror pm_exp+2
+        ror pm_exp+1
+        ror pm_exp
+        ldq pm_base
+        stq acc
+        stq acc2
+        jsr _mulmod
+        ldq acc
+        stq pm_base
+        bra _loop
+_done:  ldq pm_res
+        stq acc
+        ldq pm_mod
+        stq acc2
+        jsr acc_divmod
+        ldq acc3
+        stq acc
+        jmp int_new
+_mulmod:
+        jsr acc_mul
+        bcc +
+        jmp int_overflow
++       ldq pm_mod
+        stq acc2
+        jsr acc_divmod
+        ldq acc3
+        stq acc
+        rts

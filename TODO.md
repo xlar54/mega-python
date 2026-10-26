@@ -58,9 +58,10 @@ Environment
 Memory
 ------
 
-* Code space (see the sizes `build.bat` prints): part 1 is full, overlay R has about
-  70 bytes and part 2 about 200; the next feature should first move cold code out (as
-  sets went to tail T and fbig.asm to tail A); new code should go in a
+* Code space (see the sizes `build.bat` prints): part 1 has about 880 bytes free, overlay R
+  about 1.3 KB, part 2 about 200, tail X only about 120 (tail H about 1 KB, T 2.7 KB);
+  move cold code out before it fills up again (as sets went to tail T, fbig.asm to tail A,
+  tracebacks / keyword binding / class creation to tails H and X); new code should go in a
   tail or overlay C; each tail has room left, and more tails can be
   added (`docs/INTERNALS.md`, "Tails"). More code should go into tails (only code that never
   runs Python code; see `docs/INTERNALS.md`) or overlay C (compile time).
