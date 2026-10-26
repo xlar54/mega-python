@@ -839,6 +839,7 @@ _call:  lda argc
         sta c_flags
         pla
         beq +
+        tay                             ; (bm_wrap: F_BYTES, $80 = add sw_off)
         lda t0
         ldx t0+1
         jsr bytes_wrap

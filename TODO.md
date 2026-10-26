@@ -22,8 +22,7 @@ Language
   the main program's), a live `globals()` dict.
 * Closures: `del` of a captured variable; the free variable's name in the
   "cannot access free variable" NameError.
-* Positional-only parameters
-  (`/`); `property` deleters, `functools.wraps`; the names in argument errors
+* `property` deleters, `functools.wraps`; the names in argument errors
   ("f() got an unexpected keyword argument 'x'").
 * `bytearray`, `bytes.fromhex`, `%` formatting of bytes, `int.to_bytes`/`from_bytes`.
 * Files: `seek`/`tell`, more of `os` (`getcwd`, `stat`,
@@ -39,7 +38,7 @@ Language
   module type would print as `<module 'math'>`.)
 * Libraries: time zones (`tzinfo`) and `strptime` in `datetime`; `re`: backreferences,
   lookbehind, VERBOSE, a faster engine (native).
-* String methods with start/end positions (`find`, `index`, `count`, `startswith`, ...). `namedtuple` classes could subclass `tuple` once builtin
+* `namedtuple` classes could subclass `tuple` once builtin
   types can be subclassed.
 * Dicts: keep each key's hash next to it, so growing and deleting do not hash the
   keys again; deletes are O(n) (the pairs move down and the index is rebuilt).
@@ -63,8 +62,9 @@ Memory
 
 * Code space (see the sizes `build.bat` prints): part 1 has about 45 bytes free, overlay R
   about 50 (both full: new code must go to tails), part 2 about 70, tail S about 40, tail B about 150, tail X about 190, tail H about 300, tail T
-  about 360, tail P about 430, tail N about 700, tail M about 1.8 KB (one more tail fits
-  in mpy-ovl's 64 KB before the boot loader must change);
+  about 360, tail P about 430, tail N about 700, tail M about 1.8 KB, tail O about 3.7 KB. The tails
+  after the first 10 are in a second file, mpy-ov2 (resident.asm: load_pieces); pass 2's
+  64 KB image holds overlay C and 11 tails, so a 12th tail needs a third pass for mpy-ov2;
   move cold code out before it fills up again (as sets went to tail T, fbig.asm to tail A,
   tracebacks / keyword binding / class creation to tails H and X); new code should go in a
   tail or overlay C; each tail has room left, and more tails can be

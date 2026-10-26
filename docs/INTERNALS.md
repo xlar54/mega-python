@@ -33,6 +33,7 @@
 | `sets.asm`, `setsr.asm` | tail T: sets and frozensets (operators, methods, `set()`, repr); overlay R: `BUILD_SET` and the stubs |
 | `classm.asm` | tail M: a new class's bases (several: CPython's C3 method resolution order, kept at +10), `__mro__`, `__bases__` |
 | `bytes.asm` | tail M: `bytes` (a `T_STR` with `F_BYTES`): repr, `bytes()`, `encode`/`decode`/`hex`, str methods' results made bytes |
+| `strpos.asm` | tail O: str / bytes methods with start / end positions (`BF_POS`): they run on the slice, `find`-like ones get the start added back |
 | `introsp.asm` | tail T: `dir`, `vars`, `globals`, `delattr`, `slice()` and a slice's attributes |
 | `listslice.asm` | tail T: assigning to and deleting list slices (`a[i:j] = x` rebuilds the list in place; an extended slice stores or deletes item by item) |
 | `env.asm` | closures (overlay R): the environment opcodes |
@@ -90,7 +91,7 @@ program may be showing the graphics screen.
 | `$8114000` | `SYM_VAL` as `py_reset` left it (`SYM_BOOT`): `globals()` leaves out the symbols still holding their boot value (the builtins) |
 | `$8180000` / `$8190000` | overlay R / overlay C images (tail A, the end of R, holds `fbig.asm`; C has its own copy, `c_fbig`, for the lexer's float literals) |
 | `$81C0000` | the source of a module being imported |
-| `$81A0000-$81A9FFF` | tail B, H, F, S, P, I, X, T, M, N images, 4 KB each (tail A is the end of R's image) |
+| `$81A0000-$81AAFFF` | tail B, H, F, S, P, I, X, T, M, N, O images, 4 KB each (tail A is the end of R's image) |
 
 The KERNAL's areas are left alone, as the MEGA65 book's chip RAM map asks:
 `0.0002-0.15FF`, `1.0000-1.1FFF` (DOS), `1.F700-1.F7FF`, `1.F800-` (colour RAM window)
@@ -104,7 +105,7 @@ module imported by a key function, say); C keeps nothing between compiles. A var
 that resident code uses while C is in must not live in R.
 
 Tails: with R in, the window's last 4 KB (`TAIL`) holds one of the tails (A, B, H, F,
-S, P, I, X, T, M, N), swapped by a 4 KB DMA from attic (`need_tail` in `resident.asm`; `ovl_runtime`
+S, P, I, X, T, M, N, O), swapped by a 4 KB DMA from attic (`need_tail` in `resident.asm`; `ovl_runtime`
 brings back R with tail A). Code reaches a tail routine only through a stub,
 `label: #TAILCALL TAIL_x, target` (6 bytes: `jsr tcall` and the data; the `#TAILA`,
 `#TAILB`, `#TAILF`, `#TAILS` macros make them). `tcall` (`tailcall.asm`) loads the tail,
@@ -136,9 +137,12 @@ next call (the VM's, or one the builtin makes through `vm_call_nested`). Registe
 value stack or the CPU stack.
 
 Boot: the program file holds part 1, overlay R (already in the window, with tail A) and
-part 2 (at `$D000`, DMA'd to `$F000`). `mpy-ovl` holds overlay C and the other tails
-(one after the other, copied to attic in one DMA); it is
-loaded to `$50000` and the pieces go to attic. The window (overlay R) is copied to attic
+part 2 (at `$D000`, DMA'd to `$F000`). `mpy-ovl` holds overlay C and the first 10 other
+tails (B ... N), `mpy-ov2` the tails after them (O): each file is loaded to `$50000`
+(64 KB at most: bank 5) and its pieces go to attic (`load_pieces`, a table of DMA jobs).
+Build pass 2 assembles overlay C and the tails from address 0 (`tools/split.py` cuts its
+image into the two files); its 64 KB hold overlay C and 11 tails, so a 12th tail needs a
+third pass for `mpy-ov2`. The window (overlay R) is copied to attic
 too.
 
 ## Values

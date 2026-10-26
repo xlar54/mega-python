@@ -42,6 +42,8 @@ if errorlevel 1 (cd .. & exit /b 1)
 if errorlevel 1 (cd .. & exit /b 1)
 ..\c1541.exe -attach %PROJECT%.d81 -write mpy-ovl mpy-ovl >nul
 if errorlevel 1 (cd .. & exit /b 1)
+..\c1541.exe -attach %PROJECT%.d81 -write mpy-ov2 mpy-ov2 >nul
+if errorlevel 1 (cd .. & exit /b 1)
 for %%f in (py\*.py) do ..\c1541.exe -attach %PROJECT%.d81 -write py\%%~nxf %%~nxf >nul
 cd ..
 

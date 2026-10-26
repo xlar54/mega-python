@@ -38,7 +38,34 @@ yb_setflag:                             ; A/X = a new string: F_BYTES as yb_flag
 ; become bytes
 ;---------------------------------------------------------------------------------------
 xy_wrap:
-        sta r1
+        cpy #$80                        ; (strpos.asm) an index found in a slice: + start
+        bcc _nadj
+        phy
+        jsr int_val
+        ply
+        bit acc+3
+        bmi +
+        clc
+        lda acc
+        adc sw_off
+        sta acc
+        lda acc+1
+        adc sw_off+1
+        sta acc+1
+        bcc +
+        inc acc+2
++       phy
+        jsr int_new
+        ply
+_nadj:  pha
+        tya
+        and #F_BYTES
+        tay
+        pla
+        cpy #0
+        bne +
+        rts
++       sta r1
         stx r1+1
         jsr type_of
         cmp #T_STR

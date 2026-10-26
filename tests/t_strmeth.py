@@ -37,3 +37,14 @@ set.add(s, 3)
 print(s, frozenset.union(frozenset({1}), {2}), 'abc'.upper(), [1].copy())
 big = ('a,' * 300).rsplit(',', 400)
 print(len(big), big[:3], big[-2:], 'a b c d'.rsplit(None, 2), 'x-y-z'.rsplit('-', 1))
+
+# start / end positions (find, rfind, index, rindex, count, startswith, endswith)
+s = 'abcabcabc'
+print(s.find('c', 3), s.find('c', 3, 5), s.find('a', -3), s.rfind('a', 0, 5), s.index('b', 2), s.rindex('b', 0, -2))
+print(s.count('a', 1), s.count('a', 1, 4), s.startswith('ca', 2), s.startswith('ab', 3, 4), s.endswith('ca', 0, 4))
+print(s.find('z', 2), s.find('a', 100), s.find('', 4), s.count('', 2, 5), s.endswith('c', -1), s.find('b', None, 3))
+print(b'xyzxyz'.find(b'z', 3), b'xyzxyz'.count(b'x', 1), b'xyz'.startswith(b'y', 1))
+try:
+    s.index('a', 7)
+except ValueError:
+    print('ValueError')

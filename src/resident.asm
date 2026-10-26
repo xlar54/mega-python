@@ -106,8 +106,35 @@ boot_pieces:
         sta ovl_cur
         rts
 
-; load_pieces - the file mpy-ovl (overlay C) to STAGE, then to attic
+; load_pieces - the files mpy-ovl (overlay C and the first 10 tails) and mpy-ov2 (the
+; tails after them) to STAGE, each, then to attic (a file is at most 64 KB: bank 5)
+TAILS_1 = 10                            ; the tails in mpy-ovl
 load_pieces:
+        lda #'l'
+        jsr lp_load                     ; mpy-ovl
+        ldx #lp_c - lp_jobs
+        jsr lp_dma                      ; overlay C
+        ldx #lp_t1 - lp_jobs
+        .if TAILS_N > TAILS_1
+        jsr lp_dma                      ; tails B ... N
+        lda #'2'
+        jsr lp_load                     ; mpy-ov2
+        ldx #lp_t2 - lp_jobs            ; the rest of the tails
+        .endif
+lp_dma: ldy #0                          ; X = job: source, destination (fp0, fp1), count
+-       lda lp_jobs,x
+        sta fp0,y
+        inx
+        iny
+        cpy #8
+        bne -
+        lda lp_jobs,x
+        sta t0
+        lda lp_jobs+1,x
+        sta t0+1
+        jmp dma_copy
+lp_load:
+        sta ovl_name+6                  ; mpy-ovl / mpy-ov2
         ldx #0
 -       lda ovl_name,x
         sta FNAMEBUF,x
@@ -121,44 +148,16 @@ load_pieces:
         bcc +
         #PRINT "cannot load mpy-ovl"
 -       bra -
-+       lda #<STAGE
-        sta fp0
-        lda #>STAGE
-        sta fp0+1
-        lda #`STAGE
-        sta fp0+2
-        lda #0
-        sta fp0+3
-        lda #<OVL_C_ATTIC
-        sta fp1
-        lda #>OVL_C_ATTIC
-        sta fp1+1
-        lda #<(OVL_C_ATTIC >> 16)
-        sta fp1+2
-        lda #>(OVL_C_ATTIC >> 16)
-        sta fp1+3
-        lda #<WINDOW_SIZE
-        sta t0
-        lda #>WINDOW_SIZE
-        sta t0+1
-        jsr dma_copy
-        lda #<(STAGE + WINDOW_SIZE)     ; then the tails B, H, F, S, P, I (in a row)
-        sta fp0
-        lda #>(STAGE + WINDOW_SIZE)
-        sta fp0+1
-        lda #<OVL_B_ATTIC
-        sta fp1
-        lda #>OVL_B_ATTIC
-        sta fp1+1
-        lda #<(OVL_B_ATTIC >> 16)
-        sta fp1+2
-        lda #>(OVL_B_ATTIC >> 16)
-        sta fp1+3
-        lda #<(TAILS_N * TAIL_SIZE)
-        sta t0
-        lda #>(TAILS_N * TAIL_SIZE)
-        sta t0+1
-        jmp dma_copy
++       rts
+lp_jobs:
+lp_c:   .dword STAGE, OVL_C_ATTIC
+        .word WINDOW_SIZE
+lp_t1:  .dword STAGE + WINDOW_SIZE, OVL_B_ATTIC
+        .word TAILS_1 * TAIL_SIZE
+        .if TAILS_N > TAILS_1
+lp_t2:  .dword STAGE, OVL_B_ATTIC + TAILS_1 * TAIL_SIZE
+        .word (TAILS_N - TAILS_1) * TAIL_SIZE
+        .endif
 ovl_name:       .text "mpy-ovl"
 ovl_name_len = * - ovl_name
 
@@ -322,6 +321,7 @@ TAIL_X          = 7                     ; *args / **kwargs binding, f(*a, **k) c
 TAIL_T          = 8                     ; sets
 TAIL_M          = 9                     ; classes: bases, MRO
 TAIL_N          = 10                    ; big ints
+TAIL_O          = 11                    ; string methods' start / end positions
 ; a stub for the tail routine target
 TAILCALL .macro tail, target
         jsr tcall
@@ -416,6 +416,7 @@ tail_src:
         .byte <OVL_T_ATTIC, >OVL_T_ATTIC, (OVL_T_ATTIC >> 16) & 15, OVL_T_ATTIC >> 20
         .byte <OVL_M_ATTIC, >OVL_M_ATTIC, (OVL_M_ATTIC >> 16) & 15, OVL_M_ATTIC >> 20
         .byte <OVL_N_ATTIC, >OVL_N_ATTIC, (OVL_N_ATTIC >> 16) & 15, OVL_N_ATTIC >> 20
+        .byte <OVL_O_ATTIC, >OVL_O_ATTIC, (OVL_O_ATTIC >> 16) & 15, OVL_O_ATTIC >> 20
 
 ; compile - compile_source with the compiler overlay in the window
 compile:

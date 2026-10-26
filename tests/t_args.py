@@ -81,3 +81,33 @@ for call in [lambda: f(), lambda: f(1), lambda: only(1, key=2), lambda: kw(1),
         print('no error')
     except TypeError:
         print('TypeError')
+
+
+# positional-only parameters (before '/')
+def f(a, b, /, c, d=4, *, e=5):
+    return a, b, c, d, e
+
+
+print(f(1, 2, 3), f(1, 2, c=3, d=0, e=9), f(1, 2, 3, 4))
+try:
+    f(1, b=2, c=3)
+except TypeError:
+    print('TypeError b')
+
+
+def g(x, /, **kw):
+    return x, kw
+
+
+print(g(1, x=2), (lambda p, /, q: p - q)(5, q=2))
+
+
+def h(a, /):
+    return a
+
+
+print(h(7))
+try:
+    h(a=1)
+except TypeError:
+    print('TypeError a')

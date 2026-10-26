@@ -124,6 +124,7 @@ builtin_obj:
 ; (a str method with bytes for self sets bm_wrap: its result is made bytes; a bytes
 ; method's owner is OWN_BYTES)
 bm_wrap:        .byte 0
+sw_off:         .word 0                 ; (strpos.asm) the start an index is found from
 bm_check:
         lsr a
         lsr a
@@ -143,11 +144,18 @@ bm_check:
         cmp t0
         bne _bad
         cmp #T_STR
-        bne +
+        bne _pos
         ldz #1
         lda [p0],z
         and #F_BYTES
         sta bm_wrap
+_pos:   lda builtin_flags,x             ; start / end positions (strpos.asm)
+        and #BF_POS
+        beq +
+        lda nargc
+        cmp #3
+        bcc +
+        jmp str_window
 +       rts
 _bytes: lda t0
         cmp #T_STR
