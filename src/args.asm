@@ -518,7 +518,12 @@ xx_pack_args:
 ;---------------------------------------------------------------------------------------
 xx_ex_arg:
         #FETCHB
-        cmp #1
+        cmp #4                          ; displays: [*a, *b], {**d, k: v}
+        bcc +
+        cmp #5
+        beq _merge
+        jmp ex_display
++       cmp #1
         beq _extend
         bcs _keyword
         #PEEK 0                         ; append
@@ -557,11 +562,17 @@ _keyword:
         jsr ex_kwarg
         #DROP 2
         bra _done
-_merge: #PEEK 0                         ; a dict's items
+_merge: sta ex_kind                     ; (3: a call's **, 5: a display's)
+        #PEEK 0                         ; a dict's items
         jsr type_of
         cmp #T_DICT
         beq +
+        lda ex_kind
+        cmp #5
+        beq _notmap
         #RAISE EXC_TYPE, "argument after ** must be a dict"
+_notmap:
+        #RAISE EXC_TYPE, "object is not a mapping"
 +       lda #0
         sta ba_i
 -       #PEEK 0
@@ -591,12 +602,72 @@ _merge: #PEEK 0                         ; a dict's items
         inz
         lda [p1],z
         sta r2+1
+        lda ba_i                        ; (Python code may run in there)
+        pha
+        lda ex_kind
+        pha
         #PEEK 1
+        sta r0
+        stx r0+1
+        lda ex_kind
+        cmp #5
+        beq _upd
+        lda r0
+        ldx r0+1
         jsr ex_kwarg
+        bra _nxt
+_upd:   jsr dict_set                    ; a display: later keys win
+_nxt:   pla
+        sta ex_kind
+        pla
+        sta ba_i
         inc ba_i
         bra -
 +       #DROP 1
 _done:  jmp clear_rregs
+ex_kind:        .byte 0
+
+; ex_display - EX_ARG kinds 4-9 for displays, on [list][dict]: 4 [key][value] into the
+; dict, 5 a mapping's items into it; 6-9 the result instead of the pair: the list, a
+; tuple, a set of its items, or the dict
+ex_display:
+        cmp #6
+        bcs _finish
+        #PEEK 1                         ; 4: dict[key] = value
+        sta r1
+        stx r1+1
+        #PEEK 0
+        sta r2
+        stx r2+1
+        #PEEK 2
+        sta r0
+        stx r0+1
+        jsr dict_set
+        #DROP 2
+        jmp clear_rregs
+_finish:
+        sec
+        sbc #6
+        pha
+        #POP                            ; the dict
+        ply
+        cpy #3
+        bne +
+        #POKE 0                         ; {**d}: the dict
+        rts
++       cpy #0
+        beq _rts                        ; [*a]: the list
+        phy
+        #PEEK 0
+        ply
+        cpy #1
+        bne +
+        jsr tuple_from_list             ; (*a,)
+        bra _put
++       ldy #F_SET                      ; {*a}
+        jsr sets_from_iter
+_put:   #POKE 0
+_rts:   rts
 
 ; ex_kwarg - A/X = the call's keyword dict, r1 = name, r2 = value: add it (TypeError
 ; for a name that is no string, or one given twice)

@@ -4249,6 +4249,7 @@ el_n:           .byte 0
 target_or_exprlist:
         lda #0
         sta el_n
+        sta el_star
         sta se_tuple
 _elem:  lda el_n
         cmp #EL_MAX
@@ -4263,7 +4264,30 @@ _elem:  lda el_n
         sta el_start+1,x
         lda #$ff                        ; no load yet
         sta c_last_op+1
-        jsr expr
+        lda tok
+        cmp #TK_STAR
+        bne _expr
+        jsr ux_scan                     ; a, *b = ...: a starred target
+        bcs _star
+        lda el_n                        ; x = a, *b: one tuple
+        ldy #7
+        jsr ds_rest
+        lda #1
+        sta se_n
+        lda #0
+        sta se_tuple
+        rts
+_star:  lda el_star
+        beq +
+        jsr syntax_error
+        .text "multiple starred expressions in assignment", 0
++       ldx el_n
+        inx
+        stx el_star
+        jsr lex
+        lda #$ff
+        sta c_last_op+1
+_expr:  jsr expr
         lda el_n
         asl
         tax
@@ -4322,7 +4346,13 @@ _yes:   sec
 
 ; exprlist - an expression or a comma-separated tuple of them
 exprlist:
-        jsr expr
+        lda tok                         ; *a, b
+        cmp #TK_STAR
+        bne +
+        lda #0
+        ldy #7
+        jmp ds_rest
++       jsr expr
         lda tok
         cmp #TK_COMMA
         bne +
@@ -4391,6 +4421,9 @@ tg_set: pha
         pla
         sta (t0),y
         iny                             ; +6: entries the group spans (= its size here)
+        sta (t0),y
+        iny                             ; +7: its starred item + 1 (0: none)
+        lda #0
         sta (t0),y
         rts
 
@@ -4464,7 +4497,15 @@ _each:  dex
         jsr tg_set
         plx
         bra _each
-_done:  rts
+_done:  lda el_star                     ; a, *b = ...: the group's starred item
+        beq +
+        ldx se_first
+        jsr tg_entry
+        ldy #7
+        lda el_star
+        sta (t0),y
++       rts
+el_star:        .byte 0                 ; target_or_exprlist: the starred element + 1
 
 ; try_group_target - the single element parsed is "(a, b)" / "[a, b]": loads of names
 ; then BUILD_TUPLE/BUILD_LIST n. Make the names one target group and drop the code.
@@ -4602,6 +4643,51 @@ tgg_i:          .byte 0
 tgg_op:         .byte 0
 tgg_pos:        .word 0
 
+; ux_emit - A = the starred item + 1 of a group of t3 targets: UNPACK_EX before, after
+ux_emit:
+        dec a
+        pha                             ; before
+        ldy #OP_UNPACK_EX
+        jsr emit_op_byte
+        pla
+        eor #$ff                        ; after = t3 - before - 1
+        sec
+        adc t3
+        sec
+        sbc #1
+        jmp emit
+
+; ux_scan - (at a '*' in an element list) is this an assignment target list? -> C set
+; if an '=' follows outside brackets before the statement ends (the lexer comes back)
+ux_scan:
+        jsr lx_push
+        lda #1
+        sta lx_scan
+        ldx #0
+_lex:   phx
+        jsr lex
+        plx
+        lda tok
+        cmp #TK_SEMI
+        beq _no
+        cpx #0
+        bne +
+        cmp #TK_ASSIGN
+        beq _yes
+        cmp #TK_COLON
+        beq _no
++       jsr ge_depth
+        bcc _lex
+_no:    clc
+        bra +
+_yes:   sec
++       php
+        jsr lx_pop
+        lda #0
+        sta ge_seen
+        plp
+        rts
+
 ; store_saved_targets - the value is TOS: store it into every target from se_mark up
 store_saved_targets:
         ldx se_mark
@@ -4622,6 +4708,13 @@ _loop:  cpx tg_top
         beq +
         lda #OP_DUP
         jsr emit
++       plx                             ; a starred item: UNPACK_EX first
+        phx
+        jsr tg_entry
+        ldy #7
+        lda (t0),y
+        beq +
+        jsr ux_emit
 +       ldy #OP_UNPACK
         lda t3
         jsr emit_op_byte
@@ -4749,6 +4842,7 @@ target_list:
         lda #0
         sta tl_count                    ; items
         sta tl_comma                    ; comma seen
+        sta tl_star                     ; the starred item + 1
         lda #TK_LPAREN
         jsr accept
         lda #0
@@ -4815,7 +4909,18 @@ _inner: lda tok
         sta tl_count
         inc tl_count
         bra _after
-_plain: cmp #TK_NAME
+_plain: cmp #TK_STAR                    ; for a, *b in ...
+        bne _pname
+        lda tl_star
+        beq +
+        jsr syntax_error
+        .text "multiple starred expressions in assignment", 0
++       ldx tl_count
+        inx
+        stx tl_star
+        jsr lex
+        lda tok
+_pname: cmp #TK_NAME
         beq +
         jmp c_syntax
 +       lda tok_sym
@@ -4846,6 +4951,8 @@ _after: lda tok
         cmp #TK_NAME
         beq _name
         cmp #TK_LPAREN
+        beq _name
+        cmp #TK_STAR
         beq _name
 _end:   pla
         beq +
@@ -4886,12 +4993,16 @@ _end:   pla
         sbc tl_mark
         ldy #6
         sta (t0),y
+        iny                             ; +7: the starred item + 1
+        lda tl_star
+        sta (t0),y
         pla
         rts
 
 tl_mark:        .byte 0
 tl_count:       .byte 0
 tl_comma:       .byte 0
+tl_star:        .byte 0
 
 ; store_targets - A = mark from target_list: store TOS into those targets
 store_targets:
@@ -5457,13 +5568,91 @@ expr_or_tuple:
         rts
 
 ; tuple_rest - one item compiled and tok = ',': the rest of a tuple, then BUILD_TUPLE
+;---------------------------------------------------------------------------------------
+; unpacking in displays: from the first *x (**m in a dict) on, the items go into a
+; [list][dict] pair with EX_ARG, as a call's arguments do (args.asm); the last EX_ARG
+; makes the list, tuple, set or dict
+;---------------------------------------------------------------------------------------
+; ds_rest - A = items compiled so far (on the stack), tok = the '*' of the next one,
+; Y = 6 list / 7 tuple / 8 set: the rest of the display, to the token that ends it
+ds_rest:
+        phy
+        ldy #OP_PACK_ARGS
+        jsr emit_op_byte
+        lda #0
+        tax
+        jsr emit_word
+_item:  lda tok
+        cmp #TK_STAR
+        bne +
+        jsr lex                         ; *iterable: its items
+        jsr expr
+        lda #1
+        bra _ex
++       jsr expr
+        lda #0
+_ex:    ldy #OP_EX_ARG
+        jsr emit_op_byte
+        lda tok
+        cmp #TK_COMMA
+        bne _end
+        jsr lex
+        jsr at_expr_end
+        bcc _item
+_end:   pla
+        ldy #OP_EX_ARG
+        jsr emit_op_byte
+        lda #$ff
+        sta c_last_op+1
+        rts
+
+; dd_rest - the dict so far is on the stack, tok = '**' of the next item: the rest
+; of the dict display (to the '}')
+dd_rest:
+        ldy #OP_BUILD_LIST              ; [list][dict]
+        lda #0
+        tax
+        jsr emit_op_word
+        lda #OP_ROT2
+        jsr emit
+_item:  lda tok
+        cmp #TK_POW
+        bne +
+        jsr lex                         ; **mapping: its items
+        jsr expr
+        lda #5
+        bra _ex
++       jsr expr                        ; key: value
+        lda #TK_COLON
+        jsr expect
+        jsr expr
+        lda #4
+_ex:    ldy #OP_EX_ARG
+        jsr emit_op_byte
+        lda tok
+        cmp #TK_COMMA
+        bne _end
+        jsr lex
+        lda tok
+        cmp #TK_RBRACE
+        bne _item
+_end:   lda #9
+        ldy #OP_EX_ARG
+        jmp emit_op_byte
+
 tuple_rest:
         lda #1
 -       pha
         jsr lex                         ; past ','
         jsr at_expr_end
         bcs +
-        jsr expr
+        lda tok                         ; (a, *b): the rest unpacks
+        cmp #TK_STAR
+        bne _plain
+        pla
+        ldy #7
+        jmp ds_rest
+_plain: jsr expr
         pla
         inc a
         pha
@@ -5877,7 +6066,14 @@ at_paren:
         pha
         lda #0
         sta c_noin
-        jsr walrus
+        lda tok                         ; (*a, b)
+        cmp #TK_STAR
+        bne +
+        lda #0
+        ldy #7
+        jsr ds_rest
+        bra _close
++       jsr walrus
         bcc _close
         jsr lx_push                     ; (a generator expression compiles it again)
         jsr c_here
@@ -5950,6 +6146,10 @@ at_list:
         tax
         jsr emit_op_word
         bra _close
++       cmp #TK_STAR                    ; [*a, b]
+        bne +
+        lda #0
+        bra _star
 +       jsr c_here
         pha
         phx
@@ -5971,6 +6171,8 @@ at_list:
         lda tok
         cmp #TK_RBRACK
         beq +
+        cmp #TK_STAR
+        beq _star1
         jsr expr
         pla
         inc a
@@ -5980,6 +6182,10 @@ at_list:
         ldy #OP_BUILD_LIST
         ldx #0
         jsr emit_op_word
+        bra _close
+_star1: pla                             ; [a, *b]
+_star:  ldy #6
+        jsr ds_rest
 _close: pla
         sta c_noin
         lda #$ff
@@ -6003,6 +6209,14 @@ at_dict:
         tax
         jsr emit_op_word
         bra _close
++       cmp #TK_STAR                    ; {*a, b}
+        bne +
+        lda #0
+        bra _sstar
++       cmp #TK_POW                     ; {**m, k: v}
+        bne +
+        lda #0
+        bra _dstar
 +       jsr c_here
         pha
         phx
@@ -6029,6 +6243,8 @@ _set:   pla
         lda tok
         cmp #TK_RBRACE
         beq +
+        cmp #TK_STAR
+        beq _sstar1
         jsr expr
         pla
         inc a
@@ -6064,6 +6280,8 @@ _dict:  jsr lex
         lda tok
         cmp #TK_RBRACE
         beq +
+        cmp #TK_POW
+        beq _dstar1
         jsr expr
         lda #TK_COLON
         jsr expect
@@ -6076,6 +6294,18 @@ _dict:  jsr lex
         ldy #OP_BUILD_DICT
         ldx #0
         jsr emit_op_word
+        bra _close
+_sstar1:
+        pla                             ; {a, *b}
+_sstar: ldy #8
+        jsr ds_rest
+        bra _close
+_dstar1:
+        pla                             ; {k: v, **m}: the dict so far
+_dstar: ldy #OP_BUILD_DICT
+        ldx #0
+        jsr emit_op_word
+        jsr dd_rest
 _close: pla
         sta c_noin
         lda #$ff
