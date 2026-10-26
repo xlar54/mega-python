@@ -389,6 +389,17 @@ its frame without telling it: it still says running, and `gen_alive` checks whet
 frame is really still on the frame stack. `ENTER_ENV` reads `c_func`, so starting a
 generator sets it to the generator's function.
 
+A generator expression is a generator function of its own, as in CPython (`genexp`):
+the element was compiled before its `for` showed up, so its code is dropped and the
+lexer goes back to it (`lx_push` at the element). The first iterable is compiled in
+the enclosing scope (`ge_to_iter` finds it), then `MAKE_FUNCTION <genexpr>` with one
+parameter (`" 0"`), whose body is the comprehension code (`comprehension` kind 2) over
+that parameter, yielding each element; `ROT2`, `CALL 1` make the generator. Its `for`
+targets are its locals (`ge_scan`). The enclosing function's pre-scan must make the
+names a generator expression uses cells: names inside brackets wait in `ps_pend` until
+a `for` shows that their `(` group is a generator expression (`ps_gfor`); a lambda with
+a comprehension in it makes all its parameters cells.
+
 Type numbers: sets and frozensets (`T_SET`, `T_FSET`, which only `type_of` returns) must
 stay the last types, because code tests `>= T_SET` for "a set or frozenset".
 

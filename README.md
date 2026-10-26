@@ -279,7 +279,7 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_mix` | features combined: closures with `*args`, decorated methods, sets of tuples from comprehensions, nested unpacking in loops |
 | `t_excmix` | exceptions raised from inside closures, decorators, `*args` calls, comprehensions, class bodies and iterators, and what is left working afterwards |
 | `t_gcmix` | the same features while the heap is nearly full (many collections) |
-| `t_generators` | `yield`, `yield from` (also recursive), `send`, `close`, `try`/`finally` across a `yield`, exceptions leaving a generator, a running generator re-entered, generators in closures and methods, driven by `for`, `next`, `zip`, `sorted`, `sum`, `in`, `join`, and leaving a loop then going on |
+| `t_generators` | `yield`, `yield from` (also recursive), `send`, `close`, `try`/`finally` across a `yield`, exceptions leaving a generator, a running generator re-entered, generators in closures and methods, driven by `for`, `next`, `zip`, `sorted`, `sum`, `in`, `join`, and leaving a loop then going on; generator expressions (lazy, the first iterable taken at once, in functions, lambdas and class bodies, chained, infinite) |
 | `t_edges` | edge cases: deep recursion through a closure, many parameters and locals, changing a dict or set while iterating it (`RuntimeError`: "changed size", and CPython's "keys changed" when keys are deleted and added), imports inside functions, `RecursionError` and recovering from it, lazy `sum` of a big range |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 
@@ -413,7 +413,9 @@ Differences from CPython
 * **Generators**: a function with `yield` returns a generator, as in CPython: `for`
   loops, `next()`, builtins and other generators drive it, `send()` passes a value in,
   `return` ends it, `yield from` delegates, and `try`/`except`/`finally` blocks may
-  span a `yield`. Differences: `close()` does not run the generator's `finally` blocks,
+  span a `yield`. Generator expressions are lazy generators too (`sum(x for x in
+  range(60000))` needs no list). Differences: `close()` does not run the generator's
+  `finally` blocks,
   `throw()` is missing, `yield from` drops values sent to it and gives `None` (not the
   inner generator's return value), `StopIteration` carries no value, a
   `StopIteration` raised inside a generator is not turned into `RuntimeError`, and
@@ -427,7 +429,7 @@ Differences from CPython
   `lib-name.py` (longer library names have a short disk name: `statistics` and
   `collections`).
 * `dict.keys()`, `values()` and `items()` return lists (snapshots, not live views).
-  `map()`, `filter()` and generator expressions produce lists.
+  `map()` and `filter()` produce lists.
 * `try`/`finally`: a `break`/`continue` out of the `try` body skips the `finally` block.
 * A program's globals stay after `run()`, so a program that defines `load`, `save`,
   `run`, ... replaces those REPL commands until `new()`.

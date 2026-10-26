@@ -173,3 +173,69 @@ try:
     g1[0]
 except TypeError:
     print('TypeError')
+
+# generator expressions: lazy generators, as CPython
+print(sum(x for x in range(60000)))
+g = (c.upper() for c in 'abc')
+print(type(g).__name__, next(g), list(g), list(g))
+print(list((x, y) for x in range(3) for y in 'ab' if x != y))
+print(max((len(w), w) for w in 'the quick brown fox'.split()))
+print(any(n > 3 for n in [1, 5]), all(n > 3 for n in [1, 5]), ', '.join(str(i) for i in range(4)))
+print(sorted((i % 3 for i in range(9)), reverse=True), set(x % 4 for x in range(10)))
+print(dict((k, len(k)) for k in ['a', 'bb']), tuple(x for x in 'hi'))
+
+
+def scale(xs, k):
+    return list(x * k for x in xs if x != k)
+
+
+def nested(rows):
+    return list(sum(v for v in r) for r in rows)
+
+
+print(scale([1, 2, 3], 2), nested([[1, 2], [3, 4, 5]]))
+
+
+def lazy():
+    log = []
+
+    def src():
+        for i in range(3):
+            log.append(i)
+            yield i
+    g = (x * 10 for x in src())
+    log.append('made')
+    first = next(g)
+    log.append(first)
+    return log, list(g)
+
+
+print(lazy())
+data = [3, 1, 2]
+gen = (x for x in data)
+data = [9]
+print(list(gen))
+evens = (x for x in range(10) if x % 2 == 0)
+squares = (e * e for e in evens)
+print(list(squares))
+k = 5
+print(list(k + x for x in range(3)), list((lambda m: (m * x for x in range(3)))(2)))
+
+
+class C:
+    vals = [1, 2, 3]
+    total = sum(v for v in vals)
+
+
+print(C.total)
+
+
+def naturals():
+    n = 0
+    while True:
+        yield n
+        n += 1
+
+
+inf = (n * n for n in naturals())
+print(next(inf), next(inf))

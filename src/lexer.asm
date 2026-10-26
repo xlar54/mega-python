@@ -106,7 +106,7 @@ lx_init:
         rts
 
 ; save / restore the whole lexer state (a stack of 4 slots, for look-ahead)
-LXSAVE_N = 4
+LXSAVE_N = 8
 lx_saves:       .fill LXSAVE_N * LX_STATE_SIZE, 0
 lx_savesp:      .byte 0
 lx_push:

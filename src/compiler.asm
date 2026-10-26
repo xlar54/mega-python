@@ -2020,6 +2020,303 @@ lambda_expr:
         rts
 lambda_text:    .text "<lambda>", 0
 
+;---------------------------------------------------------------------------------------
+; genexp - a generator expression (at '(' or a call's argument; tok = its 'for'). A/X =
+; where the element's code (compiled already, in this scope) starts; the lexer state at
+; the element is pushed. As CPython, it is a generator function of its own:
+;   <first iterable> GET_ITER  MAKE_FUNCTION <genexpr>  JUMP x  <body>  x: ROT2  CALL 1
+; whose body is the comprehension over its one parameter (" 0"), yielding the items.
+; The element is compiled again, in the new scope.
+;---------------------------------------------------------------------------------------
+ge_psym:        .word 0                 ; the parameter's symbol
+ge_name:        .text "<genexpr>", 0
+ge_param:       .text " 0", 0           ; (a name no source can spell)
+genexp:
+        sta cp                          ; drop the element's code
+        stx cp+1
+        jsr lx_pop                      ; back to the element
+        jsr lx_push
+        ; the first iterable, here: after the first 'for ... in' outside brackets
+        jsr ge_to_iter
+        lda #1
+        sta c_noin
+        jsr or_test
+        lda #0
+        sta c_noin
+        lda #OP_GET_ITER
+        jsr emit
+        jsr lx_pop                      ; back to the element
+        jsr lx_push
+        lda #1                          ; (the REPL must keep the code)
+        sta c_made_func
+        ; the function's scope (as function_body does)
+        ldy #SC_CLASS
+        lda (sc),y
+        sta t6
+        iny
+        lda (sc),y
+        sta t6+1
+        lda #SK_FUNC
+        jsr scope_push
+        ldy #SC_CLASS
+        lda t6
+        sta (sc),y
+        iny
+        lda t6+1
+        sta (sc),y
+        ldy #SC_FLAGS                   ; (not a def: no name to store, no yield)
+        lda #2
+        sta (sc),y
+        lda #<ge_name
+        ldx #>ge_name
+        jsr intern_cstr
+        ldy #FB_NAME
+        lda int_ref
+        sta (sc),y
+        iny
+        lda int_ref+1
+        sta (sc),y
+        lda #<ge_param                  ; the parameter: the iterator
+        ldx #>ge_param
+        jsr intern_cstr
+        sta ge_psym
+        stx ge_psym+1
+        jsr local_add
+        lda #1
+        ldy #SC_NARGS
+        sta (sc),y
+        jsr ge_scan                     ; the 'for' targets are its locals
+        jsr fb_cells
+        jsr params_tuple
+        ldy #FB_PARAMS
+        sta (sc),y
+        iny
+        txa
+        sta (sc),y
+        ; MAKE_FUNCTION code nargs nlocals name ndefaults params flags nkwonly
+        lda #OP_MAKE_FUNCTION
+        jsr emit
+        jsr c_here
+        ldy #FB_PATCH
+        sta (sc),y
+        iny
+        txa
+        sta (sc),y
+        lda #0
+        tax
+        jsr emit_word
+        lda #1
+        jsr emit
+        ldy #SC_NLOCALS
+        lda (sc),y
+        jsr emit
+        ldy #FB_NAME
+        lda (sc),y
+        pha
+        iny
+        lda (sc),y
+        tax
+        pla
+        jsr emit_word
+        lda #0
+        jsr emit
+        ldy #FB_PARAMS
+        lda (sc),y
+        pha
+        iny
+        lda (sc),y
+        tax
+        pla
+        jsr emit_word
+        lda #FF_GEN
+        jsr emit
+        lda #0
+        jsr emit
+        jsr fb_outer_env
+        bcc +
+        lda #OP_SET_CLOSURE
+        jsr emit
++       ldy #OP_JUMP                    ; jump over the body
+        jsr emit_jump
+        ldy #FB_JUMP
+        sta (sc),y
+        iny
+        txa
+        sta (sc),y
+        ldy #FB_PATCH
+        lda (sc),y
+        pha
+        iny
+        lda (sc),y
+        tax
+        pla
+        jsr patch_here
+        ; the body
+        jsr fb_prologue
+        jsr lx_pop                      ; the element again, in this scope
+        jsr c_here
+        pha
+        phx
+        jsr expr
+        plx
+        pla
+        ldy #2
+        jsr comprehension
+        lda #R_NONE
+        ldx #0
+        jsr emit_const
+        lda #OP_RETURN
+        jsr emit
+        ldy #FB_JUMP
+        lda (sc),y
+        pha
+        iny
+        lda (sc),y
+        tax
+        pla
+        jsr patch_here
+        jsr scope_pop
+        lda #OP_ROT2                    ; [iterator][function] -> call it
+        jsr emit
+        lda #1
+        ldy #OP_CALL
+        jsr emit_op_byte
+        lda #$ff
+        sta c_last_op+1
+        rts
+
+; ge_load_param - (comp_for) load the generator expression's parameter
+ge_load_param:
+        lda tok_sym
+        pha
+        lda tok_sym+1
+        pha
+        lda ge_psym
+        sta tok_sym
+        lda ge_psym+1
+        sta tok_sym+1
+        jsr emit_load_name
+        pla
+        sta tok_sym+1
+        pla
+        sta tok_sym
+        rts
+
+; ge_to_iter - (at the element) lex on past the first 'for ... in' outside brackets:
+; tok = the first token of the first iterable
+ge_to_iter:
+        lda #1
+        sta lx_scan
+        ldx #0                          ; X = bracket depth
+_tok:   lda tok
+        jsr ge_depth
+        bcs _eof
+        cpx #0
+        bne _next
+        lda tok
+        cmp #KW_IN
+        bne _next
+        lda ge_seen
+        bne _eof
+_next:  phx
+        jsr lex
+        plx
+        bra _tok
+_eof:   lda #0
+        sta lx_scan
+        sta ge_seen
+        jmp lex
+ge_seen:        .byte 0
+; ge_depth - A = tok: brackets change X; a 'for' at depth 0 sets ge_seen -> C set at
+; the end of the input
+ge_depth:
+        cmp #TK_LPAREN
+        beq _open
+        cmp #TK_LBRACK
+        beq _open
+        cmp #TK_LBRACE
+        beq _open
+        cmp #TK_RPAREN
+        beq _close
+        cmp #TK_RBRACK
+        beq _close
+        cmp #TK_RBRACE
+        beq _close
+        cmp #KW_FOR
+        bne +
+        cpx #0
+        bne +
+        sta ge_seen
++       cmp #TK_EOF
+        beq _end
+        cmp #TK_NEWLINE
+        beq _end
+        clc
+        rts
+_end:   sec
+        rts
+_open:  inx
+        clc
+        rts
+_close: dex
+        clc
+        rts
+
+; ge_scan - (at the element) the names after each 'for' up to its 'in' become locals;
+; a nested lambda or generator expression makes them all cells. Ends at the ')'
+; that closes the generator expression; the lexer state is kept.
+ge_tgt:         .byte 0
+ge_scan:
+        jsr ps_inner_reset
+        jsr lx_push
+        lda #1
+        sta lx_scan
+        lda #0
+        sta ge_tgt
+        ldx #0
+        bra _tok
+_lex:   phx
+        jsr lex
+        plx
+_tok:   lda tok
+        cmp #TK_RPAREN
+        bne +
+        cpx #0
+        beq _end
++       jsr ge_depth
+        bcs _end
+        lda tok
+        cmp #KW_FOR
+        bne +
+        sta ge_tgt
+        cpx #0                          ; (a 'for' in brackets: a nested comprehension)
+        beq _lex
+        sta ps_allcells
+        bra _lex
++       cmp #KW_IN
+        bne +
+        lda #0
+        sta ge_tgt
+        bra _lex
++       cmp #KW_LAMBDA
+        bne +
+        sta ps_allcells
+        bra _lex
++       cmp #TK_NAME
+        bne _lex
+        lda ge_tgt
+        beq _lex
+        phx
+        lda tok_sym
+        ldx tok_sym+1
+        jsr local_add
+        plx
+        bra _lex
+_end:   lda #0
+        sta lx_scan
+        sta ge_seen
+        jmp lx_pop
+
 ; yield_expr - 'yield' [exprlist] or 'yield from' expr (the pre-scan made the function
 ; a generator). yield from is the loop  GET_ITER; t: FOR_ITER x; YIELD_VALUE; POP;
 ; JUMP t; x: None  (values sent to it are dropped, and its result is None).
@@ -2623,6 +2920,12 @@ _lex:   jsr lex
         bne +
         sta ls_seen
         bra _lex
++       cmp #KW_FOR                     ; a generator expression (or a comprehension)
+        bne +                           ; uses the parameters: make them all cells
+        lda ls_brk
+        beq _lex
+        sta ps_allcells
+        bra _lex
 +       cmp #TK_NAME
         bne _lex
         lda ls_seen
@@ -2721,6 +3024,68 @@ ps_single:      .byte 0                 ; one-line body (ends at NEWLINE)
 ps_wcount:      .byte 0                 ; with statements seen
 ps_lam:         .byte 0                 ; in a lambda (to the end of the statement)
 ps_yield:       .byte 0                 ; the body has a yield (not 0)
+; generator expressions are functions of their own: the names in them must be cells.
+; Names inside brackets wait in ps_pend until it is clear whether a 'for' makes their
+; '(' group a generator expression (then they, and the group's later names, go to
+; ps_inner)
+PS_PEND_N       = 24
+ps_bkind:       .fill 16                ; the bracket opened at each depth
+ps_pend:        .fill 2 * PS_PEND_N
+ps_npend:       .byte 0
+ps_pover:       .byte 0                 ; ps_pend overflowed
+ps_gdepth:      .byte 0                 ; inside a generator expression at this depth (0: no)
+
+; ps_gname - (a name in the body) note it for the generator expressions
+ps_gname:
+        lda ps_gdepth
+        beq +
+        jmp ps_inner_tok
++       lda ps_brk
+        beq _done
+        ldx ps_npend
+        cpx #PS_PEND_N
+        bcc +
+        sta ps_pover
+        rts
++       inc ps_npend
+        txa
+        asl
+        tax
+        lda tok_sym
+        sta ps_pend,x
+        lda tok_sym+1
+        sta ps_pend+1,x
+_done:  rts
+
+; ps_gfor - a 'for': in a '(' group it is a generator expression
+ps_gfor:
+        lda ps_gdepth
+        bne _done
+        ldx ps_brk
+        beq _done
+        cpx #16
+        bcs _done
+        lda ps_bkind,x
+        cmp #TK_LPAREN
+        bne _done
+        stx ps_gdepth
+        lda ps_pover
+        beq +
+        sta ps_allcells
++       ldx #0
+-       cpx ps_npend
+        bcs _done
+        phx
+        txa
+        asl
+        tay
+        lda ps_pend,y
+        ldx ps_pend+1,y
+        jsr ps_inner_add
+        plx
+        inx
+        bra -
+_done:  rts
 PS_INNER_N      = 64
 ps_ninner:      .byte 0
 ps_allcells:    .byte 0                 ; ps_inner overflowed: every local is a cell
@@ -2787,6 +3152,9 @@ prescan:
         jsr ps_inner_reset
         lda #0
         sta ps_yield
+        sta ps_npend
+        sta ps_pover
+        sta ps_gdepth
         sta ps_wcount
         sta ps_level
         sta ps_brk
@@ -2831,6 +3199,7 @@ _loop:  lda tok
 _tok:   lda tok
         cmp #TK_NAME
         bne _notname
+        jsr ps_gname
         lda ps_lam
         beq +
         jsr ps_inner_tok                ; (a name in a lambda)
@@ -2943,12 +3312,26 @@ _other: lda #0
         sta ps_start
         jmp _next
 _open:  inc ps_brk
-        lda #0
+        ldx ps_brk
+        cpx #16
+        bcs +
+        lda tok
+        sta ps_bkind,x
++       lda #0
         sta ps_start
         jmp _next
 _close: lda ps_brk
         beq +
         dec ps_brk
+        lda ps_brk
+        cmp ps_gdepth                   ; out of a generator expression
+        bcs +
+        lda #0
+        sta ps_gdepth
++       lda ps_brk
+        bne +
+        sta ps_npend                    ; (no brackets open: nothing pending)
+        sta ps_pover
 +       jmp _next
 _comma: lda ps_brk
         bne +
@@ -3001,7 +3384,8 @@ _dedent:
         rts                             ; the end of the body
 +       dec ps_level
         bra _stmt
-_for:   lda #1
+_for:   jsr ps_gfor
+        lda #1
         sta ps_infor
         jmp _next
 _in:    lda #0
@@ -4921,17 +5305,19 @@ _pos:   jsr ca_x
         beq +
         jsr syntax_error
         .text "positional argument follows keyword argument", 0
-+       jsr c_here
++       jsr lx_push                     ; (a generator expression compiles it again)
+        jsr c_here
         pha
         phx
         jsr expr
         plx
         pla
         ldy tok
-        cpy #KW_FOR                     ; f(x for x in y): a generator, made a list
+        cpy #KW_FOR                     ; f(x for x in y): a generator expression
         bne +
-        ldy #0
-        jsr comprehension
+        jsr genexp
+        bra ++
++       jsr lx_drop
 +       jsr ca_x
         lda ca_ex,x
         beq +
@@ -5233,6 +5619,7 @@ at_paren:
         sta c_noin
         jsr walrus
         bcc _close
+        jsr lx_push                     ; (a generator expression compiles it again)
         jsr c_here
         pha
         phx
@@ -5242,10 +5629,12 @@ at_paren:
         ldy tok
         cpy #KW_FOR
         bne +
-        ldy #0
-        jsr comprehension
+        jsr genexp
         bra _close
-+       cpy #TK_COMMA
++       pha
+        jsr lx_drop
+        pla
+        cpy #TK_COMMA
         bne _close
         jsr tuple_rest
 _close: pla
@@ -5434,7 +5823,8 @@ _close: pla
         lda #TK_RBRACE
         jmp expect
 
-; comprehension - A/X = element code start, Y = 0 list / 1 dict; tok = 'for'
+; comprehension - A/X = element code start, Y = 0 list / 1 dict / 2 a generator
+; expression's body (genexp); tok = 'for'
 comprehension:
         sta t1
         stx t1+1
@@ -5452,6 +5842,9 @@ comprehension:
         jsr cut_code                    ; the element moves into the loop
         sta cm_handle
         stx cm_handle+1
+        lda cm_kind
+        cmp #2                          ; (a generator expression yields its items)
+        beq _go
         ldy #OP_BUILD_LIST
         lda cm_kind
         beq +
@@ -5459,7 +5852,7 @@ comprehension:
 +       lda #0
         tax
         jsr emit_op_word
-        lda #0
+_go:    lda #0
         jsr comp_for                    ; depth 0
         lda cm_handle
         ldx cm_handle+1
@@ -5476,6 +5869,7 @@ cm_kind:        .byte 0
 ; comp_for - A = depth (iterators between the container and the value); tok = 'for'
 comp_for:
         pha
+        sta cf_depth
         jsr lex
         jsr target_list
         pha                             ; target mark
@@ -5483,8 +5877,23 @@ comp_for:
         jsr expect
         lda #1
         sta c_noin
+        lda cm_kind                     ; a generator expression's first iterable was
+        cmp #2                          ; evaluated outside: compile it away, iterate
+        bne _iter                       ; over the parameter instead
+        lda cf_depth
+        bne _iter
+        jsr c_here
+        pha
+        phx
         jsr or_test
-        lda #0
+        plx
+        pla
+        sta cp
+        stx cp+1
+        jsr ge_load_param
+        bra _iterd
+_iter:  jsr or_test
+_iterd: lda #0
         sta c_noin
         lda #OP_GET_ITER
         jsr emit
@@ -5586,6 +5995,13 @@ _elt:   ; the element (cut earlier: the handle is just above our frames - use lc
         ldy #OP_LIST_APPEND
         jsr emit_op_byte
         bra _back
++       cpx #2
+        bne +
+        lda #OP_YIELD_VALUE             ; a generator expression
+        jsr emit
+        lda #OP_POP
+        jsr emit
+        bra _back
 +       ldy #OP_MAP_ADD
         jsr emit_op_byte
 _back:  pla
@@ -5600,6 +6016,7 @@ _back:  pla
         pla
         rts
 cm_handle:      .word 0
+cf_depth:       .byte 0
 
 ;---------------------------------------------------------------------------------------
 ; f-strings: TK_FSTR has the raw text at tok_num (far pointer), length tok_sym

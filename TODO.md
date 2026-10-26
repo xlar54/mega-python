@@ -11,8 +11,7 @@ Language
 * Arbitrary-precision ints (now 32-bit with OverflowError).
 * Sets: methods with several other iterables (`a.union(b, c)`), `|=` and friends
   changing the set in place, CPython's hash order.
-* Generator expressions as real generators (now lists: `sum(x * x for x in
-  range(10**5))` needs the whole list), then lazy `map`/`filter` and `dict` views.
+* Lazy `map`/`filter` (now lists) and `dict` views.
 * Generators: `throw()`, `close()` raising `GeneratorExit` inside (so `finally` blocks
   run), `yield from` passing `send` values on and giving the inner return value,
   `StopIteration.value`, PEP 479 (`StopIteration` inside a generator -> `RuntimeError`).
