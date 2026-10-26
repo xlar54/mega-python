@@ -41,6 +41,8 @@ F_SET           = $10                   ; (dicts) a set: the GC and len() see a 
 F_PROPS         = $10                   ; (classes) it or a base holds a property
 F_FROZEN        = $08                   ; (sets) a frozenset
 F_BIG           = $10                   ; (ints) a big int (bigint.asm)
+F_BYTES         = $10                   ; (strings) a bytes object (bytes.asm)
+OWN_BYTES       = 31                    ; a bytes method's owner (bm_check)
 
 R_NULL          = 0
 R_NONE          = 2

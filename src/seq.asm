@@ -158,7 +158,7 @@ _str:   lda r2
         sta fp0+1
         ldz #0
         lda [fp0],z
-        jmp char_str
+        jmp char_or_byte
 _dict:  lda r2
         sta r0
         lda r2+1
@@ -190,9 +190,39 @@ _range: ; start + i * step
         jmp range_at
 
 ; char_str - A = char -> A/X = one-character string (cached for ASCII)
+; char_or_byte - A = a char of the string p0 -> its 1-char string, or for bytes its int
+char_or_byte:
+        tay
+        ldz #1
+        lda [p0],z
+        and #F_BYTES
+        bne +
+        tya
+        jmp char_str
++       tya                             ; (a small int: 2 * A + 1)
+        ldx #0
+        asl a
+        bcc +
+        inx
++       ora #1
+        rts
 char_cache:     .fill 256, 0            ; 128 refs
 char_str:
-        and #$7f
+        cmp #$80                        ; 128-255: a new string each time (the cache
+        bcc +                           ; holds 0-127)
+        pha
+        lda #1
+        sta str_len
+        lda #0
+        sta str_len+1
+        jsr str_alloc
+        pla
+        ldz #6
+        sta [p0],z
+        lda p0
+        ldx p0+1
+        rts
++       and #$7f
         asl
         tay
         lda char_cache+1,y
@@ -715,7 +745,8 @@ _sl:    jsr slice_more
         bra _sl
 _sdone: plx
         pla
-        jmp sb_take
+        jsr sb_take
+        jmp str_like_r2                 ; (a slice of bytes: bytes)
 _list:  lda t6                           ; (the type: allocating clobbers t6)
         pha
         lda #0
@@ -1155,7 +1186,7 @@ it_str: jsr it_index
         sta fp0+3
         ldz #0
         lda [fp0],z
-        jsr char_str
+        jsr char_or_byte
         clc
 _end:   rts
 

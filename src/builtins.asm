@@ -121,6 +121,9 @@ builtin_obj:
 
 ; bm_check - (call_native) A = builtin X's flags, a method's: its self (argv 0) must be
 ; of the type in bits 3-7 (str.upper(5) or list.append() raise TypeError); keeps X
+; (a str method with bytes for self sets bm_wrap: its result is made bytes; a bytes
+; method's owner is OWN_BYTES)
+bm_wrap:        .byte 0
 bm_check:
         lsr a
         lsr a
@@ -131,12 +134,28 @@ bm_check:
         pha
         lda argv
         ldx argv+1
-        jsr type_of
+        jsr type_of                     ; (p0 -> self)
         sta t0
         pla
         plx
+        cmp #OWN_BYTES
+        beq _bytes
         cmp t0
         bne _bad
+        cmp #T_STR
+        bne +
+        ldz #1
+        lda [p0],z
+        and #F_BYTES
+        sta bm_wrap
++       rts
+_bytes: lda t0
+        cmp #T_STR
+        bne _bad
+        ldz #1
+        lda [p0],z
+        and #F_BYTES
+        beq _bad
         rts
 _bad:   #RAISE EXC_TYPE, "method called on an object of another type"
 
@@ -161,10 +180,22 @@ type_made:
 builtin_method:
         lda r0
         ldx r0+1
-        jsr type_of
+        jsr is_bytes                    ; bytes: their own methods, then str's
+        bcc builtin_method_a
+        ldx #<meth_bytes
+        ldy #>meth_bytes
+        stx t6
+        sty t6+1
+        jsr bm_search
+        bcs +
+        rts
++       lda #T_STR
 builtin_method_a:
         jsr meth_table
-        bcs _miss
+        bcc bm_search
+        rts
+; bm_search - the method table t6: r1's entry -> C clear, A/X = the method
+bm_search:
 _next:  ldy #1
         lda (t6),y
         cmp #$ff
@@ -289,8 +320,11 @@ _no:    sec
 builtin_type_of_r2:
         lda r2
         ldx r2+1
-        jsr type_of
-        tax
+        jsr is_bytes
+        bcc +
+        lda #B_BYTES
+        jmp builtin_obj
++       tax
         lda type_builtin,x
         cmp #$ff
         bne +
@@ -844,6 +878,15 @@ bi_abs:
 +       #ARG 0
         sta r2
         stx r2+1
+        jsr type_of                     ; an instance: its __abs__
+        cmp #T_INST
+        bne +
+        lda #S_ABS
+        jsr inst_unary
+        bcs +
+        rts
++       lda r2
+        ldx r2+1
         jsr is_big
         bcs _big
         jsr need_int

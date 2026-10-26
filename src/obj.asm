@@ -132,6 +132,65 @@ is_big: bit #1
 _pno:   pla
 _no:    clc
         rts
+; is_bytes - A/X -> C set if it is a bytes object (a T_STR with F_BYTES; p0 -> it);
+; A = its type_of
+is_bytes:
+        jsr type_of
+        cmp #T_STR
+        bne _no
+        pha
+        ldz #1
+        lda [p0],z
+        and #F_BYTES
+        beq _pno
+        pla
+        sec
+        rts
+_pno:   pla
+_no:    clc
+        rts
+; str_flag - A/X = a string -> A = its F_BYTES bit (p1 -> it)
+str_flag:
+        sta p1
+        stx p1+1
+        ldz #1
+        lda [p1],z
+        and #F_BYTES
+        rts
+; str_kinds - r2, r3 strings -> A = r2's F_BYTES bit, C set if r3's differs
+str_kinds:
+        lda r3
+        ldx r3+1
+        jsr str_flag
+        sta t7
+        lda r2
+        ldx r2+1
+        jsr str_flag
+        cmp t7
+        clc
+        beq +
+        sec
++       rts
+; str_like_r2 - A/X = a new string: made a bytes object if r2 is one
+str_like_r2:
+        pha
+        phx
+        lda r2
+        ldx r2+1
+        jsr is_bytes
+        plx
+        pla
+        bcc +
+        sta p1
+        stx p1+1
+        pha
+        ldz #1
+        lda [p1],z
+        ora #F_BYTES
+        sta [p1],z
+        pla
++       rts
+
 ; big_either - C set if r2 or r3 is a big int
 big_either:
         lda r2
@@ -1129,6 +1188,8 @@ _notnum:
         bne _ne
         cmp #T_STR
         bne +
+        jsr str_kinds                   ; (bytes never equal a str)
+        bcs _ne
         jmp str_eq
 +       cmp #T_TUPLE
         beq _seq
@@ -1669,12 +1730,13 @@ _nib:   cmp #10
 obj_str:
         pha
         phx
-        jsr type_of
+        jsr is_bytes                    ; (str() of bytes is their repr)
+        bcs _repr
         cmp #T_STR
         beq _str
         cmp #T_INST
         beq _inst
-        plx
+_repr:  plx
         pla
         jmp obj_repr
 _str:   plx
@@ -1741,7 +1803,14 @@ repr_int:
 +       jsr int_val
         jmp sb_int
 repr_str:
-        jsr str_info
+        pha
+        phx
+        jsr is_bytes
+        plx
+        pla
+        bcc +
+        jmp bytes_repr
++       jsr str_info
         ; use ' unless the string has ' and no "
         lda #0
         sta t1

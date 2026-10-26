@@ -17,7 +17,7 @@ Python support
 What works (each item as in CPython, apart from the notes in "Differences from
 CPython" below):
 
-* **Types**: `int` (any size up to about 500 digits), `float` (IEEE double), `bool`, `None`, `str`, `list`,
+* **Types**: `int` (any size up to about 500 digits), `float` (IEEE double), `bool`, `None`, `str`, `bytes`, `list`,
   `tuple`, `dict`, `set`, `frozenset`, `range`, slices, files, generators.
 * **Statements**: `if`/`elif`/`else`, `while` and `for` (with `else`), `break`,
   `continue`, `pass`, `def`, `class`, `return`, `del`, `global`, `nonlocal`, `assert`,
@@ -36,13 +36,13 @@ CPython" below):
   `__mro__`, `__bases__`), `super()` (along the MRO), `staticmethod`, `classmethod`, `property`
   (with setters), the operator dunders (`__add__` ... `__radd__`, comparisons,
   `__eq__`/`__hash__`, also against other types), `__str__`/`__repr__`, `__len__`,
-  `__bool__`, `__getitem__`/`__setitem__`/`__delitem__`, `__contains__`, `__iter__`/`__next__`, `__call__`,
+  `__bool__`, `__getitem__`/`__setitem__`/`__delitem__`, `__contains__`, `__iter__`/`__next__`, `__call__`, `__abs__`,
   `__enter__`/`__exit__`, class attributes, `__class__`, `__name__`.
 * **Exceptions**: the builtin hierarchy (`BaseException`, `Exception`, `ValueError`,
   `KeyError`, `StopIteration`, `GeneratorExit`, ...), your own exception classes,
   tracebacks with the chain of calls.
 * **Builtins**: `abs all any ascii bin bool callable chr classmethod delattr dict dir
-  divmod enumerate exit filter float format frozenset getattr globals hasattr hash hex id
+  bytes divmod enumerate eval exec exit filter float format frozenset getattr globals hasattr hash hex id
   input int isinstance issubclass iter len list map max min next object oct open ord pow
   print property quit range repr reversed round set setattr slice sorted staticmethod str
   sum super tuple type vars zip` (`isinstance`/`issubclass` know `object` and that `bool`
@@ -57,23 +57,24 @@ CPython" below):
   readline readlines write close`). Methods also work taken from the type, as values:
   `str.upper`, `list.append`, `dict.get`.
 * **Modules**: `math`, `os`, `sys`, `time`, `random`, `json`, `string`, `bisect`, `heapq`,
-  `functools`, `copy`, `textwrap`, `statistics`, `itertools`, `collections` (`deque`,
+  `functools`, `copy`, `textwrap`, `statistics`, `itertools`, `datetime`, `re`, `collections` (`deque`,
   `Counter`, `defaultdict`, `namedtuple`, `OrderedDict`), your own modules from the disk, and the MEGA65 ones (see "Modules").
 
 Not supported yet:
 
-* `complex`, `bytes`/`bytearray` (`b'...'` is a `str`),
+* `complex`, `bytearray`, `bytes.fromhex`,
   `decimal`, `fractions`.
 * Subclassing builtin types (`class D(dict)`), metaclasses, `cls.mro()`,
   `__slots__`, `__getattr__`/`__setattr__` hooks, `property` deleters.
 * `match`, `async`/`await`, positional-only parameters (`/`), `yield` in a lambda,
   `del` of a variable a nested function uses.
-* `eval`, `exec`, `locals`, `compile`.
+* `locals`, `compile`; `eval`/`exec` with `globals`/`locals` dicts.
 * Attributes on functions (`f.cache = {}`), live `dict` views (`keys()` and friends
   return lists).
 * `str.encode`, `str.translate`, `str.format_map`; `float` methods.
 * Packages (`import a.b`), relative imports.
-* The modules `re`, `datetime`, and most of the standard library. A `namedtuple` is a
+* Most of the standard library; time zones in `datetime`; backreferences and lookbehind
+  in `re` patterns. String methods take no start/end positions (`s.find(x, 3)`). A `namedtuple` is a
   class of its own, not a `tuple` subclass (`isinstance(p, tuple)` is `False`).
 * Traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in
   tracebacks, `StopIteration(v).value` for one raised by your own code.
@@ -230,6 +231,11 @@ These modules come with it, written in Python (the hardware ones with `peek`/`po
     `median_low`/`_high`, `mode`, `multimode`, `variance`, `pvariance`, `stdev`,
     `pstdev`);
   * `collections` (`deque`, `Counter`, `defaultdict`, `namedtuple`, `OrderedDict`);
+  * `re` (`search`, `match`, `fullmatch`, `findall`, `finditer`, `sub`, `split`, groups
+    and named groups, classes, anchors, lazy and counted repeats, lookahead, the flags
+    `I`, `M`, `S`; written in Python: fine for short texts);
+  * `datetime` (`date`, `time`, `datetime`, `timedelta`: arithmetic, comparisons,
+    `strftime`, ISO formats, ordinals, `isocalendar`; naive, `now()` from the RTC);
   * `itertools` (all of it: `count`, `chain`, `islice`, `product`, `permutations`,
     `combinations`, `groupby`, `tee`, `batched`, ...).
 
@@ -361,6 +367,12 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_unpack` | `*` and `**` in list / tuple / set / dict displays, starred assignment and `for` targets |
 | `t_bigint` | ints beyond 32 bits: the operators (floored `//` and `%`, `**`, shifts, `&`, `\|`, `^`, `~` on negatives), comparisons, `int()` of strings and floats, literals, `float()`, hashing, `str`/`repr`, `%d`/`%x`/`format` with `,`, `hex`/`bin`/`oct`, `divmod`, `pow` with a modulus |
 | `t_mi` | multiple inheritance: diamonds and the C3 order, `super()` chains through both sides, `__mro__`/`__bases__`, mixins on exceptions, an inconsistent order (`TypeError`), `super().__init__()` reaching `object` |
+| `t_compscope` | comprehensions keep their loop variables to themselves: at the top level, in functions and class bodies, nested, with lambdas over them (late binding and `i=i` defaults), the first iterable taken from outside |
+| `t_eval` | `eval` and `exec`: expressions, statements, definitions that stay, loops of `eval` (its code is reclaimed), errors inside, nesting, an import inside |
+| `t_bytes` | `bytes`: literals, indexing and iteration as ints, slices, `+`, `*`, `==` (never equal to a `str`), repr, `bytes()`, `encode`/`decode`, `hex`, `str` methods giving `bytes`, dict keys |
+| `t_binfile` | binary files: all 256 byte values written and read back, lines of bytes, a `write()` of more than 255 bytes |
+| `t_datetime` | `datetime`: dates, times, datetimes and timedeltas, their arithmetic, `str`/`repr`, `strftime`, ISO formats and calendar, ordinals, errors |
+| `t_re` | `re`: searching, matching, `findall`/`finditer`, `sub` with templates and functions, `split`, groups and named groups, classes, anchors, lazy and counted repeats, lookahead, flags, errors |
 | `t_introsp` | `dir`, `vars`, `globals`, `delattr`, `slice` objects and their attributes, `ascii` |
 | `t_strmeth` | the newer `str` methods (`rfind`, `partition`, `rsplit`, `expandtabs`, ...) and methods of builtin types as values |
 | `t_errors` | error messages that name the type, `issubclass` (also of builtin types and `object`), `min`/`max` `default=`, `!r` with a format spec, `#` in format specs, annotated assignments |
@@ -467,7 +479,8 @@ Differences from CPython
   digit (CPython's own results vary by platform the same way). Float literals and
   `float()` keep 30 significant digits. `hash()` of a non-integral float differs from
   CPython's. `math` is a class object: `print(math)` shows `<class 'math'>`.
-* **Files**: text only (`'b'` in the mode is ignored and gives `str`), no `seek`/`tell`,
+* **Files**: text, or binary with `'b'` in the mode (`'rb'`, `'wb'`, `'ab'`: bytes as they are,
+  read as `bytes`), no `seek`/`tell`,
   file names of 1-16 characters on drive 8 (`os` refuses `* ? , : =` and quotes, which
   the drive would read as patterns or commands). `os` has only `remove`, `unlink`,
   `rename`, `listdir`, `path.exists` and `sys` (a MEGA65 addition); `listdir()` ignores its argument (one disk, no
@@ -522,10 +535,10 @@ Differences from CPython
   and their type is `iterator` (CPython: `<map object at ...>`, `map`).
 * A program's globals stay after `run()`, so a program that defines `load`, `save`,
   `run`, ... replaces those REPL commands until `new()`.
-* **Comprehensions** (`[x for x in ...]`, dict and set ones) run in the code around
-  them, so their loop variables stay set afterwards (in CPython they have their own
-  scope; generator expressions have it here too). At the top level that also replaces a
-  global of the same name.
+* `eval()` and `exec()` run their string in the main program's global names: a
+  function's local variables and a module's own names are not visible to it. `eval()`
+  also takes statements (the value is that of the last expression statement, else
+  `None`).
 * `globals()` and `vars()` with no argument give a new dict of the main program's global
   names: changing it does not change the variables. `dir(obj)` lists what the object
   holds and its class's (and the bases') names and a builtin type's methods, not the

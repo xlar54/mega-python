@@ -13,23 +13,20 @@ Language
   indexes beyond 32 bits, `int.bit_length()` and the other int methods, `round()` with
   a negative `ndigits` (for all ints), `math.gcd`/`isqrt`/`comb`/`factorial`.
 * Sets: CPython's hash order.
-* Comprehensions in a scope of their own (now their loop variables leak into the code
-  around them; at the top level they replace a global of that name). Generator
-  expressions already have one: compiling list / dict / set comprehensions the same way
-  costs a generator per comprehension, so a cheaper scheme (hidden local slots) is better.
 * Live `dict` views (`keys()`, `values()`, `items()` are list snapshots); iterator
   types and reprs per kind (`map`, `filter`, `zip`, `list_iterator`: now `iterator`).
 * `.value` of a `StopIteration` raised by Python code; traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in
   tracebacks.
 * `cls.mro()`, subclassing builtin types, `__getattr__`/`__setattr__` hooks,
-  `match`, `eval`/`exec`, `locals()`, `bytes`; `globals()` of a module's code (it gives
+  `match`, `eval`/`exec` with a function's locals or given dicts, `locals()`, `bytes`; `globals()` of a module's code (it gives
   the main program's), a live `globals()` dict.
 * Closures: `del` of a captured variable; the free variable's name in the
   "cannot access free variable" NameError.
 * Positional-only parameters
   (`/`); `property` deleters, `functools.wraps`; the names in argument errors
   ("f() got an unexpected keyword argument 'x'").
-* Files: `seek`/`tell`, binary mode (`bytes`), more of `os` (`getcwd`, `stat`,
+* `bytearray`, `bytes.fromhex`, `%` formatting of bytes, `int.to_bytes`/`from_bytes`.
+* Files: `seek`/`tell`, more of `os` (`getcwd`, `stat`,
   `path.getsize`), other drives, closing a forgotten file when it is collected (it
   keeps its drive channel, and the drive will not remove it).
 * Modules (`lib/*.py`, using `peek`/`poke`/`os.sys`): 16-colour
@@ -40,7 +37,9 @@ Language
   unsigned 32-bit arithmetic: bigger ints).
 * `os.sys()` for code outside bank 0 (it would need a MAP of the target). (`math` is a class object; a real
   module type would print as `<module 'math'>`.)
-* Libraries: `re`, `datetime`. `namedtuple` classes could subclass `tuple` once builtin
+* Libraries: time zones (`tzinfo`) and `strptime` in `datetime`; `re`: backreferences,
+  lookbehind, VERBOSE, a faster engine (native).
+* String methods with start/end positions (`find`, `index`, `count`, `startswith`, ...). `namedtuple` classes could subclass `tuple` once builtin
   types can be subclassed.
 * Dicts: keep each key's hash next to it, so growing and deleting do not hash the
   keys again; deletes are O(n) (the pairs move down and the index is rebuilt).
@@ -62,8 +61,8 @@ Environment
 Memory
 ------
 
-* Code space (see the sizes `build.bat` prints): part 1 has about 580 bytes free, overlay R
-  about 290, part 2 about 120, tail B about 150, tail X about 190, tail H about 300, tail T
+* Code space (see the sizes `build.bat` prints): part 1 has about 70 bytes free, overlay R
+  about 150 (both nearly full: new code must go to tails), part 2 about 120, tail B about 150, tail X about 190, tail H about 300, tail T
   about 360, tail P about 430, tail N about 650, tail M about 2.8 KB (one more tail fits
   in mpy-ovl's 64 KB before the boot loader must change);
   move cold code out before it fills up again (as sets went to tail T, fbig.asm to tail A,

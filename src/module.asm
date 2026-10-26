@@ -146,16 +146,57 @@ mod_import:
         beq _load
         rts
 _load:  jsr module_load                   ; name.py -> MODSRC, the module object bound
-        ; compile it (the compiler's scopes use the bottom of the value stack)
-        lda vsp+1
-        cmp #>(COMPILER_END + $ff)
-        bcs +
-        #RAISE EXC_MEMORY, "no room to compile the module"
-+       lda ms_key                      ; (kept across the compile and the run)
+        lda ms_key                      ; (kept across the compile and the run)
         pha
         lda ms_key+1
         pha
-        lda c_repl
+        lda ms_sym
+        sta cr_mod
+        lda ms_sym+1
+        sta cr_mod+1
+        lda #0
+        sta cr_mode
+        jsr compile_run
+        pla
+        sta ms_key+1
+        pla
+        sta ms_key
+        bcs _fail
+        lda #1                          ; (the REPL keeps this code)
+        sta c_made_func
+        lda ms_key
+        ldx ms_key+1
+        jsr sym_val_addr
+        ldz #1
+        lda [fp1],z
+        tax
+        dez
+        lda [fp1],z
+        rts
+_fail:  lda ms_key                      ; it did not import: forget it
+        ldx ms_key+1
+        jsr sym_val_addr
+        ldz #0
+        lda #0
+        sta [fp1],z
+        inz
+        sta [fp1],z
+        jmp throw
+ms_key:         .word 0
+
+;---------------------------------------------------------------------------------------
+; compile_run - the source at MODSRC compiled after the running code (c_mod = cr_mod,
+; c_repl = cr_mode) and run as a nested VM run -> C set if it raised (a compile error
+; too: cur_exc). The compiler's scopes use the bottom of the value stack.
+;---------------------------------------------------------------------------------------
+cr_mod:         .word 0
+cr_mode:        .byte 0
+compile_run:
+        lda vsp+1
+        cmp #>(COMPILER_END + $ff)
+        bcs +
+        #RAISE EXC_MEMORY, "no room to compile"
++       lda c_repl
         pha
         lda err_vec+1                   ; compile errors: back to the runtime overlay first
         pha
@@ -173,11 +214,11 @@ _load:  jsr module_load                   ; name.py -> MODSRC, the module object
         sta err_vec
         lda #>_cerr
         sta err_vec+1
-        lda ms_sym
+        lda cr_mod
         sta c_mod
-        lda ms_sym+1
+        lda cr_mod+1
         sta c_mod+1
-        lda #0
+        lda cr_mode
         sta c_repl
         lda #<MODSRC
         sta lx_ptr
@@ -191,10 +232,7 @@ _load:  jsr module_load                   ; name.py -> MODSRC, the module object
         sta t0
         stx t0+1
         jsr _restore
-        lda #1                          ; (the REPL keeps this code)
-        sta c_made_func
-        ; run its top level
-        lda ip
+        lda ip                          ; run its top level
         pha
         lda ip+1
         pha
@@ -209,30 +247,11 @@ _load:  jsr module_load                   ; name.py -> MODSRC, the module object
         sta ip+1
         pla
         sta ip
-        pla
-        sta ms_key+1
-        pla
-        sta ms_key
-        bcs _fail
-        lda ms_key
-        ldx ms_key+1
-        jsr sym_val_addr
-        ldz #1
-        lda [fp1],z
-        tax
-        dez
-        lda [fp1],z
-        rts
-_fail:  jsr _unbind                     ; it did not import: forget it
-        jmp throw
+        rts                             ; (C from vm_run)
 _cerr:  jsr ovl_runtime                 ; (SP is back at the saved context)
         jsr _restore
-        pla
-        sta ms_key+1
-        pla
-        sta ms_key
-        jsr _unbind
-        jmp throw
+        sec
+        rts
 _restore:                               ; pull the saved error context and c_repl
         pla
         sta t7
@@ -256,17 +275,159 @@ _restore:                               ; pull the saved error context and c_rep
         lda t7
         pha
         rts
-_unbind:
-        lda ms_key
-        ldx ms_key+1
+
+;---------------------------------------------------------------------------------------
+; eval(source) / exec(source): the string compiled after the running code, in the main
+; program's globals, and run; eval gives the value of its (last) expression. Their code
+; is dropped again unless it made a function or class (or imported a module).
+;---------------------------------------------------------------------------------------
+ev_sym:         .word 0
+ev_lt:          .word 0
+ev_cp:          .word 0
+ev_err:         .byte 0
+bi_exec:
+        lda #0
+        bra +
+bi_eval:
+        lda #2
++       pha                             ; CPU: [mode]
+        #NARGS 1, 1
+        #ARG 0
+        sta r2
+        stx r2+1
+        jsr type_of
+        cmp #T_STR
+        beq +
+        lda r2
+        ldx r2+1
+        jmp raise_need_str
++       lda r2
+        ldx r2+1
+        jsr str_info
+-       lda str_len                     ; (leading blanks are not an indentation)
+        ora str_len+1
+        beq +
+        ldz #0
+        lda [fp0],z
+        cmp #' '
+        beq _blank
+        cmp #9
+        bne +
+_blank: inw fp0
+        dew str_len
+        bra -
++       clc                             ; the text, a newline and a 0 at MODSRC
+        lda #<MODSRC
+        adc str_len
+        sta fp2
+        lda #>MODSRC
+        adc str_len+1
+        sta fp2+1
+        lda #<(MODSRC >> 16)
+        adc #0
+        sta fp2+2
+        lda #>(MODSRC >> 16)
+        sta fp2+3
+        lda #<MODSRC
+        sta fp1
+        lda #>MODSRC
+        sta fp1+1
+        lda #<(MODSRC >> 16)
+        sta fp1+2
+        lda #>(MODSRC >> 16)
+        sta fp1+3
+        lda str_len
+        sta t0
+        lda str_len+1
+        sta t0+1
+        ora t0
+        beq +
+        jsr dma_copy
++       ldz #0
+        lda #10
+        sta [fp2],z
+        inz
+        lda #0
+        sta [fp2],z
+        lda #<ev_text0                  ; " eval" = None (only statements: None)
+        ldx #>ev_text0
+        jsr intern_cstr
+        sta ev_sym
+        stx ev_sym+1
         jsr sym_val_addr
         ldz #0
-        lda #0
+        lda #R_NONE
         sta [fp1],z
         inz
+        lda #0
         sta [fp1],z
+        pla                             ; the mode
+        sta cr_mode
+        pha
+        lda c_made_func                 ; CPU: [mode][made][cp][line table end]
+        pha
+        lda #0
+        sta c_made_func
+        lda cp
+        pha
+        lda cp+1
+        pha
+        lda linetab_end
+        pha
+        lda linetab_end+1
+        pha
+        lda #0
+        sta cr_mod
+        sta cr_mod+1
+        jsr compile_run
+        lda #0
+        rol a
+        sta ev_err
+        pla
+        sta ev_lt+1
+        pla
+        sta ev_lt
+        pla
+        sta ev_cp+1
+        pla
+        sta ev_cp
+        lda c_made_func                 ; nothing made: its code goes
+        bne +
+        lda ev_cp
+        sta cp
+        lda ev_cp+1
+        sta cp+1
+        lda ev_lt
+        sta linetab_end
+        lda ev_lt+1
+        sta linetab_end+1
++       pla
+        ora c_made_func
+        sta c_made_func
+        pla                             ; the mode
+        ldx ev_err
+        beq +
+        jmp throw
++       cmp #2
+        beq +
+        #RET_NONE
++       lda ev_sym                      ; eval: the value (and " eval" lets it go)
+        ldx ev_sym+1
+        jsr sym_val_addr
+        ldz #1
+        lda [fp1],z
+        tax
+        dez
+        lda [fp1],z
+        pha
+        lda #R_NONE
+        sta [fp1],z
+        inz
+        lda #0
+        sta [fp1],z
+        pla
         rts
-ms_key:         .word 0
+ev_text0:       .null " eval"
 
 ;---------------------------------------------------------------------------------------
 ; module attributes and repr: in tail F

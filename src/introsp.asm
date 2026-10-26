@@ -228,8 +228,11 @@ _user:  lda in_s
         jsr sym_name
         sta r1
         stx r1+1
-        jsr str_info                    ; a hidden module name has a '.'
-        ldz #0
+        jsr str_info                    ; a hidden module name has a '.', a hidden
+        ldz #0                          ; comprehension variable a leading space
+        lda [fp0],z
+        cmp #' '
+        beq _skip
 -       cpz str_len
         beq +
         lda [fp0],z

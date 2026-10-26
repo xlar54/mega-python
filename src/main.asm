@@ -103,6 +103,7 @@ tail_t_end:
         .virtual TAIL
 tail_m_start:
         .include "classm.asm"
+        .include "bytes.asm"
 tail_m_end:
         .cerror * > WINDOW + WINDOW_SIZE, "tail M is too big"
         .endv
@@ -233,6 +234,7 @@ tail_t_end:
         .logical TAIL
 tail_m_start:
         .include "classm.asm"
+        .include "bytes.asm"
 tail_m_end:
         .endlogical
         * = $1000 + WINDOW_SIZE + 9 * TAIL_SIZE

@@ -476,6 +476,11 @@ local_offset:
 ;---------------------------------------------------------------------------------------
 ; emit_load_name - tok_sym (the current NAME)
 emit_load_name:
+        lda tok_sym                     ; (a comprehension's loop variable: renamed)
+        ldx tok_sym+1
+        jsr cmap_get
+        sta tok_sym
+        stx tok_sym+1
         jsr c_here
         sta c_last_op
         stx c_last_op+1
@@ -665,11 +670,14 @@ emit_store_sym:
 
 ; store_op_for_sym - A/X = sym -> A = store opcode, t6 = its operand
 store_op_for_sym:
-        sta t4
+        jsr cmap_get                    ; (a comprehension's loop variable: renamed, and
+        sta t4                          ; in a class body a global, not an attribute)
         stx t4+1
+        bcs +
         jsr scope_kind
         cmp #SK_CLASS
         beq _class
++
         lda t4
         ldx t4+1
         jsr resolve_name
@@ -1039,6 +1047,9 @@ compile_source:
         sta scope_depth
         sta tg_top
         sta c_noin
+        sta cmap_n                      ; (no comprehension being compiled)
+        sta cmap_cur
+        sta cmap_off
         sta lx_scan
         sta lx_savesp
         lda #0
@@ -2996,7 +3007,7 @@ fb_cells:
         lda (sc),y
         sta t0+1
         phx
-        jsr ps_inner_has
+        jsr fb_inner
         plx
         lda #0
         bcs +
@@ -3026,6 +3037,23 @@ _env:   lda #<_text
         sta (sc),y
 _rts:   rts
 _text:  .text " env", 0
+
+; fb_inner - ps_inner_has for t0, or for the plain name of a hidden one (" x")
+fb_inner:
+        jsr ps_inner_has
+        bcc +
+        lda t0
+        ldx t0+1
+        jsr unmangle
+        cmp t0
+        bne ++
+        cpx t0+1
+        bne ++
+        sec
++       rts
++       sta t0
+        stx t0+1
+        jmp ps_inner_has
 
 ; fb_enclosed - C set if a function scope encloses the current one
 fb_enclosed:
@@ -3637,8 +3665,16 @@ _dedent:
 +       dec ps_level
         bra _stmt
 _for:   jsr ps_gfor
-        lda #1
-        sta ps_infor
+        lda #1                          ; (2: a list / set / dict comprehension's)
+        ldx ps_brk
+        beq +
+        cpx #16
+        bcs +
+        ldy ps_bkind,x
+        cpy #TK_LPAREN
+        beq +
+        lda #2
++       sta ps_infor
         jmp _next
 _in:    lda #0
         sta ps_infor
@@ -3758,7 +3794,11 @@ _next:  jsr lex
 ps_local:
         lda tok_sym
         ldx tok_sym+1
-        jmp local_add
+        ldy ps_infor
+        cpy #2
+        bne +
+        jsr cm_hide                     ; a comprehension's: its hidden name
++       jmp local_add
 
 ; ps_wvar - a with block's hidden variable is a local
 ps_wvar:
@@ -4126,10 +4166,18 @@ _expr:  pla
         beq +
         jsr scope_kind
         bne +
+        lda c_repl
+        cmp #2
+        beq _eval
         lda #OP_PRINT_EXPR
         jmp emit
 +       lda #OP_POP
         jmp emit
+_eval:  lda #<ev_text                   ; eval(): into the hidden global " eval"
+        ldx #>ev_text
+        jsr intern_cstr
+        jmp emit_store_sym
+ev_text:        .null " eval"
 _assign:
         lda se_n                        ; one plain target: store in place
         cmp #1
@@ -6202,6 +6250,7 @@ _no:    sec
 ; [ ] / [a, b] / [x for x in y]
 at_list:
         jsr lex
+        jsr cmap_enter
         lda c_noin
         pha
         lda #0
@@ -6254,7 +6303,8 @@ at_list:
 _star1: pla                             ; [a, *b]
 _star:  ldy #6
         jsr ds_rest
-_close: pla
+_close: jsr cmap_leave
+        pla
         sta c_noin
         lda #$ff
         sta c_last_op+1
@@ -6265,6 +6315,7 @@ lc_start:       .word 0
 ; { } / {k: v, ...} / {k: v for ...}
 at_dict:
         jsr lex
+        jsr cmap_enter
         lda c_noin
         pha
         lda #0
@@ -6374,12 +6425,232 @@ _dstar: ldy #OP_BUILD_DICT
         ldx #0
         jsr emit_op_word
         jsr dd_rest
-_close: pla
+_close: jsr cmap_leave
+        pla
         sta c_noin
         lda #$ff
         sta c_last_op+1
         lda #TK_RBRACE
         jmp expect
+
+;---------------------------------------------------------------------------------------
+; comprehension scopes: the loop variables of a list / set / dict comprehension are
+; renamed to hidden names (" x": no source can spell them), so they do not leak into
+; the code around it. At the '[' or '{' a scan finds the targets of its 'for's
+; (cmap_enter); every name is looked up through cmap_get while it compiles; the first
+; iterable runs in the enclosing scope (cmap_off). In functions the prescan makes the
+; hidden names locals (ps_local). A hidden name's SYM_BASE is its plain name.
+;---------------------------------------------------------------------------------------
+CMAP_N          = 16
+cmap_n:         .byte 0
+cmap_cur:       .byte 0                 ; the comprehension level being compiled
+cmap_off:       .byte 0                 ; a level whose names are not renamed (yet)
+cmap_sym:       .fill 2 * CMAP_N
+cmap_hid:       .fill 2 * CMAP_N
+cmap_lvl:       .fill CMAP_N
+cmap_sc:        .fill 2 * CMAP_N        ; the scope record (sc) it belongs to
+cm_state:       .byte 0
+cm_ge:          .byte 0
+cg_sym:         .word 0
+cg_i:           .byte 0
+cm_buf:         .fill 66
+
+; cmap_enter - (at the token after a '[' or '{') a new level, with the targets of the
+; comprehension's own 'for's if it is one (the lexer comes back)
+cmap_enter:
+        inc cmap_cur
+        jsr lx_push
+        lda ge_seen
+        sta cm_ge
+        lda lx_scan
+        pha
+        lda #1
+        sta lx_scan
+        lda #0
+        sta cm_state
+        ldx #0                          ; bracket depth
+_tok:   lda cm_state
+        beq _norm
+        lda tok                         ; between 'for' and 'in': the targets
+        cmp #KW_IN
+        bne +
+        cpx #0
+        bne +
+        lda #0
+        sta cm_state
+        bra _adv
++       cmp #TK_NAME
+        bne _depth
+        phx
+        jsr cmap_add
+        plx
+        bra _adv
+_norm:  lda tok
+        cmp #KW_FOR
+        bne _depth
+        cpx #0
+        bne _depth
+        inc cm_state
+        bra _adv
+_depth: lda tok
+        jsr ge_depth
+        bcs _end
+        cpx #$ff                        ; (its closing bracket)
+        beq _end
+_adv:   phx
+        jsr lex
+        plx
+        bra _tok
+_end:   jsr lx_pop
+        pla
+        sta lx_scan
+        lda cm_ge
+        sta ge_seen
+        rts
+
+; cmap_add - tok_sym is a target of the current level
+cmap_add:
+        ldy cmap_n
+-       dey
+        bmi +
+        lda cmap_lvl,y
+        cmp cmap_cur
+        bne +
+        tya
+        asl a
+        tax
+        lda cmap_sym,x
+        cmp tok_sym
+        bne -
+        lda cmap_sym+1,x
+        cmp tok_sym+1
+        bne -
+        rts                             ; (already there)
++       ldy cmap_n
+        cpy #CMAP_N
+        bcs _full
+        lda cmap_cur
+        sta cmap_lvl,y
+        tya
+        asl a
+        tax
+        lda sc
+        sta cmap_sc,x
+        lda sc+1
+        sta cmap_sc+1,x
+        lda tok_sym
+        sta cmap_sym,x
+        lda tok_sym+1
+        sta cmap_sym+1,x
+        phx
+        lda tok_sym
+        ldx tok_sym+1
+        jsr cm_hide
+        ply
+        sta cmap_hid,y
+        txa
+        sta cmap_hid+1,y
+        inc cmap_n
+_full:  rts                             ; (too many: that name leaks, as it used to)
+
+; cm_hide - A/X = a symbol -> A/X = its hidden symbol (" name", SYM_BASE = the name)
+cm_hide:
+        sta cg_sym
+        stx cg_sym+1
+        jsr sym_name
+        jsr str_info
+        lda #' '
+        sta cm_buf
+        ldz #0
+-       cpz str_len
+        beq +
+        cpz #64
+        beq +
+        tza
+        tax
+        lda [fp0],z
+        sta cm_buf+1,x
+        inz
+        bra -
++       tza
+        tax
+        lda #0
+        sta cm_buf+1,x
+        lda #<cm_buf
+        ldx #>cm_buf
+        jsr intern_cstr
+        pha
+        phx
+        jsr sym_base_addr
+        ldz #0
+        lda cg_sym
+        sta [fp1],z
+        inz
+        lda cg_sym+1
+        sta [fp1],z
+        plx
+        pla
+        rts
+
+; cmap_leave - (at the closing bracket) the level's names are forgotten
+cmap_leave:
+        ldx cmap_n
+        beq +
+        dex
+        lda cmap_lvl,x
+        cmp cmap_cur
+        bne +
+        stx cmap_n
+        bra cmap_leave
++       dec cmap_cur
+        rts
+
+; cmap_get - A/X = a name -> A/X = the name to use, C set if it was renamed (a loop
+; variable of a comprehension being compiled, unless a function inside it has its own)
+cmap_get:
+        sta cg_sym
+        stx cg_sym+1
+        ldy cmap_n
+_next:  dey
+        bmi _none
+        lda cmap_lvl,y
+        cmp cmap_off
+        beq _next
+        tya
+        asl a
+        tax
+        lda cmap_sym,x
+        cmp cg_sym
+        bne _next
+        lda cmap_sym+1,x
+        cmp cg_sym+1
+        bne _next
+        stx cg_i
+        lda sc                          ; another scope (a function inside): its own
+        cmp cmap_sc,x                   ; local first
+        bne +
+        lda sc+1
+        cmp cmap_sc+1,x
+        beq _map
++       jsr scope_kind
+        cmp #SK_FUNC
+        bne _map
+        lda cg_sym
+        ldx cg_sym+1
+        jsr local_find
+        bcc _none
+_map:   ldx cg_i
+        lda cmap_hid,x
+        pha
+        lda cmap_hid+1,x
+        tax
+        pla
+        sec
+        rts
+_none:  lda cg_sym
+        ldx cg_sym+1
+        clc
+        rts
 
 ; comprehension - A/X = element code start, Y = 0 list / 1 dict / 2 a generator
 ; expression's body (genexp); tok = 'for'
@@ -6450,7 +6721,18 @@ comp_for:
         stx cp+1
         jsr ge_load_param
         bra _iterd
-_iter:  jsr or_test
+_iter:  lda cmap_off                    ; (a list / set / dict comprehension's first
+        pha                             ; iterable: in the enclosing scope)
+        lda cf_depth
+        bne +
+        lda cm_kind
+        cmp #2
+        beq +
+        lda cmap_cur
+        sta cmap_off
++       jsr or_test
+        pla
+        sta cmap_off
 _iterd: lda #0
         sta c_noin
         lda #OP_GET_ITER

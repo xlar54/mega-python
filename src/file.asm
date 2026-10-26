@@ -16,11 +16,13 @@ FF_EOF          = 2                     ; the KERNAL has delivered the last byte
 FF_CR           = 4                     ; the last byte read was a CR
 FF_FREED        = 8                     ; its KERNAL file is closed (at close() or at
                                         ; the end of a file being read)
+FF_BIN          = $10                   ; 'b' in the mode: bytes as they are, read as bytes
 
 fl_lfn:         .byte 0
 fl_mode:        .byte 0
 fl_len:         .fill 3
 fl_mod:         .word 0
+fl_bin:         .byte 0
 
 ; open(name, mode='r')
 xf_open:
@@ -34,6 +36,8 @@ xf_open:
         jmp raise_need_str
 +       lda #'r'
         sta fl_mode
+        lda #0
+        sta fl_bin
         lda npos
         cmp #2
         bne _mode
@@ -49,6 +53,14 @@ xf_open:
         ldz #0
         lda [fp0],z
         sta fl_mode
+-       inz                             ; 'b' after it: binary
+        cpz str_len
+        bcs _mode
+        lda [fp0],z
+        cmp #'b'
+        bne -
+        lda #FF_BIN
+        sta fl_bin
 _mode:  lda fl_mode
         cmp #'r'
         beq +
@@ -158,6 +170,9 @@ _ok:    ldx fl_lfn
         sta [p0],z
         inz
         lda fl_mode
+        sta [p0],z
+        inz
+        lda fl_bin
         sta [p0],z
         ldz #10
         lda r2
@@ -344,9 +359,14 @@ f_buf:  ldz #4
         sta fp2+2
         rts
 
-; f_getch - f_getc with CR and CR LF read as '\n'
+; f_getch - f_getc with CR and CR LF read as '\n' (binary: as they are)
 f_getch:
-        jsr f_getc
+        ldz #6
+        lda [p3],z
+        and #FF_BIN
+        beq +
+        jmp f_getc
++       jsr f_getc
         bcs _end
         cmp #13
         beq _cr
@@ -419,7 +439,33 @@ _dec:   dec fl_len
         bra -
 +       plx
         pla
-        jmp sb_take
+        jsr sb_take
+        jmp f_bin
+
+; f_bin - A/X = a new string read from file r3: made bytes if the file is binary
+f_bin:  pha
+        phx
+        lda r3
+        sta p1
+        lda r3+1
+        sta p1+1
+        ldz #6
+        lda [p1],z
+        and #FF_BIN
+        tay
+        plx
+        pla
+        cpy #0
+        beq +
+        sta p1
+        stx p1+1
+        pha
+        ldz #1
+        lda [p1],z
+        ora #F_BYTES
+        sta [p1],z
+        pla
++       rts
 
 ; readline()
 xf_readline:
@@ -435,7 +481,8 @@ xf_next:                                ; (the next line of file r3, for iterati
         jsr f_line
         plx
         pla
-        jmp sb_take
+        jsr sb_take
+        jmp f_bin
 
 ; readlines()
 xf_readlines:
@@ -457,6 +504,7 @@ xf_readlines:
         plx
         pla
         jsr sb_take
+        jsr f_bin
         sta r1
         stx r1+1
         jsr str_info
@@ -547,6 +595,10 @@ _chunk: lda fl_len                      ; up to 255 bytes at a time
         sta fp0+1
         pla
         sta fp0
+        lda #HEAP_BANK                  ; (the KERNAL call does not keep the bank byte)
+        sta fp0+2
+        lda #0
+        sta fp0+3
         lda kio_st
         and #$83                        ; time-out or no device
         beq _chunk

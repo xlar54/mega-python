@@ -32,6 +32,7 @@
 | `file.asm` | tail F: Python files (`open()` and the file methods), the `os` module, loading a module's file |
 | `sets.asm`, `setsr.asm` | tail T: sets and frozensets (operators, methods, `set()`, repr); overlay R: `BUILD_SET` and the stubs |
 | `classm.asm` | tail M: a new class's bases (several: CPython's C3 method resolution order, kept at +10), `__mro__`, `__bases__` |
+| `bytes.asm` | tail M: `bytes` (a `T_STR` with `F_BYTES`): repr, `bytes()`, `encode`/`decode`/`hex`, str methods' results made bytes |
 | `introsp.asm` | tail T: `dir`, `vars`, `globals`, `delattr`, `slice()` and a slice's attributes |
 | `listslice.asm` | tail T: assigning to and deleting list slices (`a[i:j] = x` rebuilds the list in place; an extended slice stores or deletes item by item) |
 | `env.asm` | closures (overlay R): the environment opcodes |
@@ -286,6 +287,16 @@ not starting with `_` (a scan of the symbol table). Each value is bound in the t
 through `gsym` with `c_mod` set to the target for the moment, so a module importing `*`
 gets hidden names like the ones its own code compiled to.
 
+`compile_run` (`module.asm`) compiles the source at `MODSRC` after the running code
+with `c_mod` / `c_repl` set, under an error context that brings the runtime overlay back,
+and runs it as a nested VM run; it returns C set (`cur_exc`) for compile and run errors
+alike. `import` and `eval()` / `exec()` use it. `eval` and `exec` copy their string to
+`MODSRC` (leading blanks dropped, a newline added); `eval` compiles with `c_repl` = 2,
+where a top-level expression statement stores its value in the hidden global `" eval"`.
+Like the REPL, they reclaim their code (`cp`, `linetab_end`) unless it made a function or
+class or imported a module (`c_made_func`). They must be resident: compiling swaps
+overlay R out.
+
 `py_reset` (boot, `run()`, `new()`) is in tail I with the exception setup; only its
 call of `builtins_init` stays outside (that brings in tail B for `math`).
 
@@ -359,6 +370,37 @@ whose slot is at or above the current stack top are stale, and `MAKE_CLASS` /
 `LOAD_CLASSNAME` drop them (`cb_prune`). Its names
 load with `LOAD_CLASSNAME`: the class's own attribute if it has one, else the global, so
 `b = a * 2` and `@x.setter` see what the body defined before.
+
+## Comprehension scopes
+
+A list, set or dict comprehension compiles inline (a loop in the code around it), but its
+loop variables get hidden names, a space and the name (`" x"`: no source can spell it),
+so they neither leak nor overwrite a variable of the same name. At the `[` or `{`,
+`cmap_enter` scans ahead (the lexer comes back) for the names between each `for` and
+its `in` at the comprehension's own depth and records them with their hidden symbols
+(`cm_hide`; SYM_BASE gives the plain name back) and the scope record they belong to.
+`emit_load_name` and `store_op_for_sym` look every name up there (`cmap_get`), except
+in the first iterable, which runs in the enclosing scope (`cmap_off`), and except a
+name that a function inside the comprehension has as a local of its own (a lambda's
+parameter). In a function the prescan makes the hidden names locals (`ps_infor` = 2 in
+a `[` or `{`), and `fb_cells` makes one a cell when a nested lambda or generator
+expression uses the plain name. At the top level they are globals that `globals()`,
+`dir()` and `import *` leave out; in a class body, globals too (not class attributes).
+`cmap_leave` drops a level's names at its closing bracket.
+
+## bytes
+
+A bytes object is a `T_STR` with `F_BYTES` ($10) in its header flags, so the string code
+handles length, slicing, `+`, `*`, `in`, searching and hashing. The flag is tested where
+bytes differ: `char_or_byte` (indexing and iteration give ints), `repr_str` / `obj_str`
+(b'...'), `obj_eq` and `str_concat` (`str_kinds`: a bytes never equals a str, and they
+do not concatenate), `str_like_r2` (slices, `+`, `*` of bytes are bytes),
+`builtin_type_of_r2` (`type()`, `isinstance`) and `builtin_method` (bytes' own methods,
+`meth_bytes`, before str's). A str method called with bytes for self sets `bm_wrap` in
+`bm_check`, and `call_native` turns its result into bytes (`xy_wrap`: strings, and lists
+or tuples of them); bytes-only methods have the owner `OWN_BYTES`. The lexer flags
+`b'...'` literals; a file opened with `'b'` (`FF_BIN`) reads without CR translation and
+gives bytes (`f_bin`).
 
 ## Big ints
 
