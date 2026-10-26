@@ -35,12 +35,11 @@ Language
   unsigned 32-bit arithmetic: bigger ints).
 * `os.sys()` for code outside bank 0 (it would need a MAP of the target). (`math` is a class object; a real
   module type would print as `<module 'math'>`.)
-* Libraries: `collections.namedtuple`/`OrderedDict`, `itertools`, `re`, `datetime`
-  (some need generators first).
+* Libraries: `re`, `datetime`. `namedtuple` classes could subclass `tuple` once builtin
+  types can be subclassed.
 * Dicts: keep each key's hash next to it, so growing and deleting do not hash the
   keys again; deletes are O(n) (the pairs move down and the index is rebuilt).
-* `str` methods still missing: `partition`, `rsplit`, `rfind`, `swapcase`, `expandtabs`,
-  `encode`, `removeprefix`, ...; `#` with `0` padding (`{255:#06x}`) puts the zeros first.
+* `str` methods still missing: `encode`, `translate`, `format_map`; `#` with `0` padding (`{255:#06x}`) puts the zeros first.
 * Iterate lazily where a list is built first today: `min`/`max`, `x in it` for
   non-sequences (`x in range(10**6)` should be arithmetic, as CPython), `str.join`,
   `set()`/`tuple()` of an iterator. Big ranges give `MemoryError` there (`sum` is lazy).
@@ -58,8 +57,8 @@ Environment
 Memory
 ------
 
-* Code space (see the sizes `build.bat` prints): part 1 has about 880 bytes free, overlay R
-  about 1.3 KB, part 2 about 200, tail X only about 120 (tail H about 1 KB, T 2.7 KB);
+* Code space (see the sizes `build.bat` prints): part 1 has about 840 bytes free, overlay R
+  about 1 KB, part 2 about 120, tail X about 110, tail H about 300 (T about 2 KB);
   move cold code out before it fills up again (as sets went to tail T, fbig.asm to tail A,
   tracebacks / keyword binding / class creation to tails H and X); new code should go in a
   tail or overlay C; each tail has room left, and more tails can be

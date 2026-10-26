@@ -157,3 +157,31 @@ def by_module(v):
 
 
 print(sorted([1, 3, 2], key=by_module), '%s|%5.1f' % (Loud(4), 2.25))
+
+
+class Box:
+    def __init__(self):
+        self.d = {1: 'a', 2: 'b'}
+
+    def __delitem__(self, k):
+        print('del', k)
+        del self.d[k]
+
+
+bx = Box()
+del bx[1]
+print(bx.d)
+try:
+    del (1, 2)[0]
+except TypeError as e:
+    print(e)
+
+
+class Eq:
+    def __eq__(self, o):
+        print('eq', o)
+        return True
+
+
+q = Eq()
+print(q == (1, 2), q == 5, (1, 2) == q, 5 == q, q != 'x', [q] == [(3,)], q in [1, 2])

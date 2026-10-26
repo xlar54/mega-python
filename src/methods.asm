@@ -886,6 +886,10 @@ op_unpack_ex:
         jsr x_unpack_ex
         jmp vm_loop
 x_unpack_ex:    #TAILCALL TAIL_H, xh_unpack_ex   ; (tailh.asm)
+op_import_star:
+        jsr x_import_star
+        jmp vm_loop
+x_import_star:  #TAILCALL TAIL_H, xh_import_star
 
 ; gen_stop - raise StopIteration for a generator that returned A/X (stop_value)
 gen_stop:       #TAILCALL TAIL_X, xg_stop

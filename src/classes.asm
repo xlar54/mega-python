@@ -747,12 +747,26 @@ ir_a:   .byte 0
 ir_x:   .byte 0
 ir_p:   .byte 0
 
-; inst_eq - r2 == r3 for instances: __eq__, else identity (already false) -> C
+; inst_eq - r2 == r3, one of them an instance: r2's __eq__, else r3's (reflected), else
+; identity (already false) -> C
 inst_eq:
+        lda r2
+        ldx r2+1
+        jsr type_of
+        cmp #T_INST
+        bne _refl
         lda #S_EQ
         jsr inst_binop
+        bcc _got
+_refl:  lda r3
+        ldx r3+1
+        jsr type_of
+        cmp #T_INST
+        bne _no
+        lda #S_EQ
+        jsr inst_rbinop
         bcs _no
-        jmp obj_truth_c
+_got:   jmp obj_truth_c
 _no:    clc
         rts
 

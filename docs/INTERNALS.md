@@ -26,10 +26,11 @@
 | `fmath.asm`, `float.asm` | float arithmetic (+ - * / divmod fmod sqrt floor); operators, conversions, tail entry stubs |
 | `fdtoa.asm`, `floata.asm` | tail A: double -> decimal digits and the repr/format layouts; `float()`, `round()`, `hash()`, `divmod()` |
 | `ftrans.asm`, `floatb.asm` | tail B: exp, log, sin, cos, atan, pow; the `math` module |
-| `tailh.asm` | tail H: `help()`, `mem()`, program load/save/directory |
+| `tailh.asm` | tail H: `help()`, `mem()`, program load/save/directory; tracebacks and type-named errors, `UNPACK_EX`, `IMPORT_STAR` |
 | `taili.asm` | tail I: `py_reset` (heap, symbol table, exception classes; the fixed symbols' names) |
 | `file.asm` | tail F: Python files (`open()` and the file methods), the `os` module, loading a module's file |
 | `sets.asm`, `setsr.asm` | tail T: sets and frozensets (operators, methods, `set()`, repr); overlay R: `BUILD_SET` and the stubs |
+| `listslice.asm` | tail T: assigning to and deleting list slices (`a[i:j] = x` rebuilds the list in place; an extended slice stores or deletes item by item) |
 | `env.asm` | closures (overlay R): the environment opcodes |
 | `desc.asm` | `staticmethod`, `classmethod`, `property` (overlay R), `LOAD_CLASSNAME` |
 | `args.asm` | tail X: binding `*args`/`**kwargs`/keyword-only parameters, `f(*a, **k)` calls; making a generator, its saved exception handlers, `send()`, `throw()`, `close()`, `StopIteration(value)` |
@@ -272,6 +273,14 @@ While a module is compiled (`c_mod` set), every global name compiles to a hidden
 `"name.x"` (`gsym`), and `SYM_BASE` remembers its plain symbol. `LOAD_GLOBAL` of an
 unbound hidden symbol tries the plain one: that is how a module reaches the builtins.
 A module's attributes read and write its hidden symbols.
+
+`from m import *` (module level only) compiles to `IMPORT m` then `IMPORT_STAR target`,
+the target being the importing module's symbol (`c_mod`, 0 for the main program). Its
+handler (`xh_import_star`, tail H) collects the names: the keys of the dict of `math` /
+`os`, a disk module's `__all__` if it has one, else every bound symbol `"m.x"` with `x`
+not starting with `_` (a scan of the symbol table). Each value is bound in the target
+through `gsym` with `c_mod` set to the target for the moment, so a module importing `*`
+gets hidden names like the ones its own code compiled to.
 
 `py_reset` (boot, `run()`, `new()`) is in tail I with the exception setup; only its
 call of `builtins_init` stays outside (that brings in tail B for `math`).

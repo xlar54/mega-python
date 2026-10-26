@@ -913,3 +913,283 @@ _take:  phy
         bne +
         inc ux_i+1
 +       rts
+
+;---------------------------------------------------------------------------------------
+; IMPORT_STAR w target - module -> (nothing): from module import * binds the module's
+; names (its __all__, else those not starting with '_') in the target: 0 = the main
+; program's globals, else that module's hidden names (gsym with c_mod = target)
+;---------------------------------------------------------------------------------------
+is_tgt:         .word 0
+is_all:         .byte 0                 ; the names came from __all__ (keep '_' ones)
+is_i:           .word 0
+is_s:           .word 0
+is_ml:          .byte 0
+is_buf:         .fill 16                ; the module's name
+
+xh_import_star:
+        #FETCHW
+        sta is_tgt
+        stx is_tgt+1
+        lda #0
+        sta is_all
+        #PEEK 0                         ; [module]
+        sta r0
+        stx r0+1
+        jsr type_of
+        cmp #T_MODULE
+        beq _mod
+        jsr _dict                       ; math, os: the keys of their dict
+        lda #IT_DICT
+        jsr iter_alloc
+        jsr list_from_iterable
+        bra _have
+_mod:   jsr _modsym
+        lda #<_all
+        ldx #>_all
+        jsr intern_cstr
+        lda int_ref
+        ldx int_ref+1
+        jsr mod_sym
+        jsr sym_val_addr
+        ldz #1
+        lda [fp1],z
+        tax
+        dez
+        lda [fp1],z
+        cpx #0
+        bne +
+        cmp #0
+        beq _scan
++       inc is_all                      ; __all__: a copy of it
+        jsr list_from_iterable
+        bra _have
+_scan:  lda #0                          ; else its bound hidden names
+        sta nitems
+        sta nitems+1
+        jsr list_new
+        #PUSH                           ; [module][names]
+        lda #1
+        sta is_s
+        lda #0
+        sta is_s+1
+_next:  lda is_s
+        cmp nsyms
+        lda is_s+1
+        sbc nsyms+1
+        bcs _scanned
+        jsr _public
+        bcs +
+        #PEEK 0
+        sta r0
+        stx r0+1
+        jsr list_append
++       inc is_s
+        bne _next
+        inc is_s+1
+        bra _next
+_scanned:
+        #POP
+_have:  #PUSH                           ; [module][names]
+        lda #0
+        sta is_i
+        sta is_i+1
+_loop:  #PEEK 0
+        jsr seq_len
+        lda is_i
+        cmp t0
+        lda is_i+1
+        sbc t0+1
+        bcs _done
+        lda is_i
+        sta t2
+        lda is_i+1
+        sta t2+1
+        #PEEK 0
+        jsr seq_get_t2
+        sta r1
+        stx r1+1
+        jsr type_of
+        cmp #T_STR
+        beq +
+        lda r1
+        ldx r1+1
+        jmp raise_need_str
++       lda is_all
+        bne +
+        lda r1
+        ldx r1+1
+        jsr str_info
+        ldz #0
+        lda [fp0],z
+        cmp #'_'
+        beq _skip
++       #PEEK 1                         ; its value
+        sta r0
+        stx r0+1
+        jsr type_of
+        cmp #T_MODULE
+        bne +
+        jsr module_getattr
+        bra _store
++       jsr _dict
+        jsr dict_get
+        bcs _skip
+_store: sta r2
+        stx r2+1
+        jsr _bind
+_skip:  inc is_i
+        bne _loop
+        inc is_i+1
+        bra _loop
+_done:  #DROP 2
+        jmp clear_rregs
+
+; _dict - r0 = math / os -> r0 = its dict
+_dict:  lda r0
+        sta p0
+        lda r0+1
+        sta p0+1
+        ldz #8
+        lda [p0],z
+        sta r0
+        inz
+        lda [p0],z
+        sta r0+1
+        rts
+
+; _modsym - r0 = module -> ms_mod = its symbol, is_buf / is_ml = its name
+_modsym:
+        lda r0
+        sta p0
+        lda r0+1
+        sta p0+1
+        ldz #6
+        lda [p0],z
+        sta ms_mod
+        inz
+        lda [p0],z
+        sta ms_mod+1
+        ldz #5
+        lda [p0],z
+        tax
+        dez
+        lda [p0],z
+        jsr str_info
+        ldz #0
+-       cpz str_len
+        beq +
+        cpz #16
+        beq +
+        tza
+        tax
+        lda [fp0],z
+        sta is_buf,x
+        inz
+        bra -
++       stz is_ml
+        rts
+
+; _public - symbol is_s: "<module>.name", bound, name not starting with '_' -> C clear,
+; r1 = name (interned)
+_public:
+        lda is_s
+        ldx is_s+1
+        jsr sym_val_addr
+        ldz #0
+        lda [fp1],z
+        inz
+        ora [fp1],z
+        beq _no
+        lda is_s
+        ldx is_s+1
+        jsr sym_name
+        jsr str_info
+        lda str_len+1
+        bne +
+        lda is_ml                       ; longer than "<module>."
+        ina
+        cmp str_len
+        bcs _no
++       ldz #0
+-       cpz is_ml
+        beq +
+        tza
+        tax
+        lda [fp0],z
+        cmp is_buf,x
+        bne _no
+        inz
+        bra -
++       lda [fp0],z
+        cmp #'.'
+        bne _no
+        inz
+        lda [fp0],z
+        cmp #'_'
+        beq _no
+        tza                             ; intern what follows the dot
+        clc
+        adc fp0
+        sta fp2
+        lda fp0+1
+        adc #0
+        sta fp2+1
+        lda fp0+2
+        adc #0
+        sta fp2+2
+        lda fp0+3
+        adc #0
+        sta fp2+3
+        tza
+        eor #$ff
+        sec
+        adc str_len
+        sta str_len
+        lda str_len+1
+        sbc #0
+        sta str_len+1
+        jsr intern
+        lda int_ref
+        sta r1
+        lda int_ref+1
+        sta r1+1
+        clc
+        rts
+_no:    sec
+        rts
+
+; _bind - r1 = name, r2 = value: bound in the target
+_bind:  lda r1
+        ldx r1+1
+        jsr str_info
+        lda fp0
+        sta fp2
+        lda fp0+1
+        sta fp2+1
+        lda fp0+2
+        sta fp2+2
+        lda #0
+        sta fp2+3
+        jsr intern                      ; A/X = its plain symbol
+        ldy c_mod
+        phy
+        ldy c_mod+1
+        phy
+        ldy is_tgt
+        sty c_mod
+        ldy is_tgt+1
+        sty c_mod+1
+        jsr gsym                        ; (target 0: the plain symbol)
+        ply
+        sty c_mod+1
+        ply
+        sty c_mod
+        jsr sym_val_addr
+        ldz #0
+        lda r2
+        sta [fp1],z
+        inz
+        lda r2+1
+        sta [fp1],z
+        rts
+_all:   .null "__all__"

@@ -317,7 +317,7 @@ op_table:
         .word op_load_deref, op_store_deref, op_enter_env, op_set_closure    ; 84-87 (env.asm)
         .word op_load_classname, op_end_class                                ; 88-89
         .word op_pack_args, op_ex_arg, op_call_ex                            ; 90-92 (args.asm)
-        .word op_yield, op_send, op_unpack_ex                                ; 93-95 (gen.asm, methods.asm)
+        .word op_yield, op_send, op_unpack_ex, op_import_star                ; 93-96 (gen.asm, methods.asm)
 
 op_bad:
         #RAISE EXC_SYSTEM, "bad opcode"

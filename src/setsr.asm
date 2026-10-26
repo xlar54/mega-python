@@ -24,6 +24,8 @@ bi_set_pop:     #TAILCALL TAIL_T, xt_set_pop
 bi_set_clear:   #TAILCALL TAIL_T, xt_set_clear
 set_method:     #TAILCALL TAIL_T, xt_set_method
 sets_from_iter: #TAILCALL TAIL_T, set_from_iter
+list_setslice:  #TAILCALL TAIL_T, xt_setslice   ; (listslice.asm)
+list_delslice:  #TAILCALL TAIL_T, xt_delslice
 ; the methods with another iterable: A = the operation (sets.asm, xt_set_method)
 bi_set_union:           lda #0
                         bra set_method

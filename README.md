@@ -21,20 +21,21 @@ CPython" below):
   `tuple`, `dict`, `set`, `frozenset`, `range`, slices, files, generators.
 * **Statements**: `if`/`elif`/`else`, `while` and `for` (with `else`), `break`,
   `continue`, `pass`, `def`, `class`, `return`, `del`, `global`, `nonlocal`, `assert`,
-  `import`, `from ... import`, `try`/`except`/`else`/`finally`, `raise` (also `raise
+  `import`, `from ... import` (also `*` and names in parentheses), `try`/`except`/`else`/`finally`, `raise` (also `raise
   ... from`), `with` (several managers), `yield`, `yield from`, annotated assignments
   (`x: int = 5`).
 * **Expressions**: arithmetic, bitwise and comparison operators (chained: `a < b < c`),
   `and`/`or`/`not`, `in`, `is`, conditional expressions, `lambda`, `:=`, list / dict /
   set comprehensions, generator expressions (lazy), f-strings (format specs, `!r`, `!s`),
-  `%` formatting, `str.format`, slicing with steps, unpacking with `*` and `**` in calls
+  `%` formatting, `str.format`, slicing with steps, assigning to and deleting slices of
+  lists (`a[1:3] = x`, `del a[::2]`), unpacking with `*` and `**` in calls
   and displays (`[*a, *b]`, `{**d, 'k': 1}`) and starred targets (`first, *rest = x`).
 * **Functions**: defaults, keyword arguments, `*args`, `**kwargs`, keyword-only
   parameters, closures and `nonlocal`, decorators, generators (`send`, `throw`, `close`).
 * **Classes**: single inheritance, `super()`, `staticmethod`, `classmethod`, `property`
   (with setters), the operator dunders (`__add__` ... `__radd__`, comparisons,
-  `__eq__`/`__hash__`), `__str__`/`__repr__`, `__len__`, `__bool__`, `__getitem__`/
-  `__setitem__`, `__contains__`, `__iter__`/`__next__`, `__call__`,
+  `__eq__`/`__hash__`, also against other types), `__str__`/`__repr__`, `__len__`,
+  `__bool__`, `__getitem__`/`__setitem__`/`__delitem__`, `__contains__`, `__iter__`/`__next__`, `__call__`,
   `__enter__`/`__exit__`, class attributes, `__class__`, `__name__`.
 * **Exceptions**: the builtin hierarchy (`BaseException`, `Exception`, `ValueError`,
   `KeyError`, `StopIteration`, `GeneratorExit`, ...), your own exception classes,
@@ -45,14 +46,17 @@ CPython" below):
   range repr reversed round set setattr sorted staticmethod str sum super tuple type
   zip`, and for the MEGA65 `run edit new load save files cls peek poke mem help gc`.
 * **Methods**: `str` (`upper lower split join strip lstrip rstrip find replace
-  startswith endswith isdigit isalpha isalnum isspace isupper islower count index format
-  center ljust rjust zfill title capitalize splitlines`), `list` (`append pop insert
+  startswith endswith isdigit isalpha isalnum isspace isupper islower isascii isdecimal
+  isnumeric count index rfind rindex format center ljust rjust zfill title capitalize
+  swapcase casefold splitlines partition rpartition rsplit removeprefix removesuffix
+  expandtabs`), `list` (`append pop insert
   remove index count extend reverse sort copy clear`), `dict` (`keys values items get
   pop setdefault update clear copy`), `set`/`frozenset` (all of them), files (`read
-  readline readlines write close`).
+  readline readlines write close`). Methods also work taken from the type, as values:
+  `str.upper`, `list.append`, `dict.get`.
 * **Modules**: `math`, `os`, `sys`, `time`, `random`, `json`, `string`, `bisect`, `heapq`,
-  `functools`, `copy`, `textwrap`, `statistics`, `collections` (`deque`, `Counter`,
-  `defaultdict`), your own modules from the disk, and the MEGA65 ones (see "Modules").
+  `functools`, `copy`, `textwrap`, `statistics`, `itertools`, `collections` (`deque`,
+  `Counter`, `defaultdict`, `namedtuple`, `OrderedDict`), your own modules from the disk, and the MEGA65 ones (see "Modules").
 
 Not supported yet:
 
@@ -64,15 +68,13 @@ Not supported yet:
   `del` of a variable a nested function uses.
 * `eval`, `exec`, `dir`, `vars`, `globals`, `locals`, `delattr`, `ascii`, `slice`,
   `issubclass` of builtin types (`issubclass(bool, int)`).
-* Methods taken from a builtin type as values (`str.upper`, `list.append`: use a
-  lambda), attributes on functions (`f.cache = {}`), live `dict` views (`keys()` and
-  friends return lists).
-* `str` methods: `partition`, `rpartition`, `rsplit`, `rfind`, `rindex`, `swapcase`,
-  `casefold`, `expandtabs`, `encode`, `translate`, `removeprefix`/`removesuffix`, ...;
-  `float` methods; set methods with several other iterables (`a.union(b, c)`).
-* `from module import *`, packages (`import a.b`), relative imports.
-* The modules `itertools`, `re`, `datetime`, `collections.namedtuple`/`OrderedDict`,
-  and most of the standard library.
+* Attributes on functions (`f.cache = {}`), live `dict` views (`keys()` and friends
+  return lists).
+* `str.encode`, `str.translate`, `str.format_map`; `float` methods; set methods with
+  several other iterables (`a.union(b, c)`).
+* Packages (`import a.b`), relative imports.
+* The modules `re`, `datetime`, and most of the standard library. A `namedtuple` is a
+  class of its own, not a `tuple` subclass (`isinstance(p, tuple)` is `False`).
 * Traceback objects (`with`'s `__exit__` gets `None`), file names and source lines in
   tracebacks, `StopIteration(v).value` for one raised by your own code.
 
@@ -227,7 +229,9 @@ These modules come with it, written in Python (the hardware ones with `peek`/`po
   * `statistics` (`mean`, `fmean`, `geometric_mean`, `harmonic_mean`, `median` and
     `median_low`/`_high`, `mode`, `multimode`, `variance`, `pvariance`, `stdev`,
     `pstdev`);
-  * `collections` (`deque`, `Counter`, `defaultdict`).
+  * `collections` (`deque`, `Counter`, `defaultdict`, `namedtuple`, `OrderedDict`);
+  * `itertools` (all of it: `count`, `chain`, `islice`, `product`, `permutations`,
+    `combinations`, `groupby`, `tee`, `batched`, ...).
 
   `statistics` and `collections` are `lib-stats.py` and `lib-colls.py` on the disk
   (`lib-statistics.py` would be too long a name); `import statistics` finds them.
@@ -318,7 +322,7 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 |---|---|
 | `t_basics` | int arithmetic (floor division and modulo signs, powers, shifts), comparisons, boolean operators |
 | `t_strings` | string operations and methods, escapes, `repr`, f-strings with format specs, `%`, `str.format` |
-| `t_lists` | list methods, slicing, comprehensions, `sorted` with key/reverse |
+| `t_lists` | list methods, slicing, comprehensions, `sorted` with key/reverse, slice assignment and `del` (plain and extended) |
 | `t_dicts` | dicts, tuples, unpacking (also nested), dict comprehensions |
 | `t_control` | if/elif/else, while/for with else, break/continue, conditional expressions, `:=` |
 | `t_funcs` | defaults, keyword arguments, recursion, globals, lambdas, map/filter |
@@ -327,7 +331,7 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_builtins` | the builtin functions |
 | `t_memory` | allocation-heavy code (many garbage collections) |
 | `t_floats` | float literals and repr, arithmetic and mixing with ints, `//` `%` `**`, `float()`, `round()`, `%`/`format` specs, the `math` module |
-| `t_import` | a module from the disk (`tests/support/modtest.py`): its functions, classes and globals, `import as`, `from import`, one import only, `ImportError` |
+| `t_import` | a module from the disk (`tests/support/modtest.py`): its functions, classes and globals, `import as`, `from import` (also in parentheses), `from import *` (a disk module's names, its `__all__`, `math`, into another module), one import only, `ImportError` |
 | `t_random` | `random`: seeds repeat, ranges, shuffle, sample, weighted choices, errors (properties that hold for CPython's generator too) |
 | `t_sys` | `sys`: the version values, `version_info` comparisons, `stdout.write`, `exit` |
 | `t_time` | `time`: `gmtime`, `strftime`, `asctime` of fixed times, `struct_time`, the clock's plausibility |
@@ -336,11 +340,12 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_decorators` | function, factory, stacked and class decorators; `staticmethod`, `classmethod`, `property` with setters, inherited |
 | `t_closures` | nested functions and lambdas over enclosing variables, `nonlocal`, late binding, recursion through a closure, classes inside functions |
 | `t_hash` | hashed dicts and sets: growth, deletes, keys equal across types, tuple/frozenset/instance keys (`__hash__`, `__eq__`), unhashable keys, order |
-| `t_protocols` | user classes as iterators (`__iter__`/`__next__`, `StopIteration` ends the loop), `__contains__`, `__setitem__`, `__call__` |
+| `t_protocols` | user classes as iterators (`__iter__`/`__next__`, `StopIteration` ends the loop; `__iter__` returning a built-in iterator), `__contains__`, `__setitem__`, `__delitem__`, `__call__`, `__eq__` against other types (both sides) |
 | `t_json` | `json`: `dumps` (indent, separators, sort_keys), `loads`, escapes, errors, `dump`/`load` with files |
 | `t_libs` | `string`, `bisect`, `heapq`, `functools`, `copy` |
 | `t_stats` | `statistics` |
-| `t_colls` | `collections` (`deque`, `Counter`, `defaultdict`) and `textwrap` |
+| `t_colls` | `collections` (`deque`, `Counter`, `defaultdict`, `namedtuple`, `OrderedDict`, `del`) and `textwrap` |
+| `t_itertools` | `itertools`, imported with `from itertools import *` |
 | `t_mix` | features combined: closures with `*args`, decorated methods, sets of tuples from comprehensions, nested unpacking in loops |
 | `t_excmix` | exceptions raised from inside closures, decorators, `*args` calls, comprehensions, class bodies and iterators, and what is left working afterwards |
 | `t_gcmix` | the same features while the heap is nearly full (many collections) |
@@ -348,6 +353,7 @@ allocation (finds objects the interpreter forgot to keep alive; slow, minutes pe
 | `t_edges` | edge cases: deep recursion through a closure, many parameters and locals, changing a dict or set while iterating it (`RuntimeError`: "changed size", and CPython's "keys changed" when keys are deleted and added), imports inside functions, `RecursionError` and recovering from it, lazy `sum` of a big range |
 | `t_blocks` | `finally` on `break`/`continue`/`return` (nested, mixed with `with`, `return` and `break` inside `finally`), `with` passing the exception to `__exit__` and swallowing it, several managers in one `with` |
 | `t_unpack` | `*` and `**` in list / tuple / set / dict displays, starred assignment and `for` targets |
+| `t_strmeth` | the newer `str` methods (`rfind`, `partition`, `rsplit`, `expandtabs`, ...) and methods of builtin types as values |
 | `t_errors` | error messages that name the type, `issubclass`, `min`/`max` `default=`, `!r` with a format spec, `#` in format specs, annotated assignments |
 | `t_files` | `open()` in each mode, `read`/`readline`/`readlines`/`write`, iteration, `with` (also with `return`, `break` and exceptions), a multi-block file, `FileNotFoundError`, the `os` functions |
 

@@ -274,7 +274,17 @@ _bad:
         ldx r0+1
         ldy #RT_SETITEM
         jmp raise_typed
-_list:  ldz #4
+_list:  lda r1
+        ldx r1+1
+        jsr type_of
+        cmp #T_SLICE
+        bne +
+        jmp list_setslice
++       lda r0
+        ldx r0+1
+        sta p0
+        stx p0+1
+        ldz #4
         lda [p0],z
         sta t5
         inz
@@ -366,6 +376,17 @@ op_delete_subscr:
         beq _dict
         cmp #T_LIST
         bne _bad
+        lda r1
+        ldx r1+1
+        jsr type_of
+        cmp #T_SLICE
+        bne +
+        jsr list_delslice
+        bra _done
++       lda r0
+        ldx r0+1
+        sta p0
+        stx p0+1
         ldz #4
         lda [p0],z
         sta t5
@@ -384,8 +405,20 @@ op_delete_subscr:
 _dict:  jsr dict_del
         bcc _done
         jmp raise_key
-_bad:
+_bad:   cmp #T_INST                     ; an instance: its __delitem__(key)
+        bne _err
         lda r0
+        sta r2
+        lda r0+1
+        sta r2+1
+        lda r1
+        sta r3
+        lda r1+1
+        sta r3+1
+        lda #S_DELITEM
+        jsr inst_binop
+        bcc _done
+_err:   lda r0
         ldx r0+1
         ldy #RT_DELITEM
         jmp raise_typed
@@ -976,6 +1009,11 @@ _inst:  ; __iter__ returns the iterator; we drive it with __next__
         jmp raise_typed
 +       sta r0
         stx r0+1
+        jsr type_of                     ; a built-in iterator or a generator: itself
+        cmp #T_ITER
+        beq _self
+        cmp #T_GEN
+        beq _self
         lda #IT_INST
         jmp iter_alloc
 
