@@ -276,6 +276,10 @@ Example programs on the disk:
   saves it again), pretty-printed with `indent`
 * `counter`: `Counter`, `defaultdict` and `deque` on a paragraph (letter and word
   counts with a text bar chart)
+* `mixins`: multiple inheritance: animals built from ability mixins whose methods and
+  `__init__`s chain through `super()`, a diamond where each class runs once, the
+  method resolution order (`__mro__`), a mixin on an exception class, and an
+  inconsistent order being refused
 * `recursion`: factorials, memoised Fibonacci (a closure), the Towers of Hanoi,
   permutations and the N queens puzzle (recursive generators with `yield from`), a
   flood fill, flattening nested lists, Ackermann's function and `RecursionError`
