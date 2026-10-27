@@ -196,7 +196,11 @@ def start(extra=(), speed=('-sleepless',), shot=None):
     if shot:
         args += ['-screenshot', shot]
     args += ['-8', D81, '-autoload'] + list(extra)
-    return subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    args += os.environ.get('XEMU_ARGS', '').split()     # e.g. "-initattic random.bin":
+    #                                                     real attic RAM is not cleared
+    log = os.environ.get('XEMU_LOG')            # Xemu's own messages (e.g. -ramcheckread)
+    out = open(log, 'w') if log else subprocess.DEVNULL
+    return subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT if log else out)
 
 
 def stop(p, m):
