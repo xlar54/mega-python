@@ -591,6 +591,10 @@ Sets are in tail T (`sets.asm`); overlay R keeps `BUILD_SET`'s handler and the s
 ## Debugging
 
 * `tools/xemu_run.py SHOT.png prompt "type:1+1\n" screen log`: headless runs.
+* Real hardware does not clear RAM at power-on; Xemu does. Boot clears the base page
+  (every `?` variable is there), and everything else is set before it is read. To test
+  that, run with random attic RAM: `XEMU_ARGS="-initattic random.bin"` (8 MB of random
+  bytes) for `xemu_run.py` and `run_tests.py`; `XEMU_LOG=file` keeps Xemu's messages.
 * `tools/trace.py hold STEPS "line" ...`: arms the `DBG_HOLD` point in `vm_except`, then
   single-steps with the monitor (`t1`, `t`). Xemu's `b` breakpoints did not stop the CPU.
 * `tools/bisect_run.py file.py`: pokes growing prefixes of a program into the source

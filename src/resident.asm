@@ -16,6 +16,11 @@ entry:
         sei
         lda #BP_PAGE                    ; base page = $16xx before touching variables
         tab
+        lda #0                          ; all of them 0: real RAM comes up random (Xemu
+        tax                             ; clears it, so nothing showed there)
+-       sta BP_PAGE * 256,x
+        inx
+        bne -
         ; 16-bit stack at CPUSTACK
         ldy #>CPUSTACK_TOP
         tys
